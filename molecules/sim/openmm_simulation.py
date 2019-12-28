@@ -4,7 +4,7 @@ import simtk.unit as u
 
 import parmed as pmd
 import random
-from openmm_reporter import ContactMapReporter
+from .openmm_reporter import ContactMapReporter
 
 
 def openmm_simulate_charmm_nvt(top_file, pdb_file, GPU_index=0, 
