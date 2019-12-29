@@ -10,19 +10,7 @@ from keras.layers import Flatten
 from keras.layers import Dropout
 from keras.layers import Convolution2D
 
-
-class HyperparamsEncoder:
-
-    def __init__(self):
-        self.num_conv_layers = 3
-        self.filters = [64, 64, 64]
-        self.kernels = [3, 3, 3]
-        self.strides = [1, 2, 1]
-        self.activation = 'relu'
-        self.num_affine_layers = 1
-        self.affine_width = [128]
-        self.dropout = [0]
-        self.latent_dim = 3
+from .hyperparameters import HyperparamsEncoder
 
 
 class EncoderConvolution2D:
@@ -67,12 +55,6 @@ class EncoderConvolution2D:
         conv2d_layers : list
             Convolution layers
         """
-        if len(self.hparams.filters)!=self.hparams.num_conv_layers:
-            raise Exception("number of filters must equal number of convolutional layers.")
-        if len(self.hparams.kernels)!=self.hparams.num_conv_layers:
-            raise Exception("number of kernels must equal number of convolutional layers.")
-        if len(self.hparams.filters)!=self.hparams.num_conv_layers:
-            raise Exception("number of strides must equal length of convolutional layers.")
 
         conv2d_layers = []
         for i in range(self.hparams.num_conv_layers):
@@ -101,10 +83,6 @@ class EncoderConvolution2D:
         fc_layers : list
             Fully connected layers for embedding.
         """
-        if len(self.hparams.affine_width)!=self.hparams.num_affine_layers:
-            raise Exception("number of affine width parameters must equal the number of affine layers")
-        if len(self.hparams.dropout)!=self.hparams.num_affine_layers:
-            raise Exception("number of dropout parameters must equal the number of affine layers")
 
         fc_layers = []
         for i in range(self.hparams.num_affine_layers):
