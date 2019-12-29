@@ -30,7 +30,8 @@ class EncoderConvolution2D:
         self.embedder.summary()
 
     def embed(self, data):
-        """Embed a datapoint into the latent space.
+        """
+        Embed a datapoint into the latent space.
 
         Parameters
         ----------
@@ -43,7 +44,8 @@ class EncoderConvolution2D:
         return self.embedder.predict(data)
 
     def _conv_layers(self, x):
-        """Compose convolution layers.
+        """
+        Compose convolution layers.
 
         Parameters
         ----------
@@ -57,10 +59,11 @@ class EncoderConvolution2D:
         """
 
         conv2d_layers = []
-        for i in range(self.hparams.num_conv_layers):
-            x = Convolution2D(self.hparams.filters[i],
-                              self.hparams.kernels[i],
-                              strides=self.hparams.strides[i],
+        for filter_, kernel, stride in zip(self.hparams.filters, 
+                                           self.hparams.kernels, 
+                                           self.hparams.strides):
+
+            x = Convolution2D(filter_, kernel, strides=stride,
                               activation=self.hparams.activation,
                               padding='same')(x)
             conv2d_layers.append(x)
@@ -71,7 +74,8 @@ class EncoderConvolution2D:
         return conv2d_layers
 
     def _affine_layers(self, x):
-        """Compose fully connected layers.
+        """
+        Compose fully connected layers.
 
         Parameters
         ----------
@@ -85,9 +89,8 @@ class EncoderConvolution2D:
         """
 
         fc_layers = []
-        for i in range(self.hparams.num_affine_layers):
-            x = Dense(self.hparams.affine_width[i],
-                      activation=self.hparams.activation)(Dropout(self.hparams.dropout[i])(x))
+        for width, dropout in zip(self.hparams.affine_widths, self.hparams.dropout):
+            x = Dense(width, activation=self.hparams.activation)(Dropout(dropout)(x))
             fc_layers.append(x);
 
         del x
@@ -129,9 +132,8 @@ class EncoderConvolution2D:
 
     def _get_final_conv_params(self):
         """Get the number of flattened parameters from final convolution layer."""
-        input_ = np.ones((1, self.input_shape[0], self.input_shape[1], self.input_shape[2]))
+        input_ = np.ones((1, *self.input_shape))
         dummy = Model(self.input, self.conv_layers[-1])
         conv_shape = dummy.predict(input_).shape
         self.final_conv_shape = conv_shape[1:]
-        self.total_conv_params = 1
-        for x in conv_shape: self.total_conv_params *= x
+        self.total_conv_params = np.prod(conv_shape)
