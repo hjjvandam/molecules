@@ -4,7 +4,7 @@ from molecules.ml.hyperparams import HyperParams
 class HyperParamsConvVAE(HyperParams):
     def __init__(self, num_conv_layers, filters, kernels,
                  strides, latent_dim, activation, num_affine_layers,
-                 affine_width):
+                 affine_widths):
         super().__init__()
         self.num_conv_layers = num_conv_layers 
         self.filters = filters
@@ -13,7 +13,7 @@ class HyperParamsConvVAE(HyperParams):
         self.latent_dim = latent_dim
         self.activation = activation
         self.num_affine_layers = num_affine_layers
-        self.affine_width = affine_width
+        self.affine_widths = affine_widths
 
         self.__validate()
 
@@ -24,7 +24,7 @@ class HyperParamsConvVAE(HyperParams):
             raise Exception('number of kernels must equal number of convolutional layers.')
         if len(self.strides) != self.num_conv_layers:
             raise Exception('number of strides must equal number of convolutional layers.')
-        if len(self.affine_width) != self.num_affine_layers:
+        if len(self.affine_widths) != self.num_affine_layers:
             raise Exception('number of affine width parameters must equal the number of affine layers')
 
 
@@ -32,12 +32,12 @@ class HyperparamsEncoder(HyperParamsConvVAE):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
-                 num_affine_layers=1, affine_width=[128], latent_dim=3, 
+                 num_affine_layers=1, affine_widths=[128], latent_dim=3,
                  dropout=[0]):
 
         super().__init__(num_conv_layers, filters, kernels, strides, 
                          latent_dim, activation, num_affine_layers,
-                         affine_width)
+                         affine_widths)
 
         self.dropout = dropout
 
@@ -52,11 +52,11 @@ class HyperparamsDecoder(HyperParamsConvVAE):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
-                 num_affine_layers=1, affine_width=[128], latent_dim=3, 
+                 num_affine_layers=1, affine_widths=[128], latent_dim=3,
                  output_activation='sigmoid'):
 
         super().__init__(num_conv_layers, filters, kernels, strides, 
                          latent_dim, activation, num_affine_layers,
-                         affine_width)
+                         affine_widths)
 
         self.output_activation = output_activation
