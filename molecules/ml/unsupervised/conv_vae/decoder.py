@@ -6,19 +6,7 @@ from keras.layers import Dense
 from keras.layers import Reshape
 from keras.layers import Conv2DTranspose
 
-
-class HyperparamsDecoder:
-
-    def __init__(self):
-        self.num_conv_layers = 3
-        self.filters = [64, 64, 64]
-        self.kernels = [3, 3, 3]
-        self.strides = [1, 2, 1]
-        self.latent_dim = 3
-        self.activation = 'relu'
-        self.output_activation = 'sigmoid'
-        self.num_affine_layers = 1
-        self.affine_width = [128]
+from .hyperparameters import HyperparamsDecoder
 
 
 class DecoderConvolution2D:
@@ -92,12 +80,6 @@ class DecoderConvolution2D:
         conv2d_layers : list
             Convolution layers
         """
-        if len(self.hparams.filters)!=self.hparams.num_conv_layers:
-            raise Exception("number of filters must equal number of convolutional layers.")
-        if len(self.hparams.kernels)!=self.hparams.num_conv_layers:
-            raise Exception("number of kernels must equal number of convolutional layers.")
-        if len(self.hparams.filters)!=self.hparams.num_conv_layers:
-            raise Exception("number of strides must equal length of convolutional layers.")
 
         # Mirroring the encoder network requires reversing its hyperparameters.
         filters = list(reversed(self.hparams.filters))
