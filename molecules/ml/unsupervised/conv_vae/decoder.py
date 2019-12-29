@@ -11,7 +11,8 @@ from .hyperparameters import HyperparamsDecoder
 
 class DecoderConvolution2D:
 
-    def __init__(self, output_shape, enc_conv_params, enc_conv_shape, hyperparameters=HyperparamsDecoder()):
+    def __init__(self, output_shape, enc_conv_params, 
+                 enc_conv_shape, hyperparameters=HyperparamsDecoder()):
         self.output_shape = output_shape
         self.enc_conv_params = enc_conv_params
         self.enc_conv_shape = enc_conv_shape
@@ -28,7 +29,8 @@ class DecoderConvolution2D:
         return self.generator.summary()
 
     def generate(self, embedding):
-        """Generate images from embeddings.
+        """
+        Generate images from embeddings.
 
         Parameters
         ----------
@@ -41,7 +43,8 @@ class DecoderConvolution2D:
         self.generator.predict(embedding)
 
     def _affine_layers(self, x):
-        """Compose fully connected layers.
+        """
+        Compose fully connected layers.
 
         Parameters
         ----------
@@ -54,7 +57,7 @@ class DecoderConvolution2D:
             Fully connected layers from embedding to convolution layers.
         """
         fc_layers = []
-        for width in reversed(self.hparams.affine_width):
+        for width in reversed(self.hparams.affine_widths):
             x = Dense(width, activation=self.hparams.activation)(x)
             fc_layers.append(x)
 
@@ -68,7 +71,8 @@ class DecoderConvolution2D:
         return fc_layers
 
     def _conv_layers(self, x):
-        """Compose convolution layers.
+        """
+        Compose convolution layers.
 
         Parameters
         ----------
@@ -87,7 +91,7 @@ class DecoderConvolution2D:
         strides = list(reversed(self.hparams.strides))
 
         conv2d_layers = []
-        for i in range(self.hparams.num_conv_layers-1):
+        for i in range(self.hparams.num_conv_layers - 1):
             x = Conv2DTranspose(filters[i],
                                 kernels[i],
                                 strides=strides[i],
