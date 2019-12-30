@@ -88,7 +88,7 @@ class EncoderConvolution2D:
         """
 
         fc_layers = []
-        for width, dropout in zip(self.hparams.affine_widths, self.hparams.dropout):
+        for width, dropout in zip(self.hparams.affine_widths, self.hparams.affine_dropouts):
             x = Dense(width, activation=self.hparams.activation)(Dropout(dropout)(x))
             fc_layers.append(x)
 
