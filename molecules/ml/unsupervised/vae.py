@@ -16,7 +16,7 @@ class VAE:
         self.encoder = encoder
         self.decoder = decoder
         self.graph = self._create_graph()
-        self.loss = loss if loss is not None else self._vae_loss
+        self.loss = self._vae_loss if loss is None else loss
         self.graph.compile(optimizer=optimizer, loss=self.loss)
 
     def __repr__(self):
@@ -29,7 +29,8 @@ class VAE:
 
     def train(self, data, batch_size, epochs=1, shuffle=False,
               validation_data=None, checkpoint=False, path=None, callbacks=None):
-        """Train network
+        """
+        Train network
 
         Parameters
         ----------
@@ -53,18 +54,20 @@ class VAE:
 
         path : str, optional
             Path to save model if checkpoint is set to True
+
         """
-        if checkpoint==True and path==None:
-            raise Exception("Please enter a path to save the network")
+        if checkpoint == True and path == None:
+            raise Exception('Please enter a path to save the network')
 
         if validation_data is not None:
             validation_data = (validation_data, validation_data)
 
-        self.graph.fit(data,data,batch_size,epochs=epochs,shuffle=shuffle,
-                       validation_data=validation_data,callbacks=callbacks);
+        self.graph.fit(data, data, batch_size, epochs=epochs, shuffle=shuffle,
+                       validation_data=validation_data, callbacks=callbacks);
 
     def decode(self, data):
-        """Decode a data point
+        """
+        Decode a data point
 
         Parameters
         -----------
@@ -74,11 +77,13 @@ class VAE:
         Returns
         -------
         np.ndarray of decodings for data.
+
         """
         return self.graph.predict(data)
 
     def embed(self, data):
-        """Embed a datapoint into the latent space.
+        """
+        Embed a datapoint into the latent space.
 
         Parameters
         ----------
@@ -87,11 +92,13 @@ class VAE:
         Returns
         -------
         np.ndarray of embeddings.
+
         """
         return self.encoder.embed(data)
 
     def generate(self, embedding):
-        """Generate images from embeddings.
+        """
+        Generate images from embeddings.
 
         Parameters
         ----------
@@ -100,34 +107,39 @@ class VAE:
         Returns
         -------
         generated image : np.nddary
+
         """
         self.decoder.generate(embedding)
 
     def save_weights(self, path):
-        """Save model weights.
+        """
+        Save model weights.
 
         Parameters
         ----------
         path : str
             Path to save the model weights.
+
         """
         self.graph.save_weights(path)
 
     def load_weights(self, path):
-        """Load saved model weights.
+        """
+        Load saved model weights.
 
         Parameters
         ----------
         path: str
             Path to saved model weights.
+
         """
         self.graph.load_weights(path)
 
     def _create_graph(self):
-        self.input = Input(shape=self.input_shape)
+        input_ = Input(shape=self.input_shape)
         embed = self.encoder.create_graph(self.input)
         output = self.decoder.create_graph(embed)
-        graph = Model(self.input, output, name='CVAE')
+        graph = Model(input_, output, name='CVAE')
         return graph
 
     def _vae_loss(self, input, output):
