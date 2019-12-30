@@ -30,9 +30,7 @@ def main():
 
     encoder = EncoderConvolution2D(input_shape=input_shape)
 
-    encoder._get_final_conv_params()
-    num_conv_params = encoder.total_conv_params
-    encode_conv_shape = encoder.final_conv_shape
+    encode_conv_shape, num_conv_params = encoder.get_final_conv_params()
 
     decoder = DecoderConvolution2D(output_shape=input_shape,
                                    enc_conv_params=num_conv_params,

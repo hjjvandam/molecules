@@ -126,14 +126,15 @@ class EncoderConvolution2D:
     def create_graph(self, input_):
         """Create keras model outside of class"""
         self.conv_layers = self._conv_layers(input_)
-        self.flattened = Flatten()(self.conv_layers[-1])
-        z = self._affine_layers(self.flattened)
+        flattened = Flatten()(self.conv_layers[-1])
+        z = self._affine_layers(flattened)
         return z
 
-    def _get_final_conv_params(self):
-        """Get the number of flattened parameters from final convolution layer."""
+    def get_final_conv_params(self):
+        """Return the number of flattened parameters from final convolution layer."""
         input_ = np.ones((1, *self.input_shape))
         dummy = Model(self.input, self.conv_layers[-1])
         conv_shape = dummy.predict(input_).shape
-        self.final_conv_shape = conv_shape[1:]
-        self.total_conv_params = np.prod(conv_shape)
+        encode_conv_shape = conv_shape[1:]
+        num_conv_params = np.prod(conv_shape)
+        return encode_conv_shape, num_conv_params
