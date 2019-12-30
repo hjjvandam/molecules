@@ -10,7 +10,7 @@ from keras.layers import Flatten
 from keras.layers import Dropout
 from keras.layers import Convolution2D
 
-from .hyperparameters import HyperparamsEncoder
+from .hyperparams import HyperparamsEncoder
 
 
 class EncoderConvolution2D:
@@ -57,7 +57,6 @@ class EncoderConvolution2D:
         conv2d_layers : list
             Convolution layers
         """
-
         conv2d_layers = []
         for filter_, kernel, stride in zip(self.hparams.filters, 
                                            self.hparams.kernels, 
@@ -91,7 +90,7 @@ class EncoderConvolution2D:
         fc_layers = []
         for width, dropout in zip(self.hparams.affine_widths, self.hparams.dropout):
             x = Dense(width, activation=self.hparams.activation)(Dropout(dropout)(x))
-            fc_layers.append(x);
+            fc_layers.append(x)
 
         del x
         gc.collect()
