@@ -1,13 +1,9 @@
 import gc
-
 from keras import backend as K
 from keras.models import Model
 from keras.layers import Input
 from keras.layers import Dense
-
 from keras.objectives import binary_crossentropy
-
-import numpy as np
 
 
 class VAE:
@@ -157,4 +153,3 @@ class VAE:
                   - K.exp(self.encoder.z_log_var), axis=-1)
 
         return xent_loss + kl_loss
-
