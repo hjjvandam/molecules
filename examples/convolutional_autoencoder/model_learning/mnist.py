@@ -36,7 +36,6 @@ def main():
                                    enc_conv_shape=encode_conv_shape)
 
     cvae = VAE(input_shape=input_shape,
-               latent_dim=3,
                encoder=encoder,
                decoder=decoder,
                optimizer=optimizer)

@@ -10,9 +10,8 @@ from keras.objectives import binary_crossentropy
 
 class VAE:
 
-    def __init__(self, input_shape, latent_dim, encoder, decoder, optimizer, loss=None):
+    def __init__(self, input_shape, encoder, decoder, optimizer, loss=None):
         self.input_shape = input_shape
-        self.latent_dim = latent_dim
         self.encoder = encoder
         self.decoder = decoder
         self.graph = self._create_graph()
