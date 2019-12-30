@@ -51,7 +51,8 @@ def main():
 
     weight_path = os.path.join(args.weight_path, 'cvae_fspeptide.h5')
     cvae.save_weights(weight_path)
-    callback.save_embeddings(filename='fspeptide', path=args.embedding_path)
+    callback.save(embed_path=os.path.join(args.embedding_path, 'fspeptide-embedding.npy'),
+                  idx_path=os.path.join(args.embedding_path, 'fspeptide-embedding-index.npy'))
 
 
 if __name__=='__main__':
