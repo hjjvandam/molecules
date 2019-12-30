@@ -7,6 +7,8 @@ from keras.layers import Dense
 
 from keras.objectives import binary_crossentropy
 
+import numpy as np
+
 
 class VAE:
 
@@ -35,7 +37,7 @@ class VAE:
         Parameters
         ----------
         data : np.ndarray
-            Input data;
+            Input data
 
         batch_size : int
             Minibatch size
@@ -62,8 +64,9 @@ class VAE:
         if validation_data is not None:
             validation_data = (validation_data, validation_data)
 
-        self.graph.fit(data, data, batch_size, epochs=epochs, shuffle=shuffle,
-                       validation_data=validation_data, callbacks=callbacks);
+        self.graph.fit(x=data, y=data,
+                       batch_size=batch_size, epochs=epochs, shuffle=shuffle,
+                       validation_data=validation_data, callbacks=callbacks)
 
     def decode(self, data):
         """

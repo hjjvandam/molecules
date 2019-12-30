@@ -6,7 +6,7 @@ from keras.layers import Dense
 from keras.layers import Reshape
 from keras.layers import Conv2DTranspose
 
-from .hyperparameters import HyperparamsDecoder
+from .hyperparams import HyperparamsDecoder
 
 
 class DecoderConvolution2D:
