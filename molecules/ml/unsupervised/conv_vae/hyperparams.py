@@ -32,18 +32,18 @@ class HyperparamsEncoder(HyperParamsConvVAE):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
-                 num_affine_layers=1, affine_widths=[128], dropout=[0]):
+                 num_affine_layers=1, affine_widths=[128], affine_dropouts=[0]):
 
         super().__init__(num_conv_layers, filters, kernels, strides, 
                          latent_dim, activation, num_affine_layers,
                          affine_widths)
 
-        self.dropout = dropout
+        self.affine_dropouts = affine_dropouts
 
         self.__validate()
 
     def __validate(self):
-        if len(self.dropout) != self.num_affine_layers:
+        if len(self.affine_dropouts) != self.num_affine_layers:
             raise Exception('number of dropout parameters must equal the number of affine layers')
 
 
