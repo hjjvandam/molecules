@@ -15,8 +15,9 @@ class VAE:
         self.encoder = encoder
         self.decoder = decoder
         self.graph = self._create_graph()
-        self.loss = self._vae_loss if loss is None else loss
-        self.graph.compile(optimizer=optimizer, loss=self.loss)
+        if loss is None:
+            loss = self._vae_loss
+        self.graph.compile(optimizer=optimizer, loss=loss)
 
     def __repr__(self):
         return 'Convolutional Variational Autoencoder.'
