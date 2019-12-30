@@ -136,7 +136,7 @@ class VAE:
 
     def _create_graph(self):
         input_ = Input(shape=self.input_shape)
-        embed = self.encoder.create_graph(self.input)
+        embed = self.encoder.create_graph(input_)
         output = self.decoder.create_graph(embed)
         graph = Model(input_, output, name='CVAE')
         return graph
