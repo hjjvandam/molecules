@@ -65,7 +65,6 @@ class EncoderConvolution2D:
             x = Convolution2D(filter_, kernel, strides=stride,
                               activation=self.hparams.activation,
                               padding='same')(x)
-
             conv2d_layers.append(x)
 
         del x
