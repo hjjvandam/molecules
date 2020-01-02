@@ -15,9 +15,12 @@ class HyperParamsConvVAE(HyperParams):
         self.num_affine_layers = num_affine_layers
         self.affine_widths = affine_widths
 
-        self.__validate()
+        # Need to specify this validate function, since method is
+        # overridden in child classes.
+        HyperParamsConvVAE.validate(self)
 
-    def __validate(self):
+
+    def validate(self):
         if len(self.filters) != self.num_conv_layers:
             raise Exception('number of filters must equal number of convolutional layers.')
         if len(self.kernels) != self.num_conv_layers:
@@ -34,15 +37,15 @@ class HyperparamsEncoder(HyperParamsConvVAE):
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
                  num_affine_layers=1, affine_widths=[128], affine_dropouts=[0]):
 
-        super().__init__(num_conv_layers, filters, kernels, strides, 
+        super().__init__(num_conv_layers, filters, kernels, strides,
                          latent_dim, activation, num_affine_layers,
                          affine_widths)
 
         self.affine_dropouts = affine_dropouts
 
-        self.__validate()
+        self.validate()
 
-    def __validate(self):
+    def validate(self):
         if len(self.affine_dropouts) != self.num_affine_layers:
             raise Exception('number of dropout parameters must equal the number of affine layers')
 
