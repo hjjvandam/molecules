@@ -13,6 +13,7 @@ class DecoderConvolution2D:
 
     def __init__(self, output_shape, enc_conv_params, 
                  enc_conv_shape, hyperparameters=HyperparamsDecoder()):
+        hyperparameters.validate()
         self.output_shape = output_shape
         self.enc_conv_params = enc_conv_params
         self.enc_conv_shape = enc_conv_shape

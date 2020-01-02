@@ -16,6 +16,7 @@ from .hyperparams import HyperparamsEncoder
 class EncoderConvolution2D:
 
     def __init__(self, input_shape, hyperparameters=HyperparamsEncoder()):
+        hyperparameters.validate()
         self.input_shape = input_shape
         self.input = Input(shape=input_shape)
         self.hparams = hyperparameters
