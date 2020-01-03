@@ -8,7 +8,7 @@ class Hyperparams(metaclass=ABCMeta):
 
     def __repr__(self):
         return f'{self.__class__.__name__}\n' + \
-        ''.join([f'{attr}: {value}\n' for attr, value in self.__dict__.items()])
+        ''.join(f'{attr}: {value}\n' for attr, value in self.__dict__.items())
 
     @abstractmethod
     def validate(self):
@@ -23,5 +23,5 @@ class Hyperparams(metaclass=ABCMeta):
         """Load HyperParams object from disk."""
         with open(path, 'rb') as file:
             hparams = pickle.load(file)
-            hparams.validate()
-            return hparams
+        hparams.validate()
+        return hparams
