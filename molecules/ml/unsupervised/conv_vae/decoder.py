@@ -6,13 +6,13 @@ from keras.layers import Dense
 from keras.layers import Reshape
 from keras.layers import Conv2DTranspose
 
-from .hyperparams import HyperparamsDecoder
+from .hyperparams import DecoderHyperparams
 
 
 class DecoderConvolution2D:
 
     def __init__(self, output_shape, enc_conv_params, 
-                 enc_conv_shape, hyperparameters=HyperparamsDecoder()):
+                 enc_conv_shape, hyperparameters=DecoderHyperparams()):
         hyperparameters.validate()
         self.output_shape = output_shape
         self.enc_conv_params = enc_conv_params

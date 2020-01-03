@@ -1,10 +1,14 @@
 import pickle
 from abc import ABCMeta, abstractmethod
 
-class HyperParams(metaclass=ABCMeta):
+class Hyperparams(metaclass=ABCMeta):
     """Abstract interface for defining hyperparameters"""
     def __init__(self):
         pass
+
+    def __repr__(self):
+        return f'{self.__class__.__name__}\n' + \
+        ''.join([f'{attr}: {value}\n' for attr, value in self.__dict__.items()])
 
     @abstractmethod
     def validate(self):

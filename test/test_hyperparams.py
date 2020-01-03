@@ -3,7 +3,7 @@ Tests for `molecules` module.
 """
 import os
 import pytest
-from molecules.ml.unsupervised import HyperparamsEncoder, HyperparamsDecoder
+from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
 
 
 class TestHyperParams:
@@ -23,7 +23,7 @@ class TestHyperParams:
                           'latent_dim': 3,
                           'affine_dropouts': [0]
                          }
-        encoder_hparams = HyperparamsEncoder(**hparam_options)
+        encoder_hparams = EncoderHyperparams(**hparam_options)
 
         # Save model hyperparameters to disk
         encoder_hparams.save(self.fname)
@@ -33,7 +33,7 @@ class TestHyperParams:
             in os.listdir(os.path.dirname(self.fname))
 
         # Load saved hyperparameters from disk
-        loaded_hparams = HyperparamsEncoder.load(self.fname)
+        loaded_hparams = EncoderHyperparams.load(self.fname)
 
         # Check that all attributes were read from disk correctly
         for key, val in hparam_options.items():
@@ -52,9 +52,9 @@ class TestHyperParams:
 
         affine_dropouts = [0]
 
-        encoder_hparams = HyperparamsEncoder(affine_dropouts=affine_dropouts,
+        encoder_hparams = EncoderHyperparams(affine_dropouts=affine_dropouts,
                                              **shared_hparams)
-        decoder_hparams = HyperparamsDecoder(**shared_hparams)
+        decoder_hparams = DecoderHyperparams(**shared_hparams)
 
         # Raises exception if invalid
         encoder_hparams.validate()

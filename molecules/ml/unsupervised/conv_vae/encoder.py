@@ -10,12 +10,12 @@ from keras.layers import Flatten
 from keras.layers import Dropout
 from keras.layers import Convolution2D
 
-from .hyperparams import HyperparamsEncoder
+from .hyperparams import EncoderHyperparams
 
 
 class EncoderConvolution2D:
 
-    def __init__(self, input_shape, hyperparameters=HyperparamsEncoder()):
+    def __init__(self, input_shape, hyperparameters=EncoderHyperparams()):
         hyperparameters.validate()
         self.input_shape = input_shape
         self.input = Input(shape=input_shape)

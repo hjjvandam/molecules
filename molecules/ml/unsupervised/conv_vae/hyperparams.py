@@ -1,7 +1,7 @@
-from molecules.ml.hyperparams import HyperParams
+from molecules.ml.hyperparams import Hyperparams
 
 
-class HyperParamsConvVAE(HyperParams):
+class ConvVAEHyperparams(Hyperparams):
     def __init__(self, num_conv_layers, filters, kernels,
                  strides, latent_dim, activation, num_affine_layers,
                  affine_widths):
@@ -26,7 +26,7 @@ class HyperParamsConvVAE(HyperParams):
             raise Exception('number of affine width parameters must equal the number of affine layers')
 
 
-class HyperparamsEncoder(HyperParamsConvVAE):
+class EncoderHyperparams(ConvVAEHyperparams):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
@@ -46,7 +46,7 @@ class HyperparamsEncoder(HyperParamsConvVAE):
             raise Exception('number of dropout parameters must equal the number of affine layers')
 
 
-class HyperparamsDecoder(HyperParamsConvVAE):
+class DecoderHyperparams(ConvVAEHyperparams):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
