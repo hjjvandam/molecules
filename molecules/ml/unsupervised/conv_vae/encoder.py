@@ -30,6 +30,12 @@ class EncoderConvolution2D:
         print('Convolutional Encoder:')
         self.embedder.summary()
 
+    def save_weights(self, path):
+        self.embedder.save_weights(path)
+
+    def load_weights(self, path):
+        self.embedder.load_weights(path)
+
     def embed(self, data):
         """
         Embed a datapoint into the latent space.

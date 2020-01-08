@@ -29,6 +29,12 @@ class DecoderConvolution2D:
         print('Convolutional Decoder')
         return self.generator.summary()
 
+    def save_weights(self, path):
+        self.generator.save_weights(path)
+
+    def load_weights(self, path):
+        self.generator.load_weights(path)
+
     def generate(self, embedding):
         """
         Generate images from embeddings.

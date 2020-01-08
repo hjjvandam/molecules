@@ -110,7 +110,7 @@ class VAE:
         """
         self.decoder.generate(embedding)
 
-    def save_weights(self, path):
+    def save_weights(self, ae_path, encoder_path, decoder_path):
         """
         Save model weights.
 
@@ -120,9 +120,11 @@ class VAE:
             Path to save the model weights.
 
         """
-        self.graph.save_weights(path)
+        self.graph.save_weights(ae_path)
+        self.encoder.save_weights(encoder_path)
+        self.decoder.save_weights(decoder_path)
 
-    def load_weights(self, path):
+    def load_weights(self, ae_path, encoder_path, decoder_path):
         """
         Load saved model weights.
 
@@ -132,7 +134,9 @@ class VAE:
             Path to saved model weights.
 
         """
-        self.graph.load_weights(path)
+        self.graph.load_weights(ae_path)
+        self.encoder.load_weights(encoder_path)
+        self.decoder.load_weights(decoder_path)
 
     def _create_graph(self):
         input_ = Input(shape=self.input_shape)
