@@ -3,13 +3,7 @@ import numpy as np
 
 from keras import backend as K
 from keras.models import Model
-from keras.layers import Input
-from keras.layers import Dense
-from keras.layers import Lambda
-from keras.layers import Flatten
-from keras.layers import Dropout
-from keras.layers import Convolution2D
-
+from keras.layers import Input, Dense, Lambda, Flatten, Dropout, Convolution2D
 from .hyperparams import EncoderHyperparams
 
 

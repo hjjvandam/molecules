@@ -1,11 +1,6 @@
 import gc
-import warnings
 from keras.models import Model
-from keras.layers import Input
-from keras.layers import Dense
-from keras.layers import Reshape
-from keras.layers import Conv2DTranspose
-
+from keras.layers import Input, Dense, Reshape, Conv2DTranspose
 from .hyperparams import DecoderHyperparams
 
 class DecoderConvolution2D:
