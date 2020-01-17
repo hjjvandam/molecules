@@ -1,5 +1,5 @@
 import gc
-
+import warnings
 from keras.models import Model
 from keras.layers import Input
 from keras.layers import Dense
@@ -7,7 +7,6 @@ from keras.layers import Reshape
 from keras.layers import Conv2DTranspose
 
 from .hyperparams import DecoderHyperparams
-
 
 class DecoderConvolution2D:
 
@@ -18,15 +17,13 @@ class DecoderConvolution2D:
         self.enc_conv_params = enc_conv_params
         self.enc_conv_shape = enc_conv_shape
         self.hparams = hyperparameters
-        self.input = Input(shape=(self.hparams.latent_dim,), name='z_sampling')
-        self.graph = self.create_graph(self.input)
-        self.generator = Model(self.input, self.graph)
+        self.generator = self._create_graph()
 
     def __repr__(self):
         return '2D Convolutional Decoder.'
 
     def summary(self):
-        print('Convolutional Decoder')
+        print(self)
         return self.generator.summary()
 
     def save_weights(self, path):
@@ -64,7 +61,7 @@ class DecoderConvolution2D:
             Fully connected layers from embedding to convolution layers.
         """
         fc_layers = []
-        for width in reversed(self.hparams.affine_widths):
+        for width in self.hparams.affine_widths:
             x = Dense(width, activation=self.hparams.activation)(x)
             fc_layers.append(x)
 
@@ -92,24 +89,19 @@ class DecoderConvolution2D:
             Convolution layers
         """
 
-        # Mirroring the encoder network requires reversing its hyperparameters.
-        filters = list(reversed(self.hparams.filters))
-        kernels = list(reversed(self.hparams.kernels))
-        strides = list(reversed(self.hparams.strides))
-
         conv2d_layers = []
         for i in range(self.hparams.num_conv_layers - 1):
-            x = Conv2DTranspose(filters[i],
-                                kernels[i],
-                                strides=strides[i],
+            x = Conv2DTranspose(self.hparams.filters[i],
+                                self.hparams.kernels[i],
+                                strides=self.hparams.strides[i],
                                 activation=self.hparams.activation,
                                 padding='same')(x)
             conv2d_layers.append(x)
 
         # Final output is special.
         x = Conv2DTranspose(self.output_shape[2],
-                            kernels[-1],
-                            strides=strides[-1],
+                            self.hparams.kernels[-1],
+                            strides=self.hparams.strides[-1],
                             activation=self.hparams.output_activation,
                             padding='same')(x)
 
@@ -120,8 +112,10 @@ class DecoderConvolution2D:
 
         return conv2d_layers
 
-    def create_graph(self, input_):
+    def _create_graph(self):
+        input_ = Input(shape=(self.hparams.latent_dim,), name='decoder_input')
         affine_layers = self._affine_layers(input_)
         reshaped = Reshape(self.enc_conv_shape)(affine_layers[-1])
-        out_img = self._conv_layers(reshaped)[-1]
-        return out_img
+        conv_layers = self._conv_layers(reshaped)[-1]
+        generator = Model(input_, conv_layers, name='generator')
+        return generator

@@ -18,16 +18,15 @@ class EncoderConvolution2D:
     def __init__(self, input_shape, hyperparameters=EncoderHyperparams()):
         hyperparameters.validate()
         self.input_shape = input_shape
-        self.input = Input(shape=input_shape)
         self.hparams = hyperparameters
-        self.graph = self.create_graph(self.input)
-        self.embedder = Model(self.input, self.z_mean)
+        self.input = Input(shape=self.input_shape, name='encoder_input')
+        self.embedder = self._create_graph()
 
     def __repr__(self):
         return '2D Convolutional Encoder.'
 
     def summary(self):
-        print('Convolutional Encoder:')
+        print(self)
         self.embedder.summary()
 
     def save_weights(self, path):
@@ -102,16 +101,15 @@ class EncoderConvolution2D:
         del x
         gc.collect()
 
-        self.z_mean = Dense(self.hparams.latent_dim)(fc_layers[-1])
-        self.z_log_var = Dense(self.hparams.latent_dim)(fc_layers[-1])
-        self.z = Lambda(self.sampling, output_shape=(self.hparams.latent_dim,))([self.z_mean, self.z_log_var])
+        z_mean = Dense(self.hparams.latent_dim)(fc_layers[-1])
+        z_log_var = Dense(self.hparams.latent_dim)(fc_layers[-1])
+        z = Lambda(self.sampling, output_shape=(self.hparams.latent_dim,))([z_mean, z_log_var])
 
-        embed = self.z
-        return embed
+        return z_mean, z_log_var, z
 
     def sampling(self, args):
         """
-        Reparameterization trick by sampling fr an isotropic unit Gaussian.
+        Reparameterization trick by sampling for an isotropic unit Gaussian.
 
         Parameters
         ----------
@@ -129,18 +127,21 @@ class EncoderConvolution2D:
         epsilon = K.random_normal(shape=(batch, dim))
         return z_mean + K.exp(0.5 * z_log_var) * epsilon
 
-    def create_graph(self, input_):
+    def _create_graph(self):
         """Create keras model outside of class"""
-        self.conv_layers = self._conv_layers(input_)
-        flattened = Flatten()(self.conv_layers[-1])
-        z = self._affine_layers(flattened)
-        return z
+        conv_layers = self._conv_layers(self.input)
+        flattened = Flatten()(conv_layers[-1])
+        # Member vars z_mean, z_log_var used to calculate vae loss
+        self.z_mean, self.z_log_var, z = self._affine_layers(flattened)
+        embedder = Model(self.input, outputs=[self.z_mean, self.z_log_var, z], name='embedder')
+        return embedder
 
     def get_final_conv_params(self):
         """Return the number of flattened parameters from final convolution layer."""
-        input_ = np.ones((1, *self.input_shape))
-        dummy = Model(self.input, self.conv_layers[-1])
-        conv_shape = dummy.predict(input_).shape
+        input_ = Input(shape=self.input_shape)
+        dummy = Model(input_, self._conv_layers(input_)[-1])
+        dummy_input = np.ones((1, *self.input_shape))
+        conv_shape = dummy.predict(dummy_input).shape
         encode_conv_shape = conv_shape[1:]
         num_conv_params = np.prod(conv_shape)
         return encode_conv_shape, num_conv_params
