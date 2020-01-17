@@ -132,8 +132,7 @@ class EncoderConvolution2D:
 
     def get_final_conv_params(self):
         """Return the number of flattened parameters from final convolution layer."""
-        input_ = Input(shape=self.input_shape)
-        dummy = Model(input_, self._conv_layers(input_)[-1])
+        dummy = Model(self.input, self._conv_layers(self.input)[-1])
         dummy_input = np.ones((1, *self.input_shape))
         conv_shape = dummy.predict(dummy_input).shape
         encode_conv_shape = conv_shape[1:]
