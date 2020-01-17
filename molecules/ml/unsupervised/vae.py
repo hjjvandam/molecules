@@ -21,7 +21,8 @@ class VAE:
         return 'Convolutional Variational Autoencoder.'
 
     def summary(self):
-        print('Convolutional Variational Autoencoder\n')
+        print(self)
+        self.graph.summary()
         self.encoder.summary()
         self.decoder.summary()
 
@@ -135,10 +136,9 @@ class VAE:
         self.graph.load_weights(path)
 
     def _create_graph(self):
-        input_ = Input(shape=self.input_shape)
-        embed = self.encoder.create_graph(input_)
-        output = self.decoder.create_graph(embed)
-        graph = Model(input_, output, name='CVAE')
+        *_, z = self.encoder.embedder(self.encoder.input)
+        output = self.decoder.generator(z)
+        graph = Model(self.encoder.input, output, name='CVAE')
         return graph
 
     def _vae_loss(self, input, output):

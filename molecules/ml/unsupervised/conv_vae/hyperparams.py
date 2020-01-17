@@ -1,7 +1,7 @@
-from molecules.ml.hyperparams import HyperParams
+from molecules.ml.hyperparams import Hyperparams
 
 
-class HyperParamsConvVAE(HyperParams):
+class ConvVAEHyperparams(Hyperparams):
     def __init__(self, num_conv_layers, filters, kernels,
                  strides, latent_dim, activation, num_affine_layers,
                  affine_widths):
@@ -15,9 +15,7 @@ class HyperParamsConvVAE(HyperParams):
         self.num_affine_layers = num_affine_layers
         self.affine_widths = affine_widths
 
-        self.__validate()
-
-    def __validate(self):
+    def validate(self):
         if len(self.filters) != self.num_conv_layers:
             raise Exception('number of filters must equal number of convolutional layers.')
         if len(self.kernels) != self.num_conv_layers:
@@ -28,26 +26,27 @@ class HyperParamsConvVAE(HyperParams):
             raise Exception('number of affine width parameters must equal the number of affine layers')
 
 
-class HyperparamsEncoder(HyperParamsConvVAE):
+class EncoderHyperparams(ConvVAEHyperparams):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
                  num_affine_layers=1, affine_widths=[128], affine_dropouts=[0]):
 
-        super().__init__(num_conv_layers, filters, kernels, strides, 
+        super().__init__(num_conv_layers, filters, kernels, strides,
                          latent_dim, activation, num_affine_layers,
                          affine_widths)
 
         self.affine_dropouts = affine_dropouts
 
-        self.__validate()
+        self.validate()
 
-    def __validate(self):
+    def validate(self):
+        super().validate()
         if len(self.affine_dropouts) != self.num_affine_layers:
             raise Exception('number of dropout parameters must equal the number of affine layers')
 
 
-class HyperparamsDecoder(HyperParamsConvVAE):
+class DecoderHyperparams(ConvVAEHyperparams):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3, activation='relu', 
@@ -59,3 +58,5 @@ class HyperparamsDecoder(HyperParamsConvVAE):
                          affine_widths)
 
         self.output_activation = output_activation
+
+        self.validate()
