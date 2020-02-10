@@ -29,6 +29,9 @@ def dbscan_clustering(X, eps, min_samples, outlier_cutoff=10):
 
     outliers : np.ndarray
         opt_eps associated array of outlier indices in the X data
+
+    labels : np.ndarray
+        all cluster labels
     """
 
     opt_eps = eps
@@ -43,7 +46,7 @@ def dbscan_clustering(X, eps, min_samples, outlier_cutoff=10):
         if len(outlier_inds) > outlier_cutoff:
             opt_eps += 0.05
         else: 
-            return opt_eps, outlier_inds
+            return opt_eps, outlier_inds, db.labels_
 
 
 def optics_clustering(X, min_samples):
@@ -66,6 +69,9 @@ def optics_clustering(X, min_samples):
 
     outliers : np.ndarray
         opt_eps associated array of outlier indices in the X data
+
+    labels : np.ndarray
+        all cluster labels
     """
 
     # Run OPTICS clustering on the data
@@ -74,4 +80,4 @@ def optics_clustering(X, min_samples):
     # Array of outlier indices in X data
     outlier_inds = np.flatnonzero(clustering.labels_ == -1)
     
-    return outlier_inds
+    return outlier_inds, clustering.labels_

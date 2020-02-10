@@ -28,7 +28,7 @@ class TestClustering:
 
         # Attempts to correctly identify outliers with 10 different data sets
         for attempt in range(10):
-            opt_eps, outlier_inds = dbscan_clustering(self.X, eps, min_samples)
+            opt_eps, outlier_inds, labels = dbscan_clustering(self.X, eps, min_samples)
 
             if np.setdiff1d(self.outliers, self.X[outlier_inds]).size == 0:
                 break
@@ -42,7 +42,7 @@ class TestClustering:
 
         # Attempts to correctly identify outliers with 10 different data sets
         for attempt in range(10):
-            outlier_inds = optics_clustering(self.X, min_samples)
+            outlier_inds, labels = optics_clustering(self.X, min_samples)
 
             if np.setdiff1d(self.outliers, self.X[outlier_inds]).size == 0:
                 break
