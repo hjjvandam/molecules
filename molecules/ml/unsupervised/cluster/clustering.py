@@ -42,7 +42,7 @@ def dbscan_clustering(X, eps, min_samples, outlier_cutoff=10):
         # Array of outlier indices in latent space
         outlier_inds = np.flatnonzero(db.labels_ == -1)
 
-        # If the number of outliers is greater than 150, update eps.
+        # If the number of outliers is greater than outlier_cutoff, update eps.
         if len(outlier_inds) > outlier_cutoff:
             opt_eps += 0.05
         else: 
