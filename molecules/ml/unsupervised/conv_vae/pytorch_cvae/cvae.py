@@ -113,33 +113,20 @@ class EncoderConvolution2D(nn.Module):
             Convolution layers
         """
         conv2d_layers = []
-        # for filter_, kernel, stride in zip(self.hparams.filters, 
-        #                                    self.hparams.kernels, 
-        #                                    self.hparams.strides):
+        for i, (filter_, kernel, stride) in enumerate(zip(self.hparams.filters,
+                                                          self.hparams.kernels,
+                                                          self.hparams.strides)):
 
-        #     l = nn.Conv2d()
-        #     conv2d_layers.append(l)
-
-        conv2d_layers.append(nn.Conv2d(in_channels=1, 
-                                       out_channels=self.hparams.filters[0],
-                                       kernel_size=self.hparams.kernels[0],
-                                       stride=self.hparams.strides[0],
-                                       padding=same_padding(self.input_shape[0],
-                                                            self.hparams.kernels[0],
-                                                            self.hparams.strides[0])))
-
-        # TODO: may only need to compute a single pad if we use same_padding 
-        #       for each layer, otherwise use conv2d_output_size. Think more on this.
-
-        conv2d_layers.append(nn.Conv2d(in_channels=self.hparams.kernels[0], 
-                                       out_channels=self.hparams.filters[1],
-                                       kernel_size=self.hparams.kernels[1],
-                                       stride=self.hparams.strides[1],
-                                       padding=same_padding(self.input_shape[0],
-                                                            self.hparams.kernels[0],
-                                                            self.hparams.strides[0])))
+            l = nn.Conv2d(in_channels= 1 if not i else self.hparams.filters[i - 1],
+                          out_channels=filter_,
+                          kernel_size=kernel,
+                          stride=stride,
+                          padding=same_padding(self.input_shape[0], kernel, stride)
+                          )
+            conv2d_layers.append(l)
 
         return conv2d_layers
+
 
 
 # Helpful links:
