@@ -165,6 +165,80 @@ class EncoderConvolution2D(nn.Module):
         return fc_layers
 
 
+# TODO: add activation
+
+
+class DecoderConvolution2D(nn.Module):
+    def __init__(self, input_shape, hyperparameters=DecoderHyperparams()):
+        super(DecoderConvolution2D, self).__init__()
+
+        hyperparameters.validate()
+
+        # Assume input is square matrix
+        self.output_shape = output_shape
+        self.hparams = hyperparameters
+
+        self.affine_layers = nn.Sequential(*self._affine_layers())
+        self.conv_layers = nn.Sequential(*self._conv_layers()) 
+
+    def reshape(self, x):
+        new_shape = (*self.output_shape, self.hparams.affine_widths[-1] / self.output_shape[0]**2)
+        return x.view(new_shape)
+
+    def forward(self, x):
+        x = self.affine_layers(x)
+        x = self.reshape(x)
+        x = self.conv_layers(x)
+        return x
+
+    def _conv_layers(self):
+        """
+        Compose convolution layers.
+
+        Returns
+        -------
+        conv2d_layers : list
+            Convolution layers
+        """
+        conv2d_layers = []
+        for i, (filter_, kernel, stride) in enumerate(zip(self.hparams.filters,
+                                                          self.hparams.kernels,
+                                                          self.hparams.strides)):
+
+            l = nn.Conv2d(in_channels= 1 if not i else self.hparams.filters[i - 1],
+                          out_channels=filter_,
+                          kernel_size=kernel,
+                          stride=stride,
+                          padding=same_padding(self.input_shape[0], kernel, stride)
+                          )
+            conv2d_layers.append(l)
+
+        return conv2d_layers
+
+    def _affine_layers(self):
+        """
+        Compose affine layers.
+
+        Returns
+        -------
+        fc_layers : list
+            Linear layers
+        """
+
+        fc_layers = []
+        for i, (width, dropout) in enumerate(zip(self.hparams.affine_widths, self.hparams.affine_dropouts)):
+
+            in_features = self.hparams.latent_dim if not i else self.hparams.affine_widths[i - 1]
+
+            fc_layers.append(nn.Linear(in_features=in_features,
+                                       out_features=width))
+
+            fc_layers.append(nn.Dropout(p=dropout))
+
+        return fc_layers
+
+
+
 # Helpful links:
 #   https://github.com/L1aoXingyu/pytorch-beginner/blob/master/08-AutoEncoder/conv_autoencoder.py
 #   https://pytorch.org/tutorials/beginner/saving_loading_models.html
