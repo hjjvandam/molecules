@@ -89,6 +89,24 @@ def same_padding(input_dim, f, stride):
     return (input_dim * (stride - 1) - stride + f) // 2
 
 
+def select_activation(activation):
+    """
+    Parameters
+    ----------
+    activation : str
+        type of activation e.g. 'ReLU', etc
+
+    """
+    activation = activation.lower()
+    if activation is 'relu':
+        return nn.ReLU()
+    elif activation is 'sigmoid':
+        return nn.Sigmoid()
+    else:
+        raise ValueError(f'Invalid activation type: {activation}')
+
+
+
 class EncoderConvolution2D(nn.Module):
     def __init__(self, input_shape, hyperparameters=EncoderHyperparams()):
         super(EncoderConvolution2D, self).__init__()
@@ -139,6 +157,7 @@ class EncoderConvolution2D(nn.Module):
                           padding=same_padding(self.input_shape[0], kernel, stride)
                           )
             conv2d_layers.append(l)
+            conv2d_layers.append(select_activation(self.hparams.activation))
 
         return conv2d_layers
 
@@ -160,12 +179,10 @@ class EncoderConvolution2D(nn.Module):
             fc_layers.append(nn.Linear(in_features=in_features,
                                        out_features=width))
 
+            fc_layers.append(select_activation(self.hparams.activation))
             fc_layers.append(nn.Dropout(p=dropout))
 
         return fc_layers
-
-
-# TODO: add activation
 
 
 class DecoderConvolution2D(nn.Module):
@@ -211,7 +228,14 @@ class DecoderConvolution2D(nn.Module):
                           stride=stride,
                           padding=same_padding(self.input_shape[0], kernel, stride)
                           )
+
+            if i < len(self.hparams.filters) - 1:
+                activation = self.hparams.activation
+            else:
+                activation = self.hparams.output_activation
+
             conv2d_layers.append(l)
+            conv2d_layers.append(select_activation(activation))
 
         return conv2d_layers
 
@@ -232,7 +256,7 @@ class DecoderConvolution2D(nn.Module):
 
             fc_layers.append(nn.Linear(in_features=in_features,
                                        out_features=width))
-
+            fc_layers.append(select_activation(self.hparams.activation))
             fc_layers.append(nn.Dropout(p=dropout))
 
         return fc_layers
