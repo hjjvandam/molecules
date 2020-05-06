@@ -101,8 +101,22 @@ class EncoderConvolution2D(nn.Module):
 
         self.encoder = nn.Sequential(*self._conv_layers(),
                                      nn.Flatten(),
-                                     *self._affine_layers(),
-                                     )
+                                     *self._affine_layers())
+
+        self.z_mean = Dense(nn.Linear(in_features=self.hparams.affine_widths[-1],
+                                 out_features=self.hparams.latent_dim))
+        self.z_logvar = Dense(nn.Linear(in_features=self.hparams.affine_widths[-1],
+                                 out_features=self.hparams.latent_dim))
+
+    def reparameterize(self):
+        std = torch.exp(0.5*self.z_logvar)
+        eps = torch.randn_like(std)
+        return self.z_mean + eps*std
+
+    def forward(self, x):
+        x = self.encoder(x)
+        x = self.reparameterize(x)
+        return x
 
     def _conv_layers(self):
         """
@@ -139,9 +153,11 @@ class EncoderConvolution2D(nn.Module):
         """
 
         fc_layers = []
-        for width, dropout in zip(self.hparams.affine_widths, self.hparams.affine_dropouts):
+        for i, (width, dropout) in enumerate(zip(self.hparams.affine_widths, self.hparams.affine_dropouts)):
 
-            fc_layers.append(nn.Linear(in_features=self.input_shape[0]**2 * self.hparams.filters[-1],
+            in_features = self.input_shape[0]**2 * self.hparams.filters[-1] if not i else self.hparams.affine_widths[i - 1]
+
+            fc_layers.append(nn.Linear(in_features=in_features,
                                        out_features=width))
 
             fc_layers.append(nn.Dropout(p=dropout))
