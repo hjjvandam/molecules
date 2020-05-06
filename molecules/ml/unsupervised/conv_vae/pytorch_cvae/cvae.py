@@ -100,6 +100,7 @@ class EncoderConvolution2D(nn.Module):
         self.hparams = hyperparameters
 
         self.encoder = nn.Sequential(*self._conv_layers(),
+                                     nn.Flatten(),
                                      *self._affine_layers(),
                                      )
 
@@ -127,6 +128,25 @@ class EncoderConvolution2D(nn.Module):
 
         return conv2d_layers
 
+    def _affine_layers(self):
+        """
+        Compose affine layers.
+
+        Returns
+        -------
+        fc_layers : list
+            Linear layers
+        """
+
+        fc_layers = []
+        for width, dropout in zip(self.hparams.affine_widths, self.hparams.affine_dropouts):
+
+            fc_layers.append(nn.Linear(in_features=self.input_shape[0]**2 * self.hparams.filters[-1],
+                                       out_features=width))
+
+            fc_layers.append(nn.Dropout(p=dropout))
+
+        return fc_layers
 
 
 # Helpful links:
