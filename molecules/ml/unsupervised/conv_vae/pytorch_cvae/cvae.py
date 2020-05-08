@@ -106,6 +106,8 @@ def select_activation(activation):
         raise ValueError(f'Invalid activation type: {activation}')
 
 
+# TODO: consider making _conv_layers and _affine_layers helper functions
+
 
 class EncoderConvolution2D(nn.Module):
     def __init__(self, input_shape, hyperparameters=EncoderHyperparams()):
@@ -121,10 +123,8 @@ class EncoderConvolution2D(nn.Module):
                                      nn.Flatten(),
                                      *self._affine_layers())
 
-        self.z_mean = Dense(nn.Linear(in_features=self.hparams.affine_widths[-1],
-                                 out_features=self.hparams.latent_dim))
-        self.z_logvar = Dense(nn.Linear(in_features=self.hparams.affine_widths[-1],
-                                 out_features=self.hparams.latent_dim))
+        self.z_mean = self._embedding_layer()
+        self.z_logvar = self._embedding_layer()
 
     def reparameterize(self):
         std = torch.exp(0.5*self.z_logvar)
@@ -145,19 +145,28 @@ class EncoderConvolution2D(nn.Module):
         conv2d_layers : list
             Convolution layers
         """
-        conv2d_layers = []
-        for i, (filter_, kernel, stride) in enumerate(zip(self.hparams.filters,
-                                                          self.hparams.kernels,
-                                                          self.hparams.strides)):
 
-            l = nn.Conv2d(in_channels= 1 if not i else self.hparams.filters[i - 1],
-                          out_channels=filter_,
-                          kernel_size=kernel,
-                          stride=stride,
-                          padding=same_padding(self.input_shape[0], kernel, stride)
-                          )
-            conv2d_layers.append(l)
+        conv2d_layers = []
+
+        # Contact matrices have one channel
+        in_channels = 1
+
+        for filter_, kernel, stride in zip(self.hparams.filters,
+                                           self.hparams.kernels,
+                                           self.hparams.strides):
+
+            padding = same_padding(self.input_shape[0], kernel, stride)
+
+            conv2d_layers.append(nn.Conv2d(in_channels=in_channels,
+                                           out_channels=filter_,
+                                           kernel_size=kernel,
+                                           stride=stride,
+                                           padding=padding))
+
             conv2d_layers.append(select_activation(self.hparams.activation))
+
+            # Subsequent layers in_channels is the current layers number of filters
+            in_channels = filter_
 
         return conv2d_layers
 
@@ -172,17 +181,28 @@ class EncoderConvolution2D(nn.Module):
         """
 
         fc_layers = []
-        for i, (width, dropout) in enumerate(zip(self.hparams.affine_widths, self.hparams.affine_dropouts)):
 
-            in_features = self.input_shape[0]**2 * self.hparams.filters[-1] if not i else self.hparams.affine_widths[i - 1]
+        # First layer gets flattened convolutional output
+        in_features = self.input_shape[0]**2 * self.hparams.filters[-1]
+
+        for width, dropout in zip(self.hparams.affine_widths,
+                                  self.hparams.affine_dropouts):
 
             fc_layers.append(nn.Linear(in_features=in_features,
                                        out_features=width))
 
             fc_layers.append(select_activation(self.hparams.activation))
+
             fc_layers.append(nn.Dropout(p=dropout))
 
+            # Subsequent layers in_features is the current layers width
+            in_features = width
+
         return fc_layers
+
+    def _embedding_layer(self):
+        return Dense(nn.Linear(in_features=self.hparams.affine_widths[-1],
+                               out_features=self.hparams.latent_dim))
 
 
 class DecoderConvolution2D(nn.Module):
@@ -196,9 +216,12 @@ class DecoderConvolution2D(nn.Module):
         self.hparams = hyperparameters
 
         self.affine_layers = nn.Sequential(*self._affine_layers())
-        self.conv_layers = nn.Sequential(*self._conv_layers()) 
+        self.conv_layers = nn.Sequential(*self._conv_layers())
 
     def reshape(self, x):
+        """
+        Reshape flattened x as a tensor (output, output, remainder)
+        """
         new_shape = (*self.output_shape, self.hparams.affine_widths[-1] / self.output_shape[0]**2)
         return x.view(new_shape)
 
@@ -207,6 +230,10 @@ class DecoderConvolution2D(nn.Module):
         x = self.reshape(x)
         x = self.conv_layers(x)
         return x
+
+
+    # TODO: _conv_layers could have a bug in the in_channels. Needs testing.
+    #       Check that the output dimension is correct
 
     def _conv_layers(self):
         """
@@ -218,24 +245,28 @@ class DecoderConvolution2D(nn.Module):
             Convolution layers
         """
         conv2d_layers = []
-        for i, (filter_, kernel, stride) in enumerate(zip(self.hparams.filters,
-                                                          self.hparams.kernels,
-                                                          self.hparams.strides)):
 
-            l = nn.Conv2d(in_channels= 1 if not i else self.hparams.filters[i - 1],
-                          out_channels=filter_,
-                          kernel_size=kernel,
-                          stride=stride,
-                          padding=same_padding(self.input_shape[0], kernel, stride)
-                          )
+        in_channels = self.hparams.affine_widths[-1] / self.output_shape[0]**2
 
-            if i < len(self.hparams.filters) - 1:
-                activation = self.hparams.activation
-            else:
-                activation = self.hparams.output_activation
+        for filter_, kernel, stride in zip(self.hparams.filters,
+                                           self.hparams.kernels,
+                                           self.hparams.strides):
 
-            conv2d_layers.append(l)
-            conv2d_layers.append(select_activation(activation))
+            padding = same_padding(self.input_shape[0], kernel, stride)
+
+            conv2d_layers.append(nn.Conv2d(in_channels=in_channels,
+                                           out_channels=filter_,
+                                           kernel_size=kernel,
+                                           stride=stride,
+                                           padding=padding))
+
+            conv2d_layers.append(select_activation(self.hparams.activation))
+
+            # Subsequent layers in_channels is the current layers number of filters
+            in_channels = filter_
+
+        # Overwrite output activation
+        conv2d_layers[-1] = select_activation(self.hparams.output_activation)
 
         return conv2d_layers
 
@@ -250,14 +281,21 @@ class DecoderConvolution2D(nn.Module):
         """
 
         fc_layers = []
-        for i, (width, dropout) in enumerate(zip(self.hparams.affine_widths, self.hparams.affine_dropouts)):
 
-            in_features = self.hparams.latent_dim if not i else self.hparams.affine_widths[i - 1]
+        in_features = self.hparams.latent_dim
+
+        for width, dropout in zip(self.hparams.affine_widths,
+                                  self.hparams.affine_dropouts):
 
             fc_layers.append(nn.Linear(in_features=in_features,
                                        out_features=width))
+
             fc_layers.append(select_activation(self.hparams.activation))
+
             fc_layers.append(nn.Dropout(p=dropout))
+
+            # Subsequent layers in_features is the current layers width
+            in_features = width
 
         return fc_layers
 
@@ -269,23 +307,9 @@ class DecoderConvolution2D(nn.Module):
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
 class CVAE(nn.Module):
     def __init__(self):
         super(CVAE, self).__init__()
-
-
 
     def forward(self, x):
         x = self.encoder(x)
