@@ -1,6 +1,9 @@
 from molecules.ml.hyperparams import Hyperparams
 
 
+# TODO: remove num_conv_layers, num_affine_layers since this data is encoded
+#       in the lists filters,affine_widths,etc. This will effect keras encoder decoder impl.
+
 class ConvVAEHyperparams(Hyperparams):
     def __init__(self, num_conv_layers, filters, kernels,
                  strides, latent_dim, activation, num_affine_layers,
