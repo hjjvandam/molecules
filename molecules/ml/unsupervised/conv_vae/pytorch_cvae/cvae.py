@@ -206,7 +206,7 @@ class EncoderConvolution2D(nn.Module):
 
 
 class DecoderConvolution2D(nn.Module):
-    def __init__(self, input_shape, hyperparameters=DecoderHyperparams()):
+    def __init__(self, output_shape, hyperparameters=DecoderHyperparams()):
         super(DecoderConvolution2D, self).__init__()
 
         hyperparameters.validate()
@@ -308,8 +308,11 @@ class DecoderConvolution2D(nn.Module):
 
 
 class CVAE(nn.Module):
-    def __init__(self):
+    def __init__(self, input_shape, encoder_hparams, decoder_hparams):
         super(CVAE, self).__init__()
+
+        self.encoder = EncoderConvolution2D(input_shape, encoder_hparams)
+        self.decoder = DecoderConvolution2D(input_shape, decoder_hparams)
 
     def forward(self, x):
         x = self.encoder(x)
