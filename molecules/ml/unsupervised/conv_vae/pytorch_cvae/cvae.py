@@ -1,5 +1,8 @@
+import torch
 from torch import nn, optim
 from torch.nn import functional as F
+from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
+from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
 
 def conv2d_num_params(f, c, num_filters):
     """
@@ -103,10 +106,9 @@ def select_activation(activation):
         type of activation e.g. 'ReLU', etc
 
     """
-    activation = activation.lower()
-    if activation is 'relu':
+    if activation is 'ReLU':
         return nn.ReLU()
-    elif activation is 'sigmoid':
+    elif activation is 'Sigmoid':
         return nn.Sigmoid()
     else:
         raise ValueError(f'Invalid activation type: {activation}')
@@ -117,7 +119,7 @@ def select_activation(activation):
 
 class EncoderConv2D(nn.Module):
     def __init__(self, input_shape, hparams):
-        super(EncoderConvolution2D, self).__init__()
+        super(EncoderConv2D, self).__init__()
 
         hparams.validate()
 
@@ -201,13 +203,13 @@ class EncoderConv2D(nn.Module):
         return fc_layers
 
     def _embedding_layer(self):
-        return Dense(nn.Linear(in_features=self.hparams.affine_widths[-1],
-                               out_features=self.hparams.latent_dim))
+        return nn.Linear(in_features=self.hparams.affine_widths[-1],
+                         out_features=self.hparams.latent_dim)
 
 
 class DecoderConv2D(nn.Module):
     def __init__(self, output_shape, hparams):
-        super(DecoderConvolution2D, self).__init__()
+        super(DecoderConv2D, self).__init__()
 
         hparams.validate()
 
@@ -245,13 +247,17 @@ class DecoderConv2D(nn.Module):
         """
         conv2d_layers = []
 
-        in_channels = self.hparams.affine_widths[-1] / self.output_shape[0]**2
+        print('PRINT')
+        print(self.hparams.affine_widths[-1])
+        print(self.output_shape[0]**2)
+
+        in_channels = self.hparams.affine_widths[-1]
 
         for filter_, kernel, stride in zip(self.hparams.filters,
                                            self.hparams.kernels,
                                            self.hparams.strides):
 
-            padding = same_padding(self.input_shape[0], kernel, stride)
+            padding = same_padding(self.output_shape[0], kernel, stride)
 
             conv2d_layers.append(nn.Conv2d(in_channels=in_channels,
                                            out_channels=filter_,
@@ -308,7 +314,7 @@ class DecoderConv2D(nn.Module):
 
 class CVAEModel(nn.Module):
     def __init__(self, input_shape, encoder_hparams, decoder_hparams, device):
-        super(CVAE, self).__init__()
+        super(CVAEModel, self).__init__()
 
         # May not need these .to(device) since it is called in CVAE. Test this
         self.encoder = EncoderConv2D(input_shape, encoder_hparams).to(device)
@@ -340,13 +346,11 @@ class CVAEModel(nn.Module):
         self.decoder = torch.load(dec_path)
 
 
-from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
-
 class CVAE:
     def __init__(self, input_shape,
                  encoder_hparams=EncoderHyperparams(),
                  decoder_hparams=DecoderHyperparams(),
-                 optimizer_hparams=OptimzerHyperparams(),
+                 optimizer_hparams=OptimizerHyperparams(),
                  loss=None):
 
         optimizer_hparams.validate()
@@ -354,14 +358,22 @@ class CVAE:
         self.input_shape = input_shape
         self.optimizer_hparams = optimizer_hparams
 
+        # Defined in self.train()
+        self.optimizer = None
+
         self.loss = self._loss if loss is None else loss
 
         # TODO: consider passing in device, or giving option to run cpu even if cuda is available
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.cvae = CVAEModel(input_shape, encoder_hparams, decoder_hparams).to(self.device)
+        self.cvae = CVAEModel(input_shape, encoder_hparams,
+                              decoder_hparams, self.device).to(self.device)
+
+        print(self.cvae)
 
     def train(self, train_loader, test_loader, epochs):
+        # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
+        self.optimizer = get_optimizer(self.cvae, self.optimizer_hparams)
         for epoch in range(1, epochs + 1):
             self._train(train_loader, epoch)
             self._test(test_loader)
@@ -396,18 +408,15 @@ class CVAE:
 
         """
         self.cvae.train()
-        # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
-        optimizer = get_optimizer(self.cvae, self.optimizer_hparams)
-
         train_loss = 0
-        for batch_idx, (data, _) in enumerate(train_loader):
+        for batch_idx, data in enumerate(train_loader):
             data = data.to(self.device)
-            optimizer.zero_grad()
-            recon_batch, mu, logvar = cvae(data)
+            self.optimizer.zero_grad()
+            recon_batch, mu, logvar = self.cvae(data)
             loss = self.loss(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
-            optimizer.step()
+            self.optimizer.step()
 
 
             # TODO: Handle logging/checkpoint
@@ -425,7 +434,7 @@ class CVAE:
         self.cvae.eval()
         test_loss = 0
         with torch.no_grad():
-            for i, (data, _) in enumerate(test_loader):
+            for data in test_loader:
                 data = data.to(self.device)
                 recon_batch, mu, logvar = self.cvae(data)
                 test_loss += self.loss(recon_batch, data, mu, logvar).item()
