@@ -4,7 +4,7 @@ from abc import ABCMeta, abstractmethod
 class Hyperparams(metaclass=ABCMeta):
     """Abstract interface for defining hyperparameters"""
     def __init__(self):
-        pass
+        self.validate()
 
     def __repr__(self):
         return f'{self.__class__.__name__}\n' + \
@@ -25,3 +25,11 @@ class Hyperparams(metaclass=ABCMeta):
             hparams = pickle.load(file)
         hparams.validate()
         return hparams
+
+
+class OptimizationHyperparams(Hyperparams):
+    def __init__(self):
+        super().__init__()
+
+    def validate(self):
+        pass

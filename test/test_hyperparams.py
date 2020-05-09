@@ -47,13 +47,11 @@ class TestHyperParams:
                           'strides': [1, 2, 1, 1],
                           'num_affine_layers': 1,
                           'affine_widths': [128],
+                          'affine_dropouts': [0],
                           'latent_dim': 3
                          }
 
-        affine_dropouts = [0]
-
-        encoder_hparams = EncoderHyperparams(affine_dropouts=affine_dropouts,
-                                             **shared_hparams)
+        encoder_hparams = EncoderHyperparams(**shared_hparams)
         decoder_hparams = DecoderHyperparams(**shared_hparams)
 
         # Raises exception if invalid
@@ -70,6 +68,18 @@ class TestHyperParams:
             pass
         else:
             assert False
+
+        # Invalidate inputs
+        shared_hparams['filters'].append(64)
+
+        # Constructor should implicitly validate and throw Exception
+        try:
+            encoder_hparams = EncoderHyperparams(**shared_hparams)
+        except Exception:
+            pass
+        else:
+            assert False
+
 
     @classmethod
     def teardown_class(cls):

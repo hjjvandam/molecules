@@ -8,7 +8,7 @@ class ConvVAEHyperparams(Hyperparams):
     def __init__(self, num_conv_layers, filters, kernels,
                  strides, latent_dim, activation, num_affine_layers,
                  affine_widths, affine_dropouts):
-        super().__init__()
+
         self.num_conv_layers = num_conv_layers 
         self.filters = filters
         self.kernels = kernels
@@ -18,6 +18,9 @@ class ConvVAEHyperparams(Hyperparams):
         self.num_affine_layers = num_affine_layers
         self.affine_widths = affine_widths
         self.affine_dropouts = affine_dropouts
+
+        # Placed after member vars are declared so that base class can validate
+        super().__init__()
 
     def validate(self):
         if len(self.filters) != self.num_conv_layers:
@@ -42,8 +45,6 @@ class EncoderHyperparams(ConvVAEHyperparams):
                          latent_dim, activation, num_affine_layers,
                          affine_widths, affine_dropouts)
 
-        self.validate()
-
 
 class DecoderHyperparams(ConvVAEHyperparams):
 
@@ -57,5 +58,3 @@ class DecoderHyperparams(ConvVAEHyperparams):
                          affine_widths, affine_dropouts)
 
         self.output_activation = output_activation
-
-        self.validate()
