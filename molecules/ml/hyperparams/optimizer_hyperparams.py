@@ -24,7 +24,7 @@ class OptimizerHyperparams(Hyperparams):
                  'Adamax', 'ASGD', 'LBFGS', 'RMSprop', 'Rprop', 'SGD'}
         if self.name not in names:
             raise Exception(f'Invalid optimizer name: {self.name}.\n'
-                            f'Please choose from {names}')
+                            f'Please choose from {names}.\nSee PyTorch docs.')
 
 def get_optimizer(model, hparams):
     """
