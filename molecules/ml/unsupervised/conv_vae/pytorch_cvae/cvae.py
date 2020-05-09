@@ -314,11 +314,12 @@ class DecoderConv2D(nn.Module):
 
 
 class CVAEModel(nn.Module):
-    def __init__(self, input_shape, encoder_hparams, decoder_hparams):
+    def __init__(self, input_shape, encoder_hparams, decoder_hparams, device):
         super(CVAE, self).__init__()
 
-        self.encoder = EncoderConv2D(input_shape, encoder_hparams)
-        self.decoder = DecoderConv2D(input_shape, decoder_hparams)
+        # May not need these .to(device) since it is called in CVAE. Test this
+        self.encoder = EncoderConv2D(input_shape, encoder_hparams).to(device)
+        self.decoder = DecoderConv2D(input_shape, decoder_hparams).to(device)
 
     def forward(self, x):
         x = self.encoder(x)
@@ -340,6 +341,7 @@ class CVAEModel(nn.Module):
         self.decoder = torch.load(dec_path)
 
 
+from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 
 class CVAE:
     def __init__(self, input_shape,
@@ -350,12 +352,18 @@ class CVAE:
 
         optimizer_hparams.validate()
 
+        self.input_shape = input_shape
         self.optimizer_hparams = optimizer_hparams
 
         self.loss = self._loss if loss is None else loss
 
-        self.cvae = CVAEModel(input_shape, encoder_hparams, decoder_hparams)
+        # TODO: consider passing in device, or giving option to run cpu even if cuda is available
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
+        self.cvae = CVAEModel(input_shape, encoder_hparams, decoder_hparams).to(device)
+
+
+    # TODO: May need to pass batch_size, shuffle into data loaders instead of handle here
     def train(self, train_loader, batch_size, epochs=1, shuffle=False,
               valid_loader=None, checkpoint=None, callbacks=None):
         """
@@ -386,10 +394,26 @@ class CVAE:
 
         """
         self.cvae.train()
-        # TODO: make optimizer_hparams.get_optimizer(model.parameters()) 
-        #       function which returns the optimizer given the hparams
-        optimizer = optim.RMSprop(self.cvae.parameters(), lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0)
-        pass
+        # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
+        optimizer = get_optimizer(self.cvae, self.optimizer_hparams)
+
+        train_loss = 0
+        for batch_idx, (data, _) in enumerate(train_loader):
+            data = data.to(device) # TODO: get device
+            optimizer.zero_grad()
+            recon_batch, mu, logvar = cvae(data) # TODO: check returns are correct
+            loss = self.loss(recon_batch, data, mu, logvar)
+            loss.backward()
+            train_loss += loss.item()
+            optimizer.step()
+            if batch_idx % args.log_interval == 0: # Handle logging/checkpoint
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                    epoch, batch_idx * len(data), len(train_loader.dataset), # TODO: define epoch
+                    100. * batch_idx / len(train_loader),
+                    loss.item() / len(data)))
+
+        print('====> Epoch: {} Average loss: {:.4f}'.format(
+              epoch, train_loss / len(train_loader.dataset)))
 
     def embed(self, data):
         """
@@ -464,8 +488,7 @@ class CVAE:
         https://arxiv.org/abs/1312.6114
 
         """
-        # TODO: fix view
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+        BCE = F.binary_cross_entropy(recon_x, x.view(-1, self.input_shape[0]**2), reduction='sum')
 
         # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
         KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
