@@ -38,7 +38,7 @@ class ConvVAEHyperparams(Hyperparams):
 class EncoderHyperparams(ConvVAEHyperparams):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
-                 strides=[1, 2, 1], latent_dim=3, activation='relu', 
+                 strides=[1, 2, 1], latent_dim=3, activation='ReLU',
                  num_affine_layers=1, affine_widths=[128], affine_dropouts=[0]):
 
         super().__init__(num_conv_layers, filters, kernels, strides,
@@ -49,11 +49,11 @@ class EncoderHyperparams(ConvVAEHyperparams):
 class DecoderHyperparams(ConvVAEHyperparams):
 
     def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
-                 strides=[1, 2, 1], latent_dim=3, activation='relu', 
+                 strides=[1, 2, 1], latent_dim=3, activation='ReLU',
                  num_affine_layers=1, affine_widths=[128], affine_dropouts=[0],
-                 output_activation='sigmoid'):
+                 output_activation='Sigmoid'):
 
-        super().__init__(num_conv_layers, filters, kernels, strides, 
+        super().__init__(num_conv_layers, filters, kernels, strides,
                          latent_dim, activation, num_affine_layers,
                          affine_widths, affine_dropouts)
 
