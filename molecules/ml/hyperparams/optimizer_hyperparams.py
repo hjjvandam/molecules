@@ -2,7 +2,7 @@ from molecules.ml.hyperparams import Hyperparams
 from torch import optim
 
 class OptimizerHyperparams(Hyperparams):
-    def __init__(self, name, hparams={}):
+    def __init__(self, name='RMSprop', hparams={}):
         """
         Parameters
         ----------
@@ -25,6 +25,9 @@ class OptimizerHyperparams(Hyperparams):
         if self.name not in names:
             raise Exception(f'Invalid optimizer name: {self.name}.\n'
                             f'Please choose from {names}.\nSee PyTorch docs.')
+
+    # TODO: could be useful to define bounds for each type of hparams
+    #       to assist in the bayesian optization.
 
 def get_optimizer(model, hparams):
     """
