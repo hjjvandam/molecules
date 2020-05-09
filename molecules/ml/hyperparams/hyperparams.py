@@ -25,11 +25,3 @@ class Hyperparams(metaclass=ABCMeta):
             hparams = pickle.load(file)
         hparams.validate()
         return hparams
-
-
-class OptimizationHyperparams(Hyperparams):
-    def __init__(self):
-        super().__init__()
-
-    def validate(self):
-        pass
