@@ -1,4 +1,5 @@
-from torch import nn
+from torch import nn, optim
+from torch.nn import functional as F
 
 def conv2d_num_params(f, c, num_filters):
     """
@@ -89,6 +90,11 @@ def same_padding(input_dim, f, stride):
     return (input_dim * (stride - 1) - stride + f) // 2
 
 
+# TODO: conider moving this into the HyperParams class
+#       could make base classes for ModelArchHyperParams
+#       which handles layes and can return pytorch layer
+#       types and activations. OptimizerHyperParams can
+#       return different optimizers.
 def select_activation(activation):
     """
     Parameters
@@ -109,15 +115,15 @@ def select_activation(activation):
 # TODO: consider making _conv_layers and _affine_layers helper functions
 
 
-class EncoderConvolution2D(nn.Module):
-    def __init__(self, input_shape, hyperparameters=EncoderHyperparams()):
+class EncoderConv2D(nn.Module):
+    def __init__(self, input_shape, hparams):
         super(EncoderConvolution2D, self).__init__()
 
-        hyperparameters.validate()
+        hparams.validate()
 
         # Assume input is square matrix
         self.input_shape = input_shape
-        self.hparams = hyperparameters
+        self.hparams = hparams
 
         self.encoder = nn.Sequential(*self._conv_layers(),
                                      nn.Flatten(),
@@ -205,15 +211,15 @@ class EncoderConvolution2D(nn.Module):
                                out_features=self.hparams.latent_dim))
 
 
-class DecoderConvolution2D(nn.Module):
-    def __init__(self, output_shape, hyperparameters=DecoderHyperparams()):
+class DecoderConv2D(nn.Module):
+    def __init__(self, output_shape, hparams):
         super(DecoderConvolution2D, self).__init__()
 
-        hyperparameters.validate()
+        hparams.validate()
 
         # Assume input is square matrix
         self.output_shape = output_shape
-        self.hparams = hyperparameters
+        self.hparams = hparams
 
         self.affine_layers = nn.Sequential(*self._affine_layers())
         self.conv_layers = nn.Sequential(*self._conv_layers())
@@ -307,14 +313,161 @@ class DecoderConvolution2D(nn.Module):
 
 
 
-class CVAE(nn.Module):
+class CVAEModel(nn.Module):
     def __init__(self, input_shape, encoder_hparams, decoder_hparams):
         super(CVAE, self).__init__()
 
-        self.encoder = EncoderConvolution2D(input_shape, encoder_hparams)
-        self.decoder = DecoderConvolution2D(input_shape, decoder_hparams)
+        self.encoder = EncoderConv2D(input_shape, encoder_hparams)
+        self.decoder = DecoderConv2D(input_shape, decoder_hparams)
 
     def forward(self, x):
         x = self.encoder(x)
         x = self.decoder(x)
         return x
+
+    def embed(self, data):
+        return self.encoder(data)
+
+    def generate(self, embedding):
+        return self.decoder(embedding)
+
+    def save_weights(self, enc_path, dec_path):
+        torch.save(self.encoder, enc_path)
+        torch.save(self.decoder, dec_path)
+
+    def load_weights(self, enc_path, dec_path):
+        self.encoder = torch.load(enc_path)
+        self.decoder = torch.load(dec_path)
+
+
+
+class CVAE:
+    def __init__(self, input_shape,
+                 encoder_hparams=EncoderHyperparams(),
+                 decoder_hparams=DecoderHyperparams(),
+                 optimizer_hparams=OptimzerHyperparams(),
+                 loss=None):
+
+        optimizer_hparams.validate()
+
+        self.optimizer_hparams = optimizer_hparams
+
+        self.loss = self._loss if loss is None else loss
+
+        self.cvae = CVAEModel(input_shape, encoder_hparams, decoder_hparams)
+
+    def train(self, train_loader, batch_size, epochs=1, shuffle=False,
+              valid_loader=None, checkpoint=None, callbacks=None):
+        """
+        Effects
+        -------
+        Train network
+
+        Parameters
+        ----------
+        data : np.ndarray
+            Input data
+
+        batch_size : int
+            Minibatch size
+
+        epochs : int
+            Number of epochs to train for
+
+        shuffle : bool
+            Whether to shuffle training data.
+
+        validation_data : tuple, optional
+            Tuple of np.ndarrays (X,y) representing validation data
+
+        checkpoint : str
+            Path to save model after each epoch. If none is provided,
+            then checkpoints will not be saved.
+
+        """
+        self.cvae.train()
+        # TODO: make optimizer_hparams.get_optimizer(model.parameters()) 
+        #       function which returns the optimizer given the hparams
+        optimizer = optim.RMSprop(self.cvae.parameters(), lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0)
+        pass
+
+    def embed(self, data):
+        """
+        Effects
+        -------
+        Embed a datapoint into the latent space.
+
+        Parameters
+        ----------
+        data : np.ndarray
+
+        Returns
+        -------
+        np.ndarray of embeddings.
+
+        """
+        return self.cvae.embed(data)
+
+    def generate(self, embedding):
+        """
+        Effects
+        -------
+        Generate images from embeddings.
+
+        Parameters
+        ----------
+        embedding : np.ndarray
+
+        Returns
+        -------
+        generated image : np.nddary
+
+        """
+        return self.cvae.generate(embedding)
+
+    def save_weights(self, enc_path, dec_path):
+        """
+        Effects
+        -------
+        Save model weights.
+
+        Parameters
+        ----------
+        path : str
+            Path to save the model weights.
+
+        """
+        self.cvae.save_weights(enc_path, dec_path)
+
+    def load_weights(self, enc_path, dec_path):
+        """
+        Effects
+        -------
+        Load saved model weights.
+
+        Parameters
+        ----------
+        path: str
+            Path to saved model weights.
+
+        """
+        self.cvae.load_weights(enc_path, dec_path)
+
+    def _loss(self, recon_x, x, mu, logvar):
+        """
+        Effects
+        -------
+        Reconstruction + KL divergence losses summed over all elements and batch
+
+        See Appendix B from VAE paper:
+        Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        https://arxiv.org/abs/1312.6114
+
+        """
+        # TODO: fix view
+        BCE = F.binary_cross_entropy(recon_x, x.view(-1, 784), reduction='sum')
+
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+        return BCE + KLD
