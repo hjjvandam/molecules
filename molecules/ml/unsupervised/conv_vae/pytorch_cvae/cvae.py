@@ -129,18 +129,12 @@ class EncoderConv2D(nn.Module):
                                      nn.Flatten(),
                                      *self._affine_layers())
 
-        self.z_mean = self._embedding_layer()
-        self.z_logvar = self._embedding_layer()
-
-    def reparameterize(self):
-        std = torch.exp(0.5*self.z_logvar)
-        eps = torch.randn_like(std)
-        return self.z_mean + eps*std
+        self.mu = self._embedding_layer()
+        self.logvar = self._embedding_layer()
 
     def forward(self, x):
         x = self.encoder(x)
-        x = self.reparameterize(x)
-        return x
+        return self.mu(x), self.logvar(x)
 
     def _conv_layers(self):
         """
@@ -234,8 +228,7 @@ class DecoderConv2D(nn.Module):
     def forward(self, x):
         x = self.affine_layers(x)
         x = self.reshape(x)
-        x = self.conv_layers(x)
-        return x
+        return self.conv_layers(x)
 
 
     # TODO: _conv_layers could have a bug in the in_channels. Needs testing.
@@ -321,13 +314,19 @@ class CVAEModel(nn.Module):
         self.encoder = EncoderConv2D(input_shape, encoder_hparams).to(device)
         self.decoder = DecoderConv2D(input_shape, decoder_hparams).to(device)
 
+    def reparameterize(self, mu, logvar):
+        std = torch.exp(0.5*logvar)
+        eps = torch.randn_like(std)
+        return mu + eps*std
+
     def forward(self, x):
-        x = self.encoder(x)
-        x = self.decoder(x)
-        return x
+        mu, logvar = self.encoder(x)
+        x = self.reparameterize(x, mu, logvar)
+        return self.decoder(x), mu, logvar
 
     def embed(self, data):
-        return self.encoder(data)
+        # mu layer
+        return self.encoder(data)[0]
 
     def generate(self, embedding):
         return self.decoder(embedding)
@@ -358,14 +357,17 @@ class CVAE:
         self.loss = self._loss if loss is None else loss
 
         # TODO: consider passing in device, or giving option to run cpu even if cuda is available
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.cvae = CVAEModel(input_shape, encoder_hparams, decoder_hparams).to(device)
+        self.cvae = CVAEModel(input_shape, encoder_hparams, decoder_hparams).to(self.device)
 
+    def train(self, train_loader, test_loader, epochs):
+        for epoch in range(1, epochs + 1):
+            self._train(train_loader, epoch)
+            self._test(test_loader)
 
-    # TODO: May need to pass batch_size, shuffle into data loaders instead of handle here
-    def train(self, train_loader, batch_size, epochs=1, shuffle=False,
-              valid_loader=None, checkpoint=None, callbacks=None):
+    def _train(self, train_loader, epoch,
+               checkpoint=None, callbacks=None):
         """
         Effects
         -------
@@ -399,21 +401,57 @@ class CVAE:
 
         train_loss = 0
         for batch_idx, (data, _) in enumerate(train_loader):
-            data = data.to(device) # TODO: get device
+            data = data.to(self.device)
             optimizer.zero_grad()
-            recon_batch, mu, logvar = cvae(data) # TODO: check returns are correct
+            recon_batch, mu, logvar = cvae(data)
             loss = self.loss(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
             optimizer.step()
-            if batch_idx % args.log_interval == 0: # Handle logging/checkpoint
+
+
+            # TODO: Handle logging/checkpoint
+            if batch_idx % args.log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(train_loader.dataset), # TODO: define epoch
+                    epoch, batch_idx * len(data), len(train_loader.dataset),
                     100. * batch_idx / len(train_loader),
                     loss.item() / len(data)))
 
         print('====> Epoch: {} Average loss: {:.4f}'.format(
               epoch, train_loss / len(train_loader.dataset)))
+
+
+    def _test(self, test_loader):
+        self.cvae.eval()
+        test_loss = 0
+        with torch.no_grad():
+            for i, (data, _) in enumerate(test_loader):
+                data = data.to(self.device)
+                recon_batch, mu, logvar = self.cvae(data)
+                test_loss += self.loss(recon_batch, data, mu, logvar).item()
+
+        test_loss /= len(test_loader.dataset)
+        print('====> Test set loss: {:.4f}'.format(test_loss))
+
+
+    def _loss(self, recon_x, x, mu, logvar):
+        """
+        Effects
+        -------
+        Reconstruction + KL divergence losses summed over all elements and batch
+
+        See Appendix B from VAE paper:
+        Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+        https://arxiv.org/abs/1312.6114
+
+        """
+        BCE = F.binary_cross_entropy(recon_x, x.view(-1, self.input_shape[0]**2), reduction='sum')
+
+        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+        return BCE + KLD
+
 
     def embed(self, data):
         """
@@ -476,21 +514,3 @@ class CVAE:
 
         """
         self.cvae.load_weights(enc_path, dec_path)
-
-    def _loss(self, recon_x, x, mu, logvar):
-        """
-        Effects
-        -------
-        Reconstruction + KL divergence losses summed over all elements and batch
-
-        See Appendix B from VAE paper:
-        Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        https://arxiv.org/abs/1312.6114
-
-        """
-        BCE = F.binary_cross_entropy(recon_x, x.view(-1, self.input_shape[0]**2), reduction='sum')
-
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return BCE + KLD
