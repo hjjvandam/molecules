@@ -80,6 +80,25 @@ class TestHyperParams:
         else:
             assert False
 
+    def test_optimizer_hyperparams(self):
+        from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
+        from torch import nn
+
+        class Model(nn.Module):
+            def __init__(self):
+                super(Model, self).__init__()
+                self.layer = nn.Linear(5, 5)
+
+            def forward(self, x):
+                return self.layer(x)
+
+        model = Model()
+        name = 'RMSprop'
+        hparams = {'lr': 0.9}
+
+        optimizer_hparams = OptimizerHyperparams(name, hparams)
+
+        optimizer = get_optimizer(model, optimizer_hparams)
 
     @classmethod
     def teardown_class(cls):
