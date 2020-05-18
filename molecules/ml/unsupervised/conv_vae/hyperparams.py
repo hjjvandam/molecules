@@ -40,6 +40,9 @@ class ConvVAEHyperparams(Hyperparams):
         if any(kernel % 2 == 0 for kernel in self.kernels):
             raise Exception('Only odd valued kernel sizes allowed')
 
+        if any(p < 0 or p > 1 for p in self.affine_dropouts):
+            raise Exception('Dropout probabilities, p, must be 0 <= p <= 1.')
+
 
 class EncoderHyperparams(ConvVAEHyperparams):
 
