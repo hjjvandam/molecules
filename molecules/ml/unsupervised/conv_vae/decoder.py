@@ -57,11 +57,11 @@ class DecoderConvolution2D:
         """
         fc_layers = []
         for width in self.hparams.affine_widths:
-            x = Dense(width, activation=self.hparams.activation)(x)
+            x = Dense(width, activation=self.hparams.activation.lower())(x)
             fc_layers.append(x)
 
         # Since the networks are symmetric, we need a Dense layer to bridge fc layers and conv.
-        x = Dense(self.enc_conv_params, activation=self.hparams.activation)(x)
+        x = Dense(self.enc_conv_params, activation=self.hparams.activation.lower())(x)
         fc_layers.append(x)
 
         del x
@@ -89,7 +89,7 @@ class DecoderConvolution2D:
             x = Conv2DTranspose(self.hparams.filters[i],
                                 self.hparams.kernels[i],
                                 strides=self.hparams.strides[i],
-                                activation=self.hparams.activation,
+                                activation=self.hparams.activation.lower(),
                                 padding='same')(x)
             conv2d_layers.append(x)
 
@@ -97,7 +97,7 @@ class DecoderConvolution2D:
         x = Conv2DTranspose(self.output_shape[2],
                             self.hparams.kernels[-1],
                             strides=self.hparams.strides[-1],
-                            activation=self.hparams.output_activation,
+                            activation=self.hparams.output_activation.lower(),
                             padding='same')(x)
 
         conv2d_layers.append(x)

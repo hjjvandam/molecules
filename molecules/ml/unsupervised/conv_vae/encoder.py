@@ -63,7 +63,7 @@ class EncoderConvolution2D:
                                            self.hparams.strides):
 
             x = Convolution2D(filter_, kernel, strides=stride,
-                              activation=self.hparams.activation,
+                              activation=self.hparams.activation.lower(),
                               padding='same')(x)
             conv2d_layers.append(x)
 
@@ -89,7 +89,7 @@ class EncoderConvolution2D:
 
         fc_layers = []
         for width, dropout in zip(self.hparams.affine_widths, self.hparams.affine_dropouts):
-            x = Dense(width, activation=self.hparams.activation)(Dropout(dropout)(x))
+            x = Dense(width, activation=self.hparams.activation.lower())(Dropout(dropout)(x))
             fc_layers.append(x)
 
         del x
