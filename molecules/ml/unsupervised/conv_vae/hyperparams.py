@@ -4,6 +4,8 @@ from molecules.ml.hyperparams import Hyperparams
 # TODO: remove num_conv_layers, num_affine_layers since this data is encoded
 #       in the lists filters,affine_widths,etc. This will effect keras encoder decoder impl.
 
+# TODO: change member variable names to be the same as pytorch argument names
+
 class ConvVAEHyperparams(Hyperparams):
     def __init__(self, num_conv_layers, filters, kernels,
                  strides, latent_dim, activation, num_affine_layers,
@@ -24,15 +26,19 @@ class ConvVAEHyperparams(Hyperparams):
 
     def validate(self):
         if len(self.filters) != self.num_conv_layers:
-            raise Exception('number of filters must equal number of convolutional layers.')
+            raise Exception('Number of filters must equal number of convolutional layers.')
         if len(self.kernels) != self.num_conv_layers:
-            raise Exception('number of kernels must equal number of convolutional layers.')
+            raise Exception('Number of kernels must equal number of convolutional layers.')
         if len(self.strides) != self.num_conv_layers:
-            raise Exception('number of strides must equal number of convolutional layers.')
+            raise Exception('Number of strides must equal number of convolutional layers.')
         if len(self.affine_widths) != self.num_affine_layers:
-            raise Exception('number of affine width parameters must equal the number of affine layers')
+            raise Exception('Number of affine width parameters must equal the number of affine layers')
         if len(self.affine_dropouts) != self.num_affine_layers:
-            raise Exception('number of dropout parameters must equal the number of affine layers')
+            raise Exception('Number of dropout parameters must equal the number of affine layers')
+
+        # Common convention: allows for filter center and for even padding
+        if any(kernel % 2 == 0 for kernel in self.kernels):
+            raise Exception('Only odd valued kernel sizes allowed')
 
 
 class EncoderHyperparams(ConvVAEHyperparams):
