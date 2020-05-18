@@ -1,55 +1,113 @@
 import pytest
 import numpy as np
+from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
+
+# Keras imports
+from keras.optimizers import RMSprop
+from molecules.ml.unsupervised import (VAE, EncoderConvolution2D,
+                                       DecoderConvolution2D)
+
+# Pytorch imports
+import torch
 from torch.utils.data import Dataset, DataLoader
 from molecules.ml.unsupervised.conv_vae.pytorch_cvae import CVAE
-from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
 from molecules.ml.hyperparams import OptimizerHyperparams
+from torchsummary import summary
 
 
 class TestCVAE:
 
     class DummyContactMap(Dataset):
-            def __init__(self, input_shape):
-                # Use FSPeptide sized contact maps
-                self.maps = np.random.randn(1000, *input_shape)
+            def __init__(self, input_shape, size=1000):
+                self.maps = np.eye(input_shape[-1]).reshape(input_shape)
+                self.maps = np.array([self.maps for _ in range(size)])
+
+                # Creates size identity matrices. Total shape: (size, input_shape)
 
             def __len__(self):
                 return len(self.maps)
 
             def __getitem__(self, idx):
-                return self.maps[idx]
+                return torch.from_numpy(self.maps[idx]).to(torch.float32)
 
     @classmethod
     def setup_class(self):
-        self.epochs = 2
-        self.input_shape = (21, 21)
+        self.epochs = 1
+        self.batch_size = 100
+        self.input_shape = (1, 22, 22) # Use FSPeptide sized contact maps
         self.train_loader = DataLoader(TestCVAE.DummyContactMap(self.input_shape),
-                                                       batch_size=4, shuffle=True)
+                                       batch_size=self.batch_size, shuffle=True)
         self.test_loader = DataLoader(TestCVAE.DummyContactMap(self.input_shape),
-                                                      batch_size=4, shuffle=True)
+                                      batch_size=self.batch_size, shuffle=True)
+
+        # For Keras model
+        self.dataset = TestCVAE.DummyContactMap(self.input_shape)
 
         hparams ={'num_conv_layers': 4,
                   'filters': [64, 64, 64, 64],
                   'kernels': [3, 3, 3, 3],
-                  'strides': [1, 2, 1, 1],
                   'num_affine_layers': 1,
                   'affine_widths': [128],
                   'affine_dropouts': [0],
-                  'latent_dim': 8
+                  'latent_dim': 3
                  }
 
-        self.encoder_hparams = EncoderHyperparams(**hparams)
-        self.decoder_hparams = DecoderHyperparams(**hparams)
+        strides = [1, 2, 1, 1]
+
+        self.encoder_hparams = EncoderHyperparams(**hparams, strides=strides)
+        self.decoder_hparams = DecoderHyperparams(**hparams, strides=list(reversed(strides)))
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop')
 
+    def notest_keras_cvae(self):
 
-    def test_cvae(self):
+        encoder = EncoderConvolution2D(input_shape=self.input_shape,
+                                       hyperparameters=self.encoder_hparams)
+
+        # Get shape attributes of the last encoder layer to define the decoder
+        encode_conv_shape, num_conv_params = encoder.get_final_conv_params()
+
+        decoder = DecoderConvolution2D(output_shape=self.input_shape,
+                                       enc_conv_params=num_conv_params,
+                                       enc_conv_shape=encode_conv_shape,
+                                       hyperparameters=self.decoder_hparams)
+
+        optimizer = RMSprop(lr=0.001, rho=0.9, epsilon=1e-08, decay=0.0)
+
+        cvae = VAE(input_shape=self.input_shape,
+                   encoder=encoder,
+                   decoder=decoder,
+                   optimizer=optimizer)
+
+        split = int(len(self.dataset) * 0.8)
+        train, valid = self.dataset.maps[:split], self.dataset.maps[split:]
+
+        print(type(train))
+        print(train.shape)
+        cvae.summary()
+
+        cvae.train(data=train, validation_data=valid,
+                   batch_size=self.batch_size, epochs=self.epochs)
+
+
+    def test_pytorch_cvae(self):
         cvae = CVAE(self.input_shape, self.encoder_hparams,
                     self.decoder_hparams, self.optimizer_hparams)
+
+        print(cvae)
+        summary(cvae.cvae, self.input_shape)
+
 
         cvae.train(self.train_loader, self.test_loader, self.epochs)
 
 
+    def test_padding(self):
+        from molecules.ml.unsupervised.conv_vae.pytorch_cvae.cvae import even_padding
+
+        input_dim = 22
+        kernel_size = 3
+
+        assert even_padding(input_dim, kernel_size, stride=1) == 1
+        assert even_padding(input_dim, kernel_size, stride=2) == 1
 
     @classmethod
     def teardown_class(self):
