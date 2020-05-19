@@ -393,14 +393,11 @@ class CVAE:
     def __init__(self, input_shape,
                  encoder_hparams=EncoderHyperparams(),
                  decoder_hparams=DecoderHyperparams(),
-                 optimizer_hparams=OptimizerHyperparams(),
-                 loss=None):
+                 optimizer_hparams=OptimizerHyperparams()):
 
         optimizer_hparams.validate()
 
         self.input_shape = input_shape
-
-        self.loss = self._loss if loss is None else loss
 
         # TODO: consider passing in device, or giving option to run cpu even if cuda is available
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -456,7 +453,7 @@ class CVAE:
             data = data.to(self.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.cvae(data)
-            loss = self.loss(recon_batch, data, mu, logvar)
+            loss = self._loss(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
             self.optimizer.step()
@@ -480,7 +477,7 @@ class CVAE:
             for data in test_loader:
                 data = data.to(self.device)
                 recon_batch, mu, logvar = self.cvae(data)
-                test_loss += self.loss(recon_batch, data, mu, logvar).item()
+                test_loss += self._loss(recon_batch, data, mu, logvar).item()
 
         test_loss /= len(test_loader.dataset)
         print('====> Test set loss: {:.4f}'.format(test_loss))

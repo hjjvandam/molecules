@@ -48,6 +48,9 @@ class TestCVAE:
             else:
                 raise ValueError(f'Parameter split={split} is invalid.')
 
+            # TODO: in future contact map Dataset, pass in device to precompute
+            #       the operation
+
             self.data = torch.from_numpy(self.data.reshape(-1, 1, 22, 22)).to(torch.float32)
 
         def __len__(self):
@@ -59,7 +62,7 @@ class TestCVAE:
 
     @classmethod
     def setup_class(self):
-        self.epochs = 1
+        self.epochs = 10
         self.batch_size = 100
         self.input_shape = (1, 22, 22) # Use FSPeptide sized contact maps
         self.train_loader = DataLoader(TestCVAE.DummyContactMap(self.input_shape),
