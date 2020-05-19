@@ -14,11 +14,9 @@ class TestHyperParams:
 
     def test_save_load_functions(self):
         # Set model hyperparameters for encoder
-        hparam_options = {'num_conv_layers': 4,
-                          'filters': [64, 64, 64, 64],
+        hparam_options = {'filters': [64, 64, 64, 64],
                           'kernels': [3, 3, 3, 3],
                           'strides': [1, 2, 1, 1],
-                          'num_affine_layers': 1,
                           'affine_widths': [128],
                           'latent_dim': 3,
                           'affine_dropouts': [0]
@@ -41,11 +39,9 @@ class TestHyperParams:
 
     def test_validators(self):
         # Set model hyperparameters for encoder and decoder
-        hparam_options = {'num_conv_layers': 4,
-                          'filters': [64, 64, 64, 64],
+        hparam_options = {'filters': [64, 64, 64, 64],
                           'kernels': [3, 3, 3, 3],
                           'strides': [1, 2, 1, 1],
-                          'num_affine_layers': 1,
                           'affine_widths': [128],
                           'affine_dropouts': [0],
                           'latent_dim': 3
@@ -57,12 +53,12 @@ class TestHyperParams:
         hparams.validate()
 
         # Invalidate state
-        hparams.num_conv_layers = 2
+        hparams.affine_dropouts.append(.5)
 
-        # validate() should throw an Exception
+        # validate() should throw an ValueError
         try:
             hparams.validate()
-        except Exception:
+        except ValueError:
             pass
         else:
             assert False
@@ -70,10 +66,10 @@ class TestHyperParams:
         # Invalidate inputs
         hparam_options['filters'].append(64)
 
-        # Constructor should implicitly validate and throw Exception
+        # Constructor should implicitly validate and throw ValueError
         try:
             hparams = ConvVAEHyperparams(**hparam_options)
-        except Exception:
+        except ValueError:
             pass
         else:
             assert False

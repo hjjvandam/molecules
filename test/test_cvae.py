@@ -73,11 +73,9 @@ class TestCVAE:
         self.dataset = TestCVAE.DummyContactMap(self.input_shape)
 
         # Optimal Fs-peptide params
-        hparams ={'num_conv_layers': 4,
-                  'filters': [100, 100, 100, 100],
+        hparams ={'filters': [100, 100, 100, 100],
                   'kernels': [5, 5, 5, 5],
                   'strides': [1, 2, 1, 1],
-                  'num_affine_layers': 1,
                   'affine_widths': [64],
                   'affine_dropouts': [0],
                   'latent_dim': 10
@@ -126,7 +124,6 @@ class TestCVAE:
         print(cvae)
         summary(cvae.cvae, self.input_shape)
 
-
         cvae.train(self.train_loader, self.test_loader, self.epochs)
 
 
@@ -140,7 +137,7 @@ class TestCVAE:
         assert even_padding(input_dim, kernel_size, stride=2) == 1
 
 
-    def test_pytorch_cvae_real_data(self):
+    def notest_pytorch_cvae_real_data(self):
 
         path = './test/cvae_input.h5'
 
@@ -153,7 +150,6 @@ class TestCVAE:
 
         print(cvae)
         summary(cvae.cvae, self.input_shape)
-
 
         cvae.train(train_loader, test_loader, self.epochs)
 
