@@ -3,7 +3,7 @@ Tests for `molecules` module.
 """
 import os
 import pytest
-from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
+from molecules.ml.unsupervised import ConvVAEHyperparams
 
 
 class TestHyperParams:
@@ -23,17 +23,17 @@ class TestHyperParams:
                           'latent_dim': 3,
                           'affine_dropouts': [0]
                          }
-        encoder_hparams = EncoderHyperparams(**hparam_options)
+        hparams = ConvVAEHyperparams(**hparam_options)
 
         # Save model hyperparameters to disk
-        encoder_hparams.save(self.fname)
+        hparams.save(self.fname)
 
         # Check that 'encoder-hparams.pkl' is in ./test/data
         assert os.path.basename(self.fname) \
             in os.listdir(os.path.dirname(self.fname))
 
         # Load saved hyperparameters from disk
-        loaded_hparams = EncoderHyperparams.load(self.fname)
+        loaded_hparams = ConvVAEHyperparams.load(self.fname)
 
         # Check that all attributes were read from disk correctly
         for key, val in hparam_options.items():
@@ -41,7 +41,7 @@ class TestHyperParams:
 
     def test_validators(self):
         # Set model hyperparameters for encoder and decoder
-        shared_hparams = {'num_conv_layers': 4,
+        hparam_options = {'num_conv_layers': 4,
                           'filters': [64, 64, 64, 64],
                           'kernels': [3, 3, 3, 3],
                           'strides': [1, 2, 1, 1],
@@ -51,30 +51,28 @@ class TestHyperParams:
                           'latent_dim': 3
                          }
 
-        encoder_hparams = EncoderHyperparams(**shared_hparams)
-        decoder_hparams = DecoderHyperparams(**shared_hparams)
+        hparams = ConvVAEHyperparams(**hparam_options)
 
         # Raises exception if invalid
-        encoder_hparams.validate()
-        decoder_hparams.validate()
+        hparams.validate()
 
         # Invalidate state
-        encoder_hparams.num_conv_layers = 2
+        hparams.num_conv_layers = 2
 
         # validate() should throw an Exception
         try:
-            encoder_hparams.validate()
+            hparams.validate()
         except Exception:
             pass
         else:
             assert False
 
         # Invalidate inputs
-        shared_hparams['filters'].append(64)
+        hparam_options['filters'].append(64)
 
         # Constructor should implicitly validate and throw Exception
         try:
-            encoder_hparams = EncoderHyperparams(**shared_hparams)
+            hparams = ConvVAEHyperparams(**hparam_options)
         except Exception:
             pass
         else:

@@ -3,7 +3,29 @@ from torch import nn, optim
 from torch.nn import functional as F
 from math import isclose
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
-from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
+from molecules.ml.unsupervised import ConvVAEHyperparams
+
+def reversedzip(*iterables):
+    """
+    Yields the zip of iterables in reversed order.
+
+    Example
+    -------
+    l1 = [1,2,3]
+    l2 = ['a','b','c']
+    l3 = [5,6,7]
+
+    for tup in reversedzip(l1, l2, l3):
+        print(tup)
+
+    Outputs:
+        (3, 'c', 7)
+        (2, 'b', 6)
+        (1, 'a', 5)
+
+    """
+    for tup in zip(*map(reversed, iterables)):
+        yield tup
 
 def conv2d_num_params(f, c, num_filters):
     """
@@ -147,8 +169,6 @@ class EncoderConv2D(nn.Module):
     def __init__(self, input_shape, hparams):
         super(EncoderConv2D, self).__init__()
 
-        hparams.validate()
-
         # Assume input is square matrix
         self.input_shape = input_shape
         self.hparams = hparams
@@ -245,10 +265,8 @@ class EncoderConv2D(nn.Module):
 
 
 class DecoderConv2D(nn.Module):
-    def __init__(self, output_shape, encoder_dim, hparams):
+    def __init__(self, output_shape, hparams, encoder_dim):
         super(DecoderConv2D, self).__init__()
-
-        hparams.validate()
 
         # Assume input is square matrix
         self.output_shape = output_shape
@@ -268,7 +286,7 @@ class DecoderConv2D(nn.Module):
         """
         Reshape flattened x as a tensor (channels, output, output)
         """
-        new_shape = (-1, self.hparams.filters[0],
+        new_shape = (-1, self.hparams.filters[-1],
                      self.encoder_dim, self.encoder_dim)
         return x.view(new_shape)
 
@@ -288,17 +306,18 @@ class DecoderConv2D(nn.Module):
         """
         conv2d_layers = []
 
-        in_channels = self.hparams.filters[0]
+        in_channels = self.hparams.filters[-1]
 
         # Dimension of square matrix
         input_dim = self.output_shape[1]
 
+        # TODO: might not want to do this because it will mess up saving the hparams
         # Set last filter to be the number of channels in the reconstructed image.
-        self.hparams.filters[-1] = self.output_shape[0]
+        self.hparams.filters[0] = self.output_shape[0]
 
-        for filter_, kernel, stride in zip(self.hparams.filters,
-                                           self.hparams.kernels,
-                                           self.hparams.strides):
+        for filter_, kernel, stride in reversedzip(self.hparams.filters,
+                                                   self.hparams.kernels,
+                                                   self.hparams.strides):
 
             padding = even_padding(input_dim, kernel, stride)
 
@@ -339,8 +358,8 @@ class DecoderConv2D(nn.Module):
 
         in_features = self.hparams.latent_dim
 
-        for width, dropout in zip(self.hparams.affine_widths,
-                                  self.hparams.affine_dropouts):
+        for width, dropout in reversedzip(self.hparams.affine_widths,
+                                          self.hparams.affine_dropouts):
 
             fc_layers.append(nn.Linear(in_features=in_features,
                                        out_features=width))
@@ -355,8 +374,8 @@ class DecoderConv2D(nn.Module):
 
         # Add last layer with dims to connect the last linear layer to
         # the first convolutional decoder layer
-        fc_layers.append(nn.Linear(in_features=self.hparams.affine_widths[-1],
-                                   out_features=self.hparams.filters[0] * self.encoder_dim**2))
+        fc_layers.append(nn.Linear(in_features=self.hparams.affine_widths[0],
+                                   out_features=self.hparams.filters[-1] * self.encoder_dim**2))
         fc_layers.append(select_activation(self.hparams.activation))
 
 
@@ -369,13 +388,12 @@ class DecoderConv2D(nn.Module):
 
 
 class CVAEModel(nn.Module):
-    def __init__(self, input_shape, encoder_hparams, decoder_hparams, device):
+    def __init__(self, input_shape, hparams, device):
         super(CVAEModel, self).__init__()
 
         # May not need these .to(device) since it is called in CVAE. Test this
-        self.encoder = EncoderConv2D(input_shape, encoder_hparams).to(device)
-        self.decoder = DecoderConv2D(input_shape, self.encoder.encoder_dim,
-                                     decoder_hparams).to(device)
+        self.encoder = EncoderConv2D(input_shape, hparams).to(device)
+        self.decoder = DecoderConv2D(input_shape, hparams, self.encoder.encoder_dim).to(device)
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
@@ -411,10 +429,10 @@ class CVAEModel(nn.Module):
 class CVAE:
     # TODO: set weight initialization hparams
     def __init__(self, input_shape,
-                 encoder_hparams=EncoderHyperparams(),
-                 decoder_hparams=DecoderHyperparams(),
+                 hparams=ConvVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams()):
 
+        hparams.validate()
         optimizer_hparams.validate()
 
         self.input_shape = input_shape
@@ -422,8 +440,7 @@ class CVAE:
         # TODO: consider passing in device, or giving option to run cpu even if cuda is available
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.cvae = CVAEModel(input_shape, encoder_hparams,
-                              decoder_hparams, self.device).to(self.device)
+        self.cvae = CVAEModel(input_shape, hparams, self.device).to(self.device)
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0

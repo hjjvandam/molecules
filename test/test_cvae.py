@@ -1,11 +1,10 @@
 import pytest
 import numpy as np
-from molecules.ml.unsupervised import EncoderHyperparams, DecoderHyperparams
-
+from molecules.ml.unsupervised import ConvVAEHyperparams
 # Keras imports
-from keras.optimizers import RMSprop
-from molecules.ml.unsupervised import (VAE, EncoderConvolution2D,
-                                       DecoderConvolution2D)
+# from keras.optimizers import RMSprop
+# from molecules.ml.unsupervised import (VAE, EncoderConvolution2D,
+#                                        DecoderConvolution2D)
 
 # Pytorch imports
 import torch
@@ -77,19 +76,20 @@ class TestCVAE:
         hparams ={'num_conv_layers': 4,
                   'filters': [100, 100, 100, 100],
                   'kernels': [5, 5, 5, 5],
+                  'strides': [1, 2, 1, 1],
                   'num_affine_layers': 1,
                   'affine_widths': [64],
                   'affine_dropouts': [0],
                   'latent_dim': 10
                  }
 
-        strides = [1, 2, 1, 1]
-
-        self.encoder_hparams = EncoderHyperparams(**hparams, strides=strides)
-        self.decoder_hparams = DecoderHyperparams(**hparams, strides=list(reversed(strides)))
+        self.hparams = ConvVAEHyperparams(**hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
     def notest_keras_cvae(self):
+
+        # TODO: fix or delete. Changed hyperparam interface. Major changes to keras code.
+        #       keras code also has other bugs.
 
         encoder = EncoderConvolution2D(input_shape=self.input_shape,
                                        hyperparameters=self.encoder_hparams)
@@ -121,8 +121,7 @@ class TestCVAE:
 
 
     def notest_pytorch_cvae(self):
-        cvae = CVAE(self.input_shape, self.encoder_hparams,
-                    self.decoder_hparams, self.optimizer_hparams)
+        cvae = CVAE(self.input_shape, self.hparams, self.optimizer_hparams)
 
         print(cvae)
         summary(cvae.cvae, self.input_shape)
@@ -145,19 +144,18 @@ class TestCVAE:
 
         path = './test/cvae_input.h5'
 
-        self.train_loader = DataLoader(TestCVAE.ContactMap(path, split='train'),
-                                       batch_size=self.batch_size, shuffle=True)
-        self.test_loader = DataLoader(TestCVAE.ContactMap(path, split='valid'),
-                                      batch_size=self.batch_size, shuffle=True)
+        train_loader = DataLoader(TestCVAE.ContactMap(path, split='train'),
+                                  batch_size=self.batch_size, shuffle=True)
+        test_loader = DataLoader(TestCVAE.ContactMap(path, split='valid'),
+                                 batch_size=self.batch_size, shuffle=True)
 
-        cvae = CVAE(self.input_shape, self.encoder_hparams,
-                    self.decoder_hparams, self.optimizer_hparams)
+        cvae = CVAE(self.input_shape, self.hparams, self.optimizer_hparams)
 
         print(cvae)
         summary(cvae.cvae, self.input_shape)
 
 
-        cvae.train(self.train_loader, self.test_loader, self.epochs)
+        cvae.train(train_loader, test_loader, self.epochs)
 
     @classmethod
     def teardown_class(self):

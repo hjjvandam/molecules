@@ -7,9 +7,9 @@ from molecules.ml.hyperparams import Hyperparams
 # TODO: change member variable names to be the same as pytorch argument names
 
 class ConvVAEHyperparams(Hyperparams):
-    def __init__(self, num_conv_layers, filters, kernels,
-                 strides, latent_dim, activation, num_affine_layers,
-                 affine_widths, affine_dropouts):
+    def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
+                 strides=[1, 2, 1], latent_dim=3, activation='ReLU', num_affine_layers=1,
+                 affine_widths=[128], affine_dropouts=[0], output_activation='Sigmoid'):
 
         self.num_conv_layers = num_conv_layers 
         self.filters = filters
@@ -20,6 +20,7 @@ class ConvVAEHyperparams(Hyperparams):
         self.num_affine_layers = num_affine_layers
         self.affine_widths = affine_widths
         self.affine_dropouts = affine_dropouts
+        self.output_activation = output_activation
 
         # Placed after member vars are declared so that base class can validate
         super().__init__()
@@ -42,28 +43,3 @@ class ConvVAEHyperparams(Hyperparams):
 
         if any(p < 0 or p > 1 for p in self.affine_dropouts):
             raise Exception('Dropout probabilities, p, must be 0 <= p <= 1.')
-
-
-class EncoderHyperparams(ConvVAEHyperparams):
-
-    def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
-                 strides=[1, 2, 1], latent_dim=3, activation='ReLU',
-                 num_affine_layers=1, affine_widths=[128], affine_dropouts=[0]):
-
-        super().__init__(num_conv_layers, filters, kernels, strides,
-                         latent_dim, activation, num_affine_layers,
-                         affine_widths, affine_dropouts)
-
-
-class DecoderHyperparams(ConvVAEHyperparams):
-
-    def __init__(self, num_conv_layers=3, filters=[64, 64, 64], kernels=[3, 3, 3],
-                 strides=[1, 2, 1], latent_dim=3, activation='ReLU',
-                 num_affine_layers=1, affine_widths=[128], affine_dropouts=[0],
-                 output_activation='Sigmoid'):
-
-        super().__init__(num_conv_layers, filters, kernels, strides,
-                         latent_dim, activation, num_affine_layers,
-                         affine_widths, affine_dropouts)
-
-        self.output_activation = output_activation
