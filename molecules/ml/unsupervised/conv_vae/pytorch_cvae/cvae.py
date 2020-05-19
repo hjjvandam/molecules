@@ -132,6 +132,13 @@ def select_activation(activation):
     else:
         raise ValueError(f'Invalid activation type: {activation}')
 
+def init_weights(m):
+    if type(m) == nn.Linear:
+        torch.nn.init.xavier_uniform(m.weight)
+        m.bias.data.fill_(0.01)
+    elif type(m) == nn.Conv2d:
+        torch.nn.init.xavier_uniform(m.weight)
+
 
 # TODO: consider making _conv_layers and _affine_layers helper functions
 
@@ -153,6 +160,13 @@ class EncoderConv2D(nn.Module):
 
         self.mu = self._embedding_layer()
         self.logvar = self._embedding_layer()
+
+        self.init_weights()
+
+    def init_weights(self):
+        self.encoder.apply(init_weights)
+        init_weights(self.mu)
+        init_weights(self.logvar)
 
     def forward(self, x):
         x = self.encoder(x)
@@ -243,6 +257,12 @@ class DecoderConv2D(nn.Module):
 
         self.affine_layers = nn.Sequential(*self._affine_layers())
         self.conv_layers = nn.Sequential(*self._conv_layers())
+
+        self.init_weights()
+
+    def init_weights(self):
+        self.affine_layers.apply(init_weights)
+        self.conv_layers.apply(init_weights)
 
     def reshape(self, x):
         """

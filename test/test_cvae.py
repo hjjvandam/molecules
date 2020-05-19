@@ -86,7 +86,7 @@ class TestCVAE:
 
         self.encoder_hparams = EncoderHyperparams(**hparams, strides=strides)
         self.decoder_hparams = DecoderHyperparams(**hparams, strides=list(reversed(strides)))
-        self.optimizer_hparams = OptimizerHyperparams(name='RMSprop')
+        self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.001})
 
     def notest_keras_cvae(self):
 
