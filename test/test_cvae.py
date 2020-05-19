@@ -73,20 +73,21 @@ class TestCVAE:
         # For Keras model
         self.dataset = TestCVAE.DummyContactMap(self.input_shape)
 
+        # Optimal Fs-peptide params
         hparams ={'num_conv_layers': 4,
-                  'filters': [64, 64, 64, 64],
-                  'kernels': [3, 3, 3, 3],
+                  'filters': [100, 100, 100, 100],
+                  'kernels': [5, 5, 5, 5],
                   'num_affine_layers': 1,
-                  'affine_widths': [128],
+                  'affine_widths': [64],
                   'affine_dropouts': [0],
-                  'latent_dim': 3
+                  'latent_dim': 10
                  }
 
         strides = [1, 2, 1, 1]
 
         self.encoder_hparams = EncoderHyperparams(**hparams, strides=strides)
         self.decoder_hparams = DecoderHyperparams(**hparams, strides=list(reversed(strides)))
-        self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.001})
+        self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
     def notest_keras_cvae(self):
 
