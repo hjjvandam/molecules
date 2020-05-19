@@ -27,22 +27,6 @@ def reversedzip(*iterables):
     for tup in zip(*map(reversed, iterables)):
         yield tup
 
-def conv2d_num_params(f, c, num_filters):
-    """
-    Parameters
-    ----------    
-    f : int
-        filter size
-
-    c : int
-        number of channels
-
-    num_filters : int
-        number of filters
-    """
-    # +1 to count the bias for each filter
-    return (f*f*c + 1) * num_filters
-
 def conv2d_output_dim(input_dim, kernel_size, stride, padding,
                       transpose=False):
     """
