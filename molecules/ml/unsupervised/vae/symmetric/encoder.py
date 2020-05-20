@@ -1,3 +1,4 @@
+import torch
 from torch import nn
 from math import isclose
 from molecules.ml.unsupervised.vae.utils import *
@@ -32,6 +33,11 @@ class SymmetricEncoderConv2d(nn.Module):
     def forward(self, x):
         x = self.encoder(x)
         return self.mu(x), self.logvar(x)
+
+    def encode(self, x):
+        self.eval()
+        with torch.no_grad():
+            return self.forward(x)[0]
 
     def _conv_layers(self):
         """

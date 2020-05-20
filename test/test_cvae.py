@@ -55,7 +55,7 @@ class TestVAE:
 
     @classmethod
     def setup_class(self):
-        self.epochs = 10
+        self.epochs = 1
         self.batch_size = 100
         self.input_shape = (1, 22, 22) # Use FSPeptide sized contact maps
         self.train_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
@@ -95,7 +95,7 @@ class TestVAE:
         assert even_padding(input_dim, kernel_size, stride=2) == 1
 
 
-    def test_pytorch_cvae_real_data(self):
+    def notest_pytorch_cvae_real_data(self):
 
         path = './test/cvae_input.h5'
 
@@ -110,6 +110,17 @@ class TestVAE:
         summary(vae.model, self.input_shape)
 
         vae.train(train_loader, test_loader, self.epochs)
+
+    def test_encode_decode(self):
+        vae = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
+        vae.train(self.train_loader, self.test_loader, self.epochs)
+
+        test_data = TestVAE.DummyContactMap(self.input_shape, 100)[:]
+
+        embeddings = vae.encode(test_data)
+
+        recons = vae.decode(embeddings)
+
 
     @classmethod
     def teardown_class(self):

@@ -14,10 +14,13 @@ class VAEModel(nn.Module):
     def __init__(self, input_shape, hparams):
         super(VAEModel, self).__init__()
 
-        from molecules.ml.unsupervised.vae.symmetric import (SymmetricEncoderConv2d,
-                                                             SymmetricDecoderConv2d)
-        self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
-        self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.encoder_dim)
+        if isinstance(hparams, SymmetricVAEHyperparams):
+            from molecules.ml.unsupervised.vae.symmetric import (SymmetricEncoderConv2d,
+                                                                 SymmetricDecoderConv2d)
+            self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
+            self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.encoder_dim)
+        else:
+            raise TypeError(f'Invalid hparams type: {type(hparams)}.')
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
@@ -33,14 +36,12 @@ class VAEModel(nn.Module):
         x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
         return x, mu, logvar
 
-    # TODO: wrap embed, generate in context manager with no_grad() ?
-
-    def embed(self, data):
+    def encode(self, x):
         # mu layer
-        return self.encoder(data)[0]
+        return self.encoder.encode(x)
 
-    def generate(self, embedding):
-        return self.decoder(embedding)
+    def decode(self, embedding):
+        return self.decoder.decode(embedding)
 
     def save_weights(self, enc_path, dec_path):
         torch.save(self.encoder, enc_path)
@@ -166,7 +167,7 @@ class VAE:
         test_loss /= len(test_loader.dataset)
         print('====> Test set loss: {:.4f}'.format(test_loss))
 
-    def embed(self, data):
+    def encode(self, x):
         """
         Effects
         -------
@@ -174,16 +175,16 @@ class VAE:
 
         Parameters
         ----------
-        data : np.ndarray
+        x : np.ndarray
 
         Returns
         -------
         np.ndarray of embeddings.
 
         """
-        return self.model.embed(data)
+        return self.model.encode(x)
 
-    def generate(self, embedding):
+    def decode(self, embedding):
         """
         Effects
         -------
@@ -198,7 +199,7 @@ class VAE:
         generated image : np.nddary
 
         """
-        return self.model.generate(embedding)
+        return self.model.decode(embedding)
 
     # TODO: consider functions to save/load optimizer
 
