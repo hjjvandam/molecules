@@ -1,7 +1,7 @@
 import torch
 from torch import nn, optim
+from torch.nn import functional as F
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import vae_loss
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
@@ -49,6 +49,26 @@ class VAEModel(nn.Module):
     def load_weights(self, enc_path, dec_path):
         self.encoder = torch.load(enc_path)
         self.decoder = torch.load(dec_path)
+
+
+def vae_loss(recon_x, x, mu, logvar):
+    """
+    Effects
+    -------
+    Reconstruction + KL divergence losses summed over all elements and batch
+
+    See Appendix B from VAE paper:
+    Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+    https://arxiv.org/abs/1312.6114
+
+    """
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+
+    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+    return BCE + KLD
+
 
 class VAE:
     # TODO: set weight initialization hparams
