@@ -39,6 +39,12 @@ class SymmetricEncoderConv2d(nn.Module):
         with torch.no_grad():
             return self.forward(x)[0]
 
+    def save_weights(self, path):
+        torch.save(self.state_dict(), path)
+
+    def load_weights(self, path):
+        self.load_state_dict(torch.load(path))
+
     def _conv_layers(self):
         """
         Compose convolution layers.

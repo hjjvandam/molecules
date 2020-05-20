@@ -114,7 +114,7 @@ def select_activation(activation):
 
 def init_weights(m):
     if type(m) == nn.Linear:
-        nn.init.xavier_uniform(m.weight)
+        nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
     elif type(m) == nn.Conv2d:
-        nn.init.xavier_uniform(m.weight)
+        nn.init.xavier_uniform_(m.weight)

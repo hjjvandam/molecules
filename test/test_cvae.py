@@ -1,3 +1,4 @@
+import os
 import pytest
 import numpy as np
 import torch
@@ -11,7 +12,7 @@ from molecules.ml.hyperparams import OptimizerHyperparams
 class TestVAE:
 
     class DummyContactMap(Dataset):
-            def __init__(self, input_shape, size=1000):
+            def __init__(self, input_shape, size=200):
                 self.maps = np.eye(input_shape[-1]).reshape(input_shape)
                 self.maps = np.array([self.maps for _ in range(size)])
 
@@ -76,14 +77,9 @@ class TestVAE:
         self.hparams = SymmetricVAEHyperparams(**hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
-    def notest_pytorch_cvae(self):
-        vae = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
-
-        print(vae)
-        summary(vae.model, self.input_shape)
-
-        vae.train(self.train_loader, self.test_loader, self.epochs)
-
+        # For testing saving and loading weights
+        self.enc_path = os.path.join('.', 'test', 'data', 'encoder-weights.pt')
+        self.dec_path = os.path.join('.', 'test', 'data', 'decoder-weights.pt')
 
     def test_padding(self):
         from molecules.ml.unsupervised.vae.utils import even_padding
@@ -122,6 +118,34 @@ class TestVAE:
         recons = vae.decode(embeddings)
 
 
+    def test_save_load_weights(self):
+        vae1 = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
+        vae1.train(self.train_loader, self.test_loader, self.epochs)
+        vae1.save_weights(self.enc_path, self.dec_path)
+
+        vae2 = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
+        vae2.load_weights(self.enc_path, self.dec_path)
+
+        # Checks that all model weights are exactly equal
+        for va1_params, vae2_params in zip(vae1.model.state_dict().values(),
+                                           vae2.model.state_dict().values()):
+            assert torch.equal(va1_params, va1_params)
+
+
+        # Checks that weights can be loaded into encoder/decoder modules seperately
+        from molecules.ml.unsupervised.vae.symmetric import (SymmetricEncoderConv2d,
+                                                             SymmetricDecoderConv2d)
+
+        encoder = SymmetricEncoderConv2d(self.input_shape, self.hparams)
+        encoder.load_weights(self.enc_path)
+
+        decoder = SymmetricDecoderConv2d(self.input_shape, self.hparams,
+                                         encoder.encoder_dim)
+        decoder.load_weights(self.dec_path)
+
+
     @classmethod
     def teardown_class(self):
-        pass
+        # Delete file to clean testing directories
+        os.remove(self.enc_path)
+        os.remove(self.dec_path)

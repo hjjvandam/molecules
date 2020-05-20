@@ -44,12 +44,12 @@ class VAEModel(nn.Module):
         return self.decoder.decode(embedding)
 
     def save_weights(self, enc_path, dec_path):
-        torch.save(self.encoder, enc_path)
-        torch.save(self.decoder, dec_path)
+        self.encoder.save_weights(enc_path)
+        self.decoder.save_weights(dec_path)
 
     def load_weights(self, enc_path, dec_path):
-        self.encoder = torch.load(enc_path)
-        self.decoder = torch.load(dec_path)
+        self.encoder.load_weights(enc_path)
+        self.decoder.load_weights(dec_path)
 
 
 def vae_loss(recon_x, x, mu, logvar):

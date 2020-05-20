@@ -9,8 +9,8 @@ from molecules.ml.unsupervised.vae import SymmetricVAEHyperparams
 class TestHyperParams:
 
     @classmethod
-    def setup_class(cls):
-        cls.fname = os.path.join('.', 'test', 'data', 'encoder-hparams.pkl')
+    def setup_class(self):
+        self.fname = os.path.join('.', 'test', 'data', 'encoder-hparams.pkl')
 
     def test_save_load_functions(self):
         # Set model hyperparameters for encoder
@@ -95,6 +95,6 @@ class TestHyperParams:
         optimizer = get_optimizer(model, optimizer_hparams)
 
     @classmethod
-    def teardown_class(cls):
+    def teardown_class(self):
         # Delete file to clean testing directories
-        os.remove(cls.fname)
+        os.remove(self.fname)

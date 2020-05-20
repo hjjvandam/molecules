@@ -65,6 +65,12 @@ class SymmetricDecoderConv2d(nn.Module):
         with torch.no_grad():
             return self.forward(embedding)
 
+    def save_weights(self, path):
+        torch.save(self.state_dict(), path)
+
+    def load_weights(self, path):
+        self.load_state_dict(torch.load(path))
+
     def _conv_layers(self):
         """
         Compose convolution layers.
@@ -81,8 +87,8 @@ class SymmetricDecoderConv2d(nn.Module):
         # Dimension of square matrix
         input_dim = self.output_shape[1]
 
-        # TODO: might not want to do this because it will mess up saving the hparams
         # Set last filter to be the number of channels in the reconstructed image.
+        tmp = self.hparams.filters[0]
         self.hparams.filters[0] = self.output_shape[0]
 
         for filter_, kernel, stride in reversedzip(self.hparams.filters,
@@ -111,6 +117,9 @@ class SymmetricDecoderConv2d(nn.Module):
 
         # Overwrite output activation
         conv2d_layers[-1] = select_activation(self.hparams.output_activation)
+
+        # Restore invariant state
+        self.hparams.filters[0] = tmp
 
         return conv2d_layers
 
