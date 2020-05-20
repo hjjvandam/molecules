@@ -74,15 +74,17 @@ class VAE:
     def __init__(self, input_shape,
                  hparams=SymmetricVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams(),
-                 loss=None):
+                 loss=None,
+                 cuda=True):
 
         hparams.validate()
         optimizer_hparams.validate()
 
         self.input_shape = input_shape
 
-        # TODO: consider passing in device, or giving option to run cpu even if cuda is available
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        # TODO: consider passing in device (this will allow the ability to set the train/test
+        #       data to cuda as well, since device will be a variable in the user space)
+        self.device = torch.device('cuda' if cuda and torch.cuda.is_available() else 'cpu')
 
         self.model = VAEModel(input_shape, hparams).to(self.device)
 
