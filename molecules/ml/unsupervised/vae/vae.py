@@ -6,10 +6,6 @@ from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 
-# Helpful links:
-#   https://github.com/L1aoXingyu/pytorch-beginner/blob/master/08-AutoEncoder/conv_autoencoder.py
-#   https://pytorch.org/tutorials/beginner/saving_loading_models.html
-
 class VAEModel(nn.Module):
     def __init__(self, input_shape, hparams):
         super(VAEModel, self).__init__()
@@ -32,8 +28,10 @@ class VAEModel(nn.Module):
         x = self.reparameterize(mu, logvar)
         x = self.decoder(x)
         # TODO: see if we can remove this to speed things up
-        #       or find an inplace way
-        x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
+        #       or find an inplace way. Only necessary for bad
+        #       hyperparam config such as optimizer learning rate
+        #       being large.
+        #x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
         return x, mu, logvar
 
     def encode(self, x):
@@ -145,6 +143,8 @@ class VAE:
 
 
             # TODO: Handle logging/checkpoint
+            #       https://pytorch.org/tutorials/beginner/saving_loading_models.html
+            #       should also save optimizer state
             if batch_idx % log_interval == 0:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, batch_idx * len(data), len(train_loader.dataset),
@@ -200,8 +200,6 @@ class VAE:
 
         """
         return self.model.decode(embedding)
-
-    # TODO: consider functions to save/load optimizer
 
     def save_weights(self, enc_path, dec_path):
         """
