@@ -52,7 +52,7 @@ def conv2d_output_shape(input_dim, kernel_size, stride, padding,
                                    padding, transpose)
     return (output_dim, output_dim, num_filters)
 
-def same_padding(input_dim, kernel_size, stride):
+def _same_padding(input_dim, kernel_size, stride):
     """
     Parameters
     ----------
@@ -75,18 +75,18 @@ def same_padding(input_dim, kernel_size, stride):
     """
     return (input_dim * (stride - 1) - stride + kernel_size) // 2
 
-def even_padding(input_dim, kernel_size, stride):
+def same_padding(input_dim, kernel_size, stride):
     """
-    Implements Keras-like padding.
+    Implements Keras-like same padding.
     If the stride is one then use same_padding.
     Otherwise, select the smallest pad such that the
     kernel_size fits evenly within the input_dim.
     """
     if stride == 1:
-        return same_padding(input_dim, kernel_size, stride)
+        return _same_padding(input_dim, kernel_size, stride)
 
     # TODO: this could have bugs for stride != 1. Needs testing.
-    return same_padding(input_dim // stride, kernel_size, 1)
+    return _same_padding(input_dim // stride, kernel_size, 1)
 
 
 # TODO: These pytorch functions should be moved elsewhere
@@ -112,9 +112,10 @@ def select_activation(activation):
     else:
         raise ValueError(f'Invalid activation type: {activation}')
 
+# TODO: generalize this more.
 def init_weights(m):
     if type(m) == nn.Linear:
         nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)
-    elif type(m) == nn.Conv2d:
+    elif type(m) in [nn.Conv2d, nn.ConvTranspose2d]:
         nn.init.xavier_uniform_(m.weight)

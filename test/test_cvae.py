@@ -82,13 +82,13 @@ class TestVAE:
         self.dec_path = os.path.join('.', 'test', 'data', 'decoder-weights.pt')
 
     def test_padding(self):
-        from molecules.ml.unsupervised.vae.utils import even_padding
+        from molecules.ml.unsupervised.vae.utils import same_padding
 
         input_dim = 22
         kernel_size = 3
 
-        assert even_padding(input_dim, kernel_size, stride=1) == 1
-        assert even_padding(input_dim, kernel_size, stride=2) == 1
+        assert same_padding(input_dim, kernel_size, stride=1) == 1
+        assert same_padding(input_dim, kernel_size, stride=2) == 1
 
 
     def notest_pytorch_cvae_real_data(self):

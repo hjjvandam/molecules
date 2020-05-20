@@ -1,7 +1,8 @@
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import *
+from molecules.ml.unsupervised.vae.utils import (conv2d_output_dim, same_padding,
+                                                 select_activation, init_weights)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 def reversedzip(*iterables):
@@ -95,7 +96,7 @@ class SymmetricDecoderConv2d(nn.Module):
                                                    self.hparams.kernels,
                                                    self.hparams.strides):
 
-            padding = even_padding(input_dim, kernel, stride)
+            padding = same_padding(input_dim, kernel, stride)
 
             conv2d_layers.append(nn.ConvTranspose2d(in_channels=in_channels,
                                                     out_channels=filter_,
