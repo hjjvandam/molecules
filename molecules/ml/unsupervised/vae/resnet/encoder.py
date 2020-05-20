@@ -15,7 +15,7 @@ class ResnetEncoder(nn.Module):
         self.input_shape = input_shape
         self.hparams = hparams
 
-        self.encoder = nn.Sequential()
+        self.encoder = nn.Sequential(*self._encoder_layers())
 
         self.mu = self._embedding_layer()
         self.logvar = self._embedding_layer()
@@ -41,6 +41,24 @@ class ResnetEncoder(nn.Module):
 
     def load_weights(self, path):
         self.load_state_dict(torch.load(path))
+
+    def _encoder_layers(self):
+        layers = []
+
+        # Contact matrices have one channel
+        in_channels = self.input_shape[0]
+
+        padding = same_padding(self.input_shape[1], kernel_size=5, stride=1)
+
+        layers.append(nn.Conv1d(in_channels=in_channels,
+                                out_channels=self.hparams.enc_filters,
+                                kernel_size=5,
+                                stride=1,
+                                padding=padding))
+
+        layers.append(select_activation(self.hparams.activation))
+
+        return layers
 
     def _embedding_layer(self):
         # TODO: implement
