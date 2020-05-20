@@ -50,11 +50,32 @@ class VAEModel(nn.Module):
         self.decoder = torch.load(dec_path)
 
 
+def vae_loss(recon_x, x, mu, logvar):
+    """
+    Effects
+    -------
+    Reconstruction + KL divergence losses summed over all elements and batch
+
+    See Appendix B from VAE paper:
+    Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
+    https://arxiv.org/abs/1312.6114
+
+    """
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+
+    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+    return BCE + KLD
+
+
+
 class VAE:
     # TODO: set weight initialization hparams
     def __init__(self, input_shape,
                  hparams=SymmetricVAEHyperparams(),
-                 optimizer_hparams=OptimizerHyperparams()):
+                 optimizer_hparams=OptimizerHyperparams(),
+                 loss=None):
 
         hparams.validate()
         optimizer_hparams.validate()
@@ -69,6 +90,8 @@ class VAE:
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
         self.optimizer = get_optimizer(self.model, optimizer_hparams)
+
+        self.loss = vae_loss if loss is None else loss
 
     def __repr__(self):
         return str(self.model)
@@ -114,7 +137,7 @@ class VAE:
             data = data.to(self.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
-            loss = self._loss(recon_batch, data, mu, logvar)
+            loss = self.loss(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
             self.optimizer.step()
@@ -138,30 +161,10 @@ class VAE:
             for data in test_loader:
                 data = data.to(self.device)
                 recon_batch, mu, logvar = self.model(data)
-                test_loss += self._loss(recon_batch, data, mu, logvar).item()
+                test_loss += self.loss(recon_batch, data, mu, logvar).item()
 
         test_loss /= len(test_loader.dataset)
         print('====> Test set loss: {:.4f}'.format(test_loss))
-
-
-    def _loss(self, recon_x, x, mu, logvar):
-        """
-        Effects
-        -------
-        Reconstruction + KL divergence losses summed over all elements and batch
-
-        See Appendix B from VAE paper:
-        Kingma and Welling. Auto-Encoding Variational Bayes. ICLR, 2014
-        https://arxiv.org/abs/1312.6114
-
-        """
-        BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
-
-        # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-        KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-
-        return BCE + KLD
-
 
     def embed(self, data):
         """
