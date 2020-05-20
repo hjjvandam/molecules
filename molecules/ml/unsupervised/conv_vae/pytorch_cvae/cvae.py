@@ -372,12 +372,11 @@ class DecoderConv2D(nn.Module):
 
 
 class CVAEModel(nn.Module):
-    def __init__(self, input_shape, hparams, device):
+    def __init__(self, input_shape, hparams):
         super(CVAEModel, self).__init__()
 
-        # May not need these .to(device) since it is called in CVAE. Test this
-        self.encoder = EncoderConv2D(input_shape, hparams).to(device)
-        self.decoder = DecoderConv2D(input_shape, hparams, self.encoder.encoder_dim).to(device)
+        self.encoder = EncoderConv2D(input_shape, hparams)
+        self.decoder = DecoderConv2D(input_shape, hparams, self.encoder.encoder_dim)
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
@@ -388,7 +387,6 @@ class CVAEModel(nn.Module):
         mu, logvar = self.encoder(x)
         x = self.reparameterize(mu, logvar)
         x = self.decoder(x)
-        # TODO: having issue with nans in BCE loss function. Try weight initialization.
         x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
         return x, mu, logvar
 
@@ -424,7 +422,7 @@ class CVAE:
         # TODO: consider passing in device, or giving option to run cpu even if cuda is available
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
-        self.cvae = CVAEModel(input_shape, hparams, self.device).to(self.device)
+        self.cvae = CVAEModel(input_shape, hparams).to(self.device)
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
@@ -556,6 +554,8 @@ class CVAE:
 
         """
         return self.cvae.generate(embedding)
+
+    # TODO: consider functions to save/load optimizer
 
     def save_weights(self, enc_path, dec_path):
         """
