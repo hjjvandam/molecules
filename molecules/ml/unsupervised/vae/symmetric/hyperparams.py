@@ -1,6 +1,6 @@
 from molecules.ml.hyperparams import Hyperparams
 
-class ConvVAEHyperparams(Hyperparams):
+class SymmetricVAEHyperparams(Hyperparams):
     def __init__(self, filters=[64, 64, 64], kernels=[3, 3, 3],
                  strides=[1, 2, 1], latent_dim=3,
                  affine_widths=[128], affine_dropouts=[0],

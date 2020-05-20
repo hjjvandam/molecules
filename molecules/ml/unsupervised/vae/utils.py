@@ -1,25 +1,3 @@
-def reversedzip(*iterables):
-    """
-    Yields the zip of iterables in reversed order.
-
-    Example
-    -------
-    l1 = [1,2,3]
-    l2 = ['a','b','c']
-    l3 = [5,6,7]
-
-    for tup in reversedzip(l1, l2, l3):
-        print(tup)
-
-    Outputs:
-        (3, 'c', 7)
-        (2, 'b', 6)
-        (1, 'a', 5)
-
-    """
-    for tup in zip(*map(reversed, iterables)):
-        yield tup
-
 def conv2d_output_dim(input_dim, kernel_size, stride, padding,
                       transpose=False):
     """

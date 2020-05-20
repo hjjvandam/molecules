@@ -4,11 +4,11 @@ import torch
 from torchsummary import summary
 from molecules.utils import open_h5
 from torch.utils.data import Dataset, DataLoader
-from molecules.ml.unsupervised.vae import ConvVAEHyperparams
-from molecules.ml.unsupervised.vae import CVAE
+from molecules.ml.unsupervised.vae import SymmetricVAEHyperparams
+from molecules.ml.unsupervised.vae import VAE
 from molecules.ml.hyperparams import OptimizerHyperparams
 
-class TestCVAE:
+class TestVAE:
 
     class DummyContactMap(Dataset):
             def __init__(self, input_shape, size=1000):
@@ -58,9 +58,9 @@ class TestCVAE:
         self.epochs = 10
         self.batch_size = 100
         self.input_shape = (1, 22, 22) # Use FSPeptide sized contact maps
-        self.train_loader = DataLoader(TestCVAE.DummyContactMap(self.input_shape),
+        self.train_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
                                        batch_size=self.batch_size, shuffle=True)
-        self.test_loader = DataLoader(TestCVAE.DummyContactMap(self.input_shape),
+        self.test_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
                                       batch_size=self.batch_size, shuffle=True)
 
 
@@ -73,20 +73,20 @@ class TestCVAE:
                   'latent_dim': 10
                  }
 
-        self.hparams = ConvVAEHyperparams(**hparams)
+        self.hparams = SymmetricVAEHyperparams(**hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
     def notest_pytorch_cvae(self):
-        cvae = CVAE(self.input_shape, self.hparams, self.optimizer_hparams)
+        vae = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
 
-        print(cvae)
-        summary(cvae.cvae, self.input_shape)
+        print(vae)
+        summary(vae.model, self.input_shape)
 
-        cvae.train(self.train_loader, self.test_loader, self.epochs)
+        vae.train(self.train_loader, self.test_loader, self.epochs)
 
 
     def test_padding(self):
-        from molecules.ml.unsupervised.vae.vae import even_padding
+        from molecules.ml.unsupervised.vae.utils import even_padding
 
         input_dim = 22
         kernel_size = 3
@@ -99,17 +99,17 @@ class TestCVAE:
 
         path = './test/cvae_input.h5'
 
-        train_loader = DataLoader(TestCVAE.ContactMap(path, split='train'),
+        train_loader = DataLoader(TestVAE.ContactMap(path, split='train'),
                                   batch_size=self.batch_size, shuffle=True)
-        test_loader = DataLoader(TestCVAE.ContactMap(path, split='valid'),
+        test_loader = DataLoader(TestVAE.ContactMap(path, split='valid'),
                                  batch_size=self.batch_size, shuffle=True)
 
-        cvae = CVAE(self.input_shape, self.hparams, self.optimizer_hparams)
+        vae = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
 
-        print(cvae)
-        summary(cvae.cvae, self.input_shape)
+        print(vae)
+        summary(vae.model, self.input_shape)
 
-        cvae.train(train_loader, test_loader, self.epochs)
+        vae.train(train_loader, test_loader, self.epochs)
 
     @classmethod
     def teardown_class(self):

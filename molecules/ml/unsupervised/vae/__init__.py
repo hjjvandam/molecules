@@ -1,2 +1,2 @@
-from molecules.ml.unsupervised.vae.vae import CVAE
-from molecules.ml.unsupervised.vae.hyperparams import ConvVAEHyperparams
+from molecules.ml.unsupervised.vae.vae import VAE
+from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams

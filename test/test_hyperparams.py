@@ -3,7 +3,7 @@ Tests for `molecules` module.
 """
 import os
 import pytest
-from molecules.ml.unsupervised.vae import ConvVAEHyperparams
+from molecules.ml.unsupervised.vae import SymmetricVAEHyperparams
 
 
 class TestHyperParams:
@@ -21,7 +21,7 @@ class TestHyperParams:
                           'latent_dim': 3,
                           'affine_dropouts': [0]
                          }
-        hparams = ConvVAEHyperparams(**hparam_options)
+        hparams = SymmetricVAEHyperparams(**hparam_options)
 
         # Save model hyperparameters to disk
         hparams.save(self.fname)
@@ -31,7 +31,7 @@ class TestHyperParams:
             in os.listdir(os.path.dirname(self.fname))
 
         # Load saved hyperparameters from disk
-        loaded_hparams = ConvVAEHyperparams.load(self.fname)
+        loaded_hparams = SymmetricVAEHyperparams.load(self.fname)
 
         # Check that all attributes were read from disk correctly
         for key, val in hparam_options.items():
@@ -47,7 +47,7 @@ class TestHyperParams:
                           'latent_dim': 3
                          }
 
-        hparams = ConvVAEHyperparams(**hparam_options)
+        hparams = SymmetricVAEHyperparams(**hparam_options)
 
         # Raises exception if invalid
         hparams.validate()
@@ -68,7 +68,7 @@ class TestHyperParams:
 
         # Constructor should implicitly validate and throw ValueError
         try:
-            hparams = ConvVAEHyperparams(**hparam_options)
+            hparams = SymmetricVAEHyperparams(**hparam_options)
         except ValueError:
             pass
         else:
