@@ -3,7 +3,7 @@ from torch import nn, optim
 from torch.nn import functional as F
 from math import isclose
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
-from molecules.ml.unsupervised import ConvVAEHyperparams
+from molecules.ml.unsupervised.vae.hyperparams import ConvVAEHyperparams
 
 def reversedzip(*iterables):
     """

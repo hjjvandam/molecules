@@ -2,6 +2,8 @@ import numpy as np
 from keras.callbacks import Callback
 
 
+# TODO: remove these or migrate to pytorch
+
 class EmbeddingCallback(Callback):
     """
     Saves embeddings of random samples.

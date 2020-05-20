@@ -3,7 +3,7 @@ Tests for `molecules` module.
 """
 import os
 import pytest
-from molecules.ml.unsupervised import ConvVAEHyperparams
+from molecules.ml.unsupervised.vae import ConvVAEHyperparams
 
 
 class TestHyperParams:
