@@ -143,6 +143,13 @@ class TestVAE:
                                          encoder.encoder_dim)
         decoder.load_weights(self.dec_path)
 
+    def test_resnet_vae(self):
+        from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
+
+        hparams = ResnetVAEHyperparams()
+
+        vae = VAE(self.input_shape, hparams, self.optimizer_hparams)
+
 
     @classmethod
     def teardown_class(self):
