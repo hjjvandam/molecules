@@ -107,7 +107,7 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def test_encode_decode(self):
+    def notest_encode_decode(self):
         vae = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
         vae.train(self.train_loader, self.test_loader, self.epochs)
 
@@ -118,7 +118,7 @@ class TestVAE:
         recons = vae.decode(embeddings)
 
 
-    def test_save_load_weights(self):
+    def notest_save_load_weights(self):
         vae1 = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
         vae1.train(self.train_loader, self.test_loader, self.epochs)
         vae1.save_weights(self.enc_path, self.dec_path)
@@ -151,8 +151,39 @@ class TestVAE:
         vae = VAE(self.input_shape, hparams, self.optimizer_hparams)
 
 
+    def test_residual_module(self):
+        from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
+
+        input_shape, filters, kernel_size, activation = (1, 22*22), 10, 3, 'ReLU'
+
+        res = ResidualConv1d(input_shape, filters, kernel_size, activation)
+
+        print(res)
+        summary(res, input_shape)
+
+        for x in self.train_loader:
+            # Flatten contact matrix
+            x = x.view(-1, *input_shape)
+            out = res(x)
+
+        # Test with shrink=True
+        res = ResidualConv1d(input_shape, filters,
+                             kernel_size, activation,
+                             shrink=True)
+
+        print(res)
+        summary(res, input_shape)
+
+        for x in self.train_loader:
+            # Flatten contact matrix
+            x = x.view(-1, *input_shape)
+            out = res(x)
+
+
+
     @classmethod
     def teardown_class(self):
         # Delete file to clean testing directories
-        os.remove(self.enc_path)
-        os.remove(self.dec_path)
+        # os.remove(self.enc_path)
+        # os.remove(self.dec_path)
+        pass
