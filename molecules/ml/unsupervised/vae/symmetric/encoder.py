@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import (conv2d_output_dim, same_padding,
+from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
                                                  select_activation, init_weights)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
@@ -52,11 +52,11 @@ class SymmetricEncoderConv2d(nn.Module):
 
         Returns
         -------
-        conv2d_layers : list
+        layers : list
             Convolution layers
         """
 
-        conv2d_layers = []
+        layers = []
 
         # Contact matrices have one channel
         in_channels = self.input_shape[0]
@@ -67,20 +67,20 @@ class SymmetricEncoderConv2d(nn.Module):
 
             padding = same_padding(self.encoder_dim, kernel, stride)
 
-            conv2d_layers.append(nn.Conv2d(in_channels=in_channels,
-                                           out_channels=filter_,
-                                           kernel_size=kernel,
-                                           stride=stride,
-                                           padding=padding))
+            layers.append(nn.Conv2d(in_channels=in_channels,
+                                    out_channels=filter_,
+                                    kernel_size=kernel,
+                                    stride=stride,
+                                    padding=padding))
 
-            conv2d_layers.append(select_activation(self.hparams.activation))
+            layers.append(select_activation(self.hparams.activation))
 
             # Subsequent layers in_channels is the current layers number of filters
             in_channels = filter_
 
-            self.encoder_dim = conv2d_output_dim(self.encoder_dim, kernel, stride, padding)
+            self.encoder_dim = conv_output_dim(self.encoder_dim, kernel, stride, padding)
 
-        return conv2d_layers
+        return layers
 
     def _affine_layers(self):
         """
@@ -88,11 +88,11 @@ class SymmetricEncoderConv2d(nn.Module):
 
         Returns
         -------
-        fc_layers : list
+        layers : list
             Linear layers
         """
 
-        fc_layers = []
+        layers = []
 
         # First layer gets flattened convolutional output
         in_features = self.hparams.filters[-1] * self.encoder_dim**2
@@ -100,18 +100,18 @@ class SymmetricEncoderConv2d(nn.Module):
         for width, dropout in zip(self.hparams.affine_widths,
                                   self.hparams.affine_dropouts):
 
-            fc_layers.append(nn.Linear(in_features=in_features,
-                                       out_features=width))
+            layers.append(nn.Linear(in_features=in_features,
+                                    out_features=width))
 
-            fc_layers.append(select_activation(self.hparams.activation))
+            layers.append(select_activation(self.hparams.activation))
 
             if not isclose(dropout, 0):
-                fc_layers.append(nn.Dropout(p=dropout))
+                layers.append(nn.Dropout(p=dropout))
 
             # Subsequent layers in_features is the current layers width
             in_features = width
 
-        return fc_layers
+        return layers
 
     def _embedding_layer(self):
         return nn.Linear(in_features=self.hparams.affine_widths[-1],
