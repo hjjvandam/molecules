@@ -66,15 +66,21 @@ class TestVAE:
 
 
         # Optimal Fs-peptide params
-        hparams ={'filters': [100, 100, 100, 100],
-                  'kernels': [5, 5, 5, 5],
-                  'strides': [1, 2, 1, 1],
-                  'affine_widths': [64],
-                  'affine_dropouts': [0],
-                  'latent_dim': 10
-                 }
+        fs_peptide_hparams ={'filters': [100, 100, 100, 100],
+                             'kernels': [5, 5, 5, 5],
+                             'strides': [1, 2, 1, 1],
+                             'affine_widths': [64],
+                             'affine_dropouts': [0],
+                             'latent_dim': 10}
 
-        self.hparams = SymmetricVAEHyperparams(**hparams)
+        hparams ={'filters': [64, 64, 64, 64],
+                  'kernels': [3, 3, 3, 3],
+                  'strides': [1, 2, 1, 1],
+                  'affine_widths': [128],
+                  'affine_dropouts': [0],
+                  'latent_dim': 3}
+
+        self.hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
         # For testing saving and loading weights
@@ -87,11 +93,30 @@ class TestVAE:
         input_dim = 22
         kernel_size = 3
 
-        assert same_padding(input_dim, kernel_size, stride=1) == 1
-        assert same_padding(input_dim, kernel_size, stride=2) == 1
+        assert same_padding(input_dim, kernel_size, stride=1) == 1 # Stride 1
+        assert same_padding(input_dim, kernel_size, stride=2) == 1 # Test fs-peptide
+        assert same_padding(input_dim, 5, stride=1) == 2 # Optimal fs-peptide
+        assert same_padding(input_dim, 5, stride=2) == 1 # Optimal fs-peptide
+        assert same_padding(75, 2, 2) == 1 # Resnet Autoencoder
 
 
-    def notest_pytorch_cvae_real_data(self):
+    def test_conv_output_shape(self):
+        from molecules.ml.unsupervised.vae.utils import conv_output_shape
+
+        # Optimal fs-peptide
+        assert conv_output_shape(input_dim=22, kernel_size=5, stride=1, padding=2,
+                                 num_filters=100) == (100, 22, 22)
+        assert conv_output_shape(input_dim=22, kernel_size=5, stride=2, padding=1,
+                                 num_filters=100) == (100, 10, 10)
+        # Test fs-peptide
+        assert conv_output_shape(input_dim=22, kernel_size=3, stride=1, padding=1,
+                                 num_filters=64) == (64, 22, 22)
+        assert conv_output_shape(input_dim=22, kernel_size=3, stride=2, padding=1,
+                                 num_filters=64) == (64, 11, 11)
+
+
+
+    def _test_pytorch_cvae_real_data(self):
 
         path = './test/cvae_input.h5'
 
@@ -107,7 +132,7 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def notest_encode_decode(self):
+    def _test_encode_decode(self):
         vae = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
         vae.train(self.train_loader, self.test_loader, self.epochs)
 
@@ -118,7 +143,7 @@ class TestVAE:
         recons = vae.decode(embeddings)
 
 
-    def notest_save_load_weights(self):
+    def _test_save_load_weights(self):
         vae1 = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
         vae1.train(self.train_loader, self.test_loader, self.epochs)
         vae1.save_weights(self.enc_path, self.dec_path)
@@ -146,12 +171,16 @@ class TestVAE:
     def test_resnet_vae(self):
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
-        hparams = ResnetVAEHyperparams()
+        input_shape = (1, 22, 22)
+        hparams = ResnetVAEHyperparams(input_shape)
 
-        vae = VAE(self.input_shape, hparams, self.optimizer_hparams)
+        vae = VAE(input_shape, hparams, self.optimizer_hparams)
+
+        print(vae)
+        summary(vae.model, input_shape)
 
 
-    def test_residual_module(self):
+    def notest_residual_module(self):
         from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
         input_shape, filters, kernel_size, activation = (1, 22*22), 10, 3, 'ReLU'

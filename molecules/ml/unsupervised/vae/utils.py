@@ -1,4 +1,4 @@
-def conv2d_output_dim(input_dim, kernel_size, stride, padding,
+def conv_output_dim(input_dim, kernel_size, stride, padding,
                       transpose=False):
     """
     Parameters
@@ -22,8 +22,8 @@ def conv2d_output_dim(input_dim, kernel_size, stride, padding,
 
     return (2*padding + input_dim - kernel_size) // stride + 1
 
-def conv2d_output_shape(input_dim, kernel_size, stride, padding,
-                        num_filters, transpose=False):
+def conv_output_shape(input_dim, kernel_size, stride, padding,
+                      num_filters, transpose=False, dim=2):
     """
     Parameters
     ----------
@@ -42,38 +42,26 @@ def conv2d_output_shape(input_dim, kernel_size, stride, padding,
     num_filters : int
         number of filters
 
+    transpose : bool
+        signifies whether Conv or ConvTranspose
+
+    dim : int
+        1 or 2, signifies Conv1d or Conv2d
 
     Returns
     -------
-    (N,N, num_filters) tuple
+    (N, N, channels) tuple
 
     """
-    output_dim = conv2d_output_dim(input_dim, kernel_size, stride,
-                                   padding, transpose)
-    return (output_dim, output_dim, num_filters)
+    output_dim = conv_output_dim(input_dim, kernel_size, stride,
+                                 padding, transpose)
 
-def _same_padding(input_dim, kernel_size, stride):
-    """
-    Parameters
-    ----------
-    n : int
-        input size
-    
-    kernel_size : int
-        filter size
+    if dim == 1:
+        return num_filters, output_dim
+    if dim == 2:
+        return num_filters, output_dim, output_dim
 
-    stride : int
-        stride length
-
-    Effects
-    -------
-    In this case we want output_dim = input_dim
-
-    input_dim = output_dim = (2*pad + input_dim - kernel_size) // stride + 1
-
-    Solve for pad. 
-    """
-    return (input_dim * (stride - 1) - stride + kernel_size) // 2
+    raise ValueError(f'Invalid dim: {dim}')
 
 def same_padding(input_dim, kernel_size, stride):
     """
@@ -81,12 +69,23 @@ def same_padding(input_dim, kernel_size, stride):
     If the stride is one then use same_padding.
     Otherwise, select the smallest pad such that the
     kernel_size fits evenly within the input_dim.
+
+    Note: Assumes square matrix with dimension input_dim
     """
     if stride == 1:
-        return _same_padding(input_dim, kernel_size, stride)
+        # In this case we want output_dim = input_dim
+        # input_dim = output_dim = (2*pad + input_dim - kernel_size) // stride + 1
+        return (input_dim * (stride - 1) - stride + kernel_size) // 2
 
-    # TODO: this could have bugs for stride != 1. Needs testing.
-    return _same_padding(input_dim // stride, kernel_size, 1)
+    # Largest i such that: alpha = kernel_size + i*stride <= input_dim
+    # Then input_dim - alpha is the pad
+    # i <= (input_dim - kernel_size) // stride
+    for i in reversed(range((input_dim - kernel_size) // stride + 1)):
+        alpha = kernel_size + i*stride
+        if alpha <= input_dim:
+            return input_dim - alpha
+
+    raise Exception(f'No padding found')
 
 
 # TODO: These pytorch functions should be moved elsewhere
