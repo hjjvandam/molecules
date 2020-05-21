@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from molecules.ml.unsupervised.vae.utils import (conv2d_output_dim, same_padding,
+from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
                                                  select_activation, init_weights)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
