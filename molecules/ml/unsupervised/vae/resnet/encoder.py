@@ -37,7 +37,7 @@ class ResnetEncoder(nn.Module):
         print('forward before: ',x.shape)
         # TODO: reshape in dataloader during preprocessing. Add flatten option to dataset class
         x = self.encoder(x.view(-1, 1, self.input_shape[1]**2))
-        print('forward: ',x.shape)
+        print('forward: ',x.shape) 
         return self.mu(x), self.logvar(x)
 
     def encode(self, x):
@@ -80,7 +80,7 @@ class ResnetEncoder(nn.Module):
                                          self.hparams.activation,
                                          shrink=True))
 
-            res_input_shape = layers[-1].shape
+            res_input_shape = layers[-1].output_shape
 
         return nn.Sequential(*layers, nn.Flatten()), res_input_shape
 

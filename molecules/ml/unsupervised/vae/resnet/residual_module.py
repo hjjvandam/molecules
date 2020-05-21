@@ -9,6 +9,7 @@ class ResidualConv1d(nn.Module):
         super(ResidualConv1d, self).__init__()
 
         self.input_shape = input_shape
+        self.output_shape = input_shape
         self.filters = filters
         self.kernel_size = kernel_size
         self.activation = activation
@@ -17,18 +18,20 @@ class ResidualConv1d(nn.Module):
         # Depth of residual module
         self.depth = depth
 
-        self.residual, self.shape = self._residual_layers()
+        self.residual = self._residual_layers()
 
         if self.shrink:
-            self.shrink_layer, self.shape = self._shrink_layer()
+            self.shrink_layer, self.output_shape = self._shrink_layer()
 
     def forward(self, x):
         x += self.residual(x)
 
+        print('x after res: ', x.shape)
+
         if self.shrink:
             x = self.shrink_layer(x)
 
-        print('res shape: ', x.shape)
+        print('res shrink shape: ', x.shape)
 
         return x
 
@@ -85,14 +88,7 @@ class ResidualConv1d(nn.Module):
                                 stride=1,
                                 padding=bottleneck_padding))
 
-        shape = conv_output_shape(input_dim=shape[1],
-                                  kernel_size=1,
-                                  stride=1,
-                                  padding=bottleneck_padding,
-                                  num_filters=self.input_shape[0],
-                                  dim=1)
-
-        return nn.Sequential(*layers), shape
+        return nn.Sequential(*layers)
 
     def _shrink_layer(self):
 
@@ -100,9 +96,9 @@ class ResidualConv1d(nn.Module):
         #       without activation. The input to this layer is x + residual.
         #       Consider if it should be wrapped activation(x + residual).
 
-        padding = same_padding(self.shape[1], self.kfac, self.kfac)
+        padding = same_padding(self.input_shape[1], self.kfac, self.kfac)
 
-        conv = nn.Conv1d(in_channels=self.shape[0],
+        conv = nn.Conv1d(in_channels=self.input_shape[0],
                          out_channels=self.filters,
                          kernel_size=self.kfac,
                          stride=self.kfac,
@@ -110,7 +106,7 @@ class ResidualConv1d(nn.Module):
 
         act = select_activation(self.activation)
 
-        shape = conv_output_shape(input_dim=self.shape[1],
+        shape = conv_output_shape(input_dim=self.input_shape[1],
                                   kernel_size=self.kfac,
                                   stride=self.kfac,
                                   padding=padding,
