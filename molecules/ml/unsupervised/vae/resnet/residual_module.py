@@ -1,5 +1,6 @@
 from torch import nn
 from molecules.ml.unsupervised.vae.utils import (same_padding,
+                                                 conv_output_shape,
                                                  select_activation)
 
 class ResidualConv1d(nn.Module):
@@ -16,19 +17,20 @@ class ResidualConv1d(nn.Module):
         # Depth of residual module
         self.depth = depth
 
-        self.residual = self._residual_layers()
+        self.residual, self.shape = self._residual_layers()
 
         if self.shrink:
-            self.shrink_layer = self._shrink_layer()
+            self.shrink_layer, self.shape = self._shrink_layer()
 
     def forward(self, x):
         x += self.residual(x)
 
         if self.shrink:
-            return self.shrink_layer(x)
+            x = self.shrink_layer(x)
+
+        print('res shape: ', x.shape)
 
         return x
-
 
     def _residual_layers(self):
         # TODO: check out SyncBatchNorm
@@ -48,7 +50,7 @@ class ResidualConv1d(nn.Module):
                                 stride=1,
                                 padding=bottleneck_padding))
 
-        padding = same_padding(self.input_shape[1], self.kernel_size, stride=1)
+        shape = (self.filters, self.input_shape[1])
 
         # Now add residual layers
         for _ in range(self.depth):
@@ -56,11 +58,20 @@ class ResidualConv1d(nn.Module):
 
             layers.append(select_activation(self.activation))
 
-            layers.append(nn.Conv1d(in_channels=self.filters,
+            padding = same_padding(shape[1], self.kernel_size, stride=1)
+
+            layers.append(nn.Conv1d(in_channels=shape[0],
                                     out_channels=self.filters,
                                     kernel_size=self.kernel_size,
                                     stride=1,
                                     padding=padding))
+
+            shape = conv_output_shape(input_dim=shape[1],
+                                      kernel_size=self.kernel_size,
+                                      stride=1,
+                                      padding=padding,
+                                      num_filters=self.filters,
+                                      dim=1)
 
         # Project back up (undo bottleneck)
         layers.append(nn.BatchNorm1d(num_features=self.filters))
@@ -74,7 +85,14 @@ class ResidualConv1d(nn.Module):
                                 stride=1,
                                 padding=bottleneck_padding))
 
-        return nn.Sequential(*layers)
+        shape = conv_output_shape(input_dim=shape[1],
+                                  kernel_size=1,
+                                  stride=1,
+                                  padding=bottleneck_padding,
+                                  num_filters=self.input_shape[0],
+                                  dim=1)
+
+        return nn.Sequential(*layers), shape
 
     def _shrink_layer(self):
 
@@ -82,12 +100,23 @@ class ResidualConv1d(nn.Module):
         #       without activation. The input to this layer is x + residual.
         #       Consider if it should be wrapped activation(x + residual).
 
-        padding = same_padding(self.input_shape[1], self.kfac, self.kfac)
+        padding = same_padding(self.shape[1], self.kfac, self.kfac)
 
-        conv = nn.Conv1d(in_channels=self.input_shape[0],
+        conv = nn.Conv1d(in_channels=self.shape[0],
                          out_channels=self.filters,
                          kernel_size=self.kfac,
                          stride=self.kfac,
                          padding=padding)
 
-        return nn.Sequential(conv, select_activation(self.activation))
+        act = select_activation(self.activation)
+
+        shape = conv_output_shape(input_dim=self.shape[1],
+                                  kernel_size=self.kfac,
+                                  stride=self.kfac,
+                                  padding=padding,
+                                  num_filters=self.filters,
+                                  dim=1)
+
+        print('shrink_layer: ', shape, self.filters)
+
+        return nn.Sequential(conv, act), shape
