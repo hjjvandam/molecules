@@ -50,7 +50,7 @@ def conv_output_shape(input_dim, kernel_size, stride, padding,
 
     Returns
     -------
-    (N, N, channels) tuple
+    (channels, N, N) tuple
 
     """
     output_dim = conv_output_dim(input_dim, kernel_size, stride,

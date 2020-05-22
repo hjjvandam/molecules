@@ -26,12 +26,12 @@ class ResidualConv1d(nn.Module):
     def forward(self, x):
         x += self.residual(x)
 
-        print('x after res: ', x.shape)
+        print('\nResidualConv1d::forward after residual x.shape:', tuple(x.shape))
 
         if self.shrink:
             x = self.shrink_layer(x)
 
-        print('res shrink shape: ', x.shape)
+        print('ResidualConv1d::forward after shrink_layer x.shape:', tuple(x.shape), '\n')
 
         return x
 
@@ -113,6 +113,12 @@ class ResidualConv1d(nn.Module):
                                   num_filters=self.filters,
                                   dim=1)
 
-        print('shrink_layer: ', shape, self.filters)
+        print('\nResidualConv1d::_shrink_layer\n',
+              f'\t input_shape: {self.input_shape}\n',
+              f'\t out_shape: {shape}\n',
+              f'\t filters: {self.filters}\n',
+              f'\t kernel_size: {self.kfac}\n',
+              f'\t stride: {self.kfac}\n',
+              f'\t padding: {padding}\n\n')
 
         return nn.Sequential(conv, act), shape

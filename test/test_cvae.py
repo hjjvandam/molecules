@@ -99,6 +99,8 @@ class TestVAE:
         assert same_padding(input_dim, 5, stride=2) == 1 # Optimal fs-peptide
         assert same_padding(75, 2, 2) == 1 # Resnet Autoencoder
 
+        assert same_padding(5, 2, 2) == 1
+
 
     def test_conv_output_shape(self):
         from molecules.ml.unsupervised.vae.utils import conv_output_shape
@@ -171,8 +173,8 @@ class TestVAE:
     def test_resnet_vae(self):
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
-        input_shape = (1, 22, 22)
-        hparams = ResnetVAEHyperparams(input_shape)
+        input_shape = (1200, 1200)
+        hparams = ResnetVAEHyperparams(input_shape, latent_dim=150)
 
         vae = VAE(input_shape, hparams, self.optimizer_hparams)
 
