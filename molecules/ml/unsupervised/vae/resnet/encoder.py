@@ -42,15 +42,15 @@ class ResnetEncoder(nn.Module):
         #x = x.view(-1, self.input_shape[1], self.input_shape[1])
 
 
-        print('ResnetEncoder::forward before encoder x.shape: ', tuple(x.shape))
+        #print('ResnetEncoder::forward before encoder x.shape: ', tuple(x.shape))
         x = self.encoder(x)
-        print('ResnetEncoder::forward after encoder x.shape: ', tuple(x.shape))
+        #print('ResnetEncoder::forward after encoder x.shape: ', tuple(x.shape))
         return self.mu(x), self.logvar(x)
 
     def encode(self, x):
         self.eval()
         with torch.no_grad():
-            return self.forward(x)[0]
+            return self(x)[0]
 
     def save_weights(self, path):
         torch.save(self.state_dict(), path)

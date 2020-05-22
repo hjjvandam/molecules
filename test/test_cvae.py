@@ -27,7 +27,7 @@ class TestVAE:
 
     # TODO: find elegant way to get the input_shape for the model initialization
     class ContactMap(Dataset):
-        def __init__(self, path, split_ptc=0.8, split='train'):
+        def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
             with open_h5(path) as input_file:
                 # Access contact matrix data from h5 file
                 data = np.array(input_file['contact_maps'])
@@ -45,7 +45,17 @@ class TestVAE:
             # TODO: in future contact map Dataset, pass in device to precompute
             #       the operation
 
-            self.data = torch.from_numpy(self.data.reshape(-1, 1, 22, 22)).to(torch.float32)
+
+            # TODO: this reshape code may not be the best solution. revisit
+            num_residues = self.data.shape[2]
+            assert num_residues == 22
+
+            if squeeze:
+                shape = (-1, num_residues, num_residues)
+            else:
+                shape = (-1, 1, num_residues, num_residues)
+
+            self.data = torch.from_numpy(self.data.reshape(shape)).to(torch.float32)
 
         def __len__(self):
             return len(self.data)
@@ -116,8 +126,6 @@ class TestVAE:
         assert conv_output_shape(input_dim=22, kernel_size=3, stride=2, padding=1,
                                  num_filters=64) == (64, 11, 11)
 
-
-
     def _test_pytorch_cvae_real_data(self):
 
         path = './test/cvae_input.h5'
@@ -144,7 +152,6 @@ class TestVAE:
 
         recons = vae.decode(embeddings)
 
-
     def _test_save_load_weights(self):
         vae1 = VAE(self.input_shape, self.hparams, self.optimizer_hparams)
         vae1.train(self.train_loader, self.test_loader, self.epochs)
@@ -170,7 +177,7 @@ class TestVAE:
                                          encoder.encoder_dim)
         decoder.load_weights(self.dec_path)
 
-    def test_resnet_vae(self):
+    def _test_resnet_vae(self):
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
         input_shape = (1200, 1200)
@@ -181,6 +188,25 @@ class TestVAE:
         print(vae)
         summary(vae.model, input_shape)
 
+    def test_resnet_vae_training(self):
+        from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
+
+        path = './test/cvae_input.h5'
+
+        train_loader = DataLoader(TestVAE.ContactMap(path, split='train', squeeze=True),
+                                  batch_size=self.batch_size, shuffle=True)
+        test_loader = DataLoader(TestVAE.ContactMap(path, split='valid', squeeze=True),
+                                 batch_size=self.batch_size, shuffle=True)
+
+        input_shape = (22, 22)
+        hparams = ResnetVAEHyperparams(input_shape, latent_dim=11)
+
+        vae = VAE(input_shape, hparams, self.optimizer_hparams)
+
+        print(vae)
+        summary(vae.model, input_shape)
+
+        vae.train(train_loader, test_loader, self.epochs)
 
     def notest_residual_module(self):
         from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
@@ -209,8 +235,6 @@ class TestVAE:
             # Flatten contact matrix
             x = x.view(-1, *input_shape)
             out = res(x)
-
-
 
     @classmethod
     def teardown_class(self):

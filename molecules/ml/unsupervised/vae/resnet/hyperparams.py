@@ -4,6 +4,7 @@ from math import ceil, log, sqrt
 class ResnetVAEHyperparams(Hyperparams):
     def __init__(self, input_shape, enc_kernel_size=5,
                  latent_dim=150, activation='ReLU',
+                 output_activation='Sigmoid',
                  dec_reslayers=3, dec_kernel_size=5,
                  dec_filters=1200, dec_filter_growth_rate=1.0):
 
@@ -26,6 +27,7 @@ class ResnetVAEHyperparams(Hyperparams):
         # User defined hyperparams
         self.enc_kernel_size = enc_kernel_size
         self.activation = activation
+        self.output_activation = output_activation
         self.latent_dim = latent_dim
         self.dec_reslayers = dec_reslayers
         self.dec_kernel_size = dec_kernel_size

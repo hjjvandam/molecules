@@ -29,7 +29,7 @@ class ResnetDecoder(nn.Module):
     def decode(self, embedding):
         self.eval()
         with torch.no_grad():
-            return self.forward(embedding)
+            return self(embedding)
 
     def save_weights(self, path):
         torch.save(self.state_dict(), path)
@@ -77,6 +77,8 @@ class ResnetDecoder(nn.Module):
                                 kernel_size=self.hparams.dec_kernel_size,
                                 stride=1,
                                 padding=padding))
+
+        layers.append(select_activation(self.hparams.output_activation))
 
 
         return nn.Sequential(*layers)

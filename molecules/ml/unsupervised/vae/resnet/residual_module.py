@@ -20,18 +20,23 @@ class ResidualConv1d(nn.Module):
 
         self.residual = self._residual_layers()
 
+        self.activation_fnc = select_activation(self.activation)
+
         if self.shrink:
             self.shrink_layer, self.output_shape = self._shrink_layer()
 
     def forward(self, x):
-        x += self.residual(x)
 
-        print('\nResidualConv1d::forward after residual x.shape:', tuple(x.shape))
+        # TODO: should we use activation here?
+
+        x = self.activation_fnc(x + self.residual(x))
+
+        #print('\nResidualConv1d::forward after residual x.shape:', tuple(x.shape))
 
         if self.shrink:
             x = self.shrink_layer(x)
 
-        print('ResidualConv1d::forward after shrink_layer x.shape:', tuple(x.shape), '\n')
+        #print('ResidualConv1d::forward after shrink_layer x.shape:', tuple(x.shape), '\n')
 
         return x
 

@@ -64,7 +64,7 @@ class SymmetricDecoderConv2d(nn.Module):
     def decode(self, embedding):
         self.eval()
         with torch.no_grad():
-            return self.forward(embedding)
+            return self(embedding)
 
     def save_weights(self, path):
         torch.save(self.state_dict(), path)
