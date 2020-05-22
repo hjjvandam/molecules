@@ -12,9 +12,9 @@ class ResnetVAEHyperparams(Hyperparams):
         # Below are architecture-specific derived parameters which
         # are not user-settable.
 
-        # input_shape is of dimension (1, N*N) where N is
+        # input_shape is of dimension (N, N) where N is
         # the number of residues
-        num_residues = input_shape[1] #int(sqrt(input_shape[1]))
+        num_residues = input_shape[0]
 
         # The number of starting filters we use for the first
         # Conv1D.  Subsequent number of filters are computed

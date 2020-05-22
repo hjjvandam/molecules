@@ -22,8 +22,7 @@ class ResnetEncoder(nn.Module):
         # number of residues, treat 1st dim of contact matrix as
         # channel
 
-        #num_residues = int(sqrt(input_shape[1]))
-        self.input_shape = input_shape #(input_shape[0], num_residues, num_residues)
+        self.input_shape = input_shape
         self.hparams = hparams
 
         self.encoder, output_shape = self._encoder_layers()
@@ -75,6 +74,8 @@ class ResnetEncoder(nn.Module):
         res_input_shape = conv_output_shape(self.input_shape[1], kernel_size=5,
                                             stride=1, padding=padding,
                                             num_filters=self.hparams.enc_filters, dim=1)
+
+        print('res_input_shape: ',res_input_shape)
 
         # Add residual layers
         for lidx in range(self.hparams.enc_reslayers):
