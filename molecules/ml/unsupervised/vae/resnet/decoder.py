@@ -16,7 +16,7 @@ class ResnetDecoder(nn.Module):
         self.output_shape = output_shape
         self.hparams = hparams
 
-        self.decoder = nn.Sequential()
+        self.decoder = self._decoder_layers()
 
         self.init_weights()
 
@@ -36,3 +36,44 @@ class ResnetDecoder(nn.Module):
 
     def load_weights(self, path):
         self.load_state_dict(torch.load(path))
+
+
+    def _decoder_layers(self):
+
+        layers = []
+
+        res_input_shape = (1, self.hparams.latent_dim)
+
+        for lidx in range(self.hparams.dec_reslayers):
+
+            filters = self.hparams.dec_filters * self.hparams.dec_filter_growth_rate**lidx
+            filters = round(filters)
+
+            if self.hparams.shrink_rounds:
+                self.hparams.shrink_rounds -= 1
+
+            layers.append(ResidualConv1d(res_input_shape,
+                                         filters,
+                                         self.hparams.dec_kernel_size,
+                                         self.hparams.activation,
+                                         shrink=self.hparams.shrink_rounds))
+
+            res_input_shape = layers[-1].output_shape
+
+            if self.hparams.upsample_rounds:
+
+                # TODO: add upsampling1d layer
+                self.hparams.upsample_rounds -= 1
+
+        padding = same_padding(res_input_shape[1],
+                               self.hparams.dec_kernel_size,
+                               stride=1)
+
+        layers.append(nn.Conv1d(in_channels=res_input_shape[0],
+                                out_channels=self.output_shape[1], # should be num_residues
+                                kernel_size=self.hparams.dec_kernel_size,
+                                stride=1,
+                                padding=padding))
+
+
+        return nn.Sequential(*layers)

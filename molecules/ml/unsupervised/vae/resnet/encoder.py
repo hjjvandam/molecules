@@ -86,7 +86,7 @@ class ResnetEncoder(nn.Module):
             #print('res_input_shape: ',res_input_shape)
             layers.append(ResidualConv1d(res_input_shape,
                                          filters,
-                                         self.hparams.kernel_size,
+                                         self.hparams.enc_kernel_size,
                                          self.hparams.activation,
                                          shrink=True))
 
