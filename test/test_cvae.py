@@ -188,7 +188,7 @@ class TestVAE:
         print(vae)
         summary(vae.model, input_shape)
 
-    def test_resnet_vae_training(self):
+    def _test_resnet_vae_training(self):
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
         path = './test/cvae_input.h5'
@@ -208,7 +208,7 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def notest_residual_module(self):
+    def _test_residual_module(self):
         from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
         input_shape, filters, kernel_size, activation = (1, 22*22), 10, 3, 'ReLU'
