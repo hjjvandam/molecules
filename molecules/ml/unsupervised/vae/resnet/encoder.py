@@ -86,8 +86,8 @@ class ResnetEncoder(nn.Module):
 
             res_input_shape = layers[-1].output_shape
 
-        return nn.Sequential(*layers, nn.Flatten()), res_input_shape
+        return nn.Sequential(*layers, nn.Flatten()), prod(res_input_shape)
 
     def _embedding_layer(self, output_shape):
-        return nn.Linear(in_features=prod(output_shape),
+        return nn.Linear(in_features=output_shape,
                          out_features=self.hparams.latent_dim)
