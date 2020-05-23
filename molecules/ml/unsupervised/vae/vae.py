@@ -4,7 +4,7 @@ from torch.nn import functional as F
 from math import isclose
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
-
+from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
 class VAEModel(nn.Module):
     def __init__(self, input_shape, hparams):
@@ -15,6 +15,12 @@ class VAEModel(nn.Module):
                                                                  SymmetricDecoderConv2d)
             self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
             self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.encoder_dim)
+
+        elif isinstance(hparams, ResnetVAEHyperparams):
+            from molecules.ml.unsupervised.vae.resnet import ResnetEncoder, ResnetDecoder
+            self.encoder = ResnetEncoder(input_shape, hparams)
+            self.decoder = ResnetDecoder(input_shape, hparams)
+
         else:
             raise TypeError(f'Invalid hparams type: {type(hparams)}.')
 
