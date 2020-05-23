@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from math import isclose
 from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
-                                                 select_activation, init_weights)
+                                                 get_activation, init_weights)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 def reversedzip(*iterables):
@@ -108,7 +108,7 @@ class SymmetricDecoderConv2d(nn.Module):
             # TODO: revist output_padding, see github issue.
             #       This code may not generalize to other examples. Needs testing.
 
-            layers.append(select_activation(self.hparams.activation))
+            layers.append(get_activation(self.hparams.activation))
 
             # Subsequent layers in_channels is the current layers number of filters
             # Except for the last layer which is 1 (or output_shape channels)
@@ -118,7 +118,7 @@ class SymmetricDecoderConv2d(nn.Module):
             input_dim = conv_output_dim(input_dim, kernel, stride, padding, transpose=True)
 
         # Overwrite output activation
-        layers[-1] = select_activation(self.hparams.output_activation)
+        layers[-1] = get_activation(self.hparams.output_activation)
 
         # Restore invariant state
         self.hparams.filters[0] = tmp
@@ -145,7 +145,7 @@ class SymmetricDecoderConv2d(nn.Module):
             layers.append(nn.Linear(in_features=in_features,
                                     out_features=width))
 
-            layers.append(select_activation(self.hparams.activation))
+            layers.append(get_activation(self.hparams.activation))
 
             if not isclose(dropout, 0):
                 layers.append(nn.Dropout(p=dropout))
@@ -157,7 +157,7 @@ class SymmetricDecoderConv2d(nn.Module):
         # the first convolutional decoder layer
         layers.append(nn.Linear(in_features=self.hparams.affine_widths[0],
                                    out_features=self.hparams.filters[-1] * self.encoder_dim**2))
-        layers.append(select_activation(self.hparams.activation))
+        layers.append(get_activation(self.hparams.activation))
 
 
         return layers

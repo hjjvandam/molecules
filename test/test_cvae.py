@@ -177,7 +177,7 @@ class TestVAE:
                                          encoder.encoder_dim)
         decoder.load_weights(self.dec_path)
 
-    def _test_resnet_vae(self):
+    def test_resnet_vae(self):
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
         input_shape = (1200, 1200)

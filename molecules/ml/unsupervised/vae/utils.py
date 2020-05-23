@@ -96,7 +96,7 @@ from torch import nn
 #       which handles layes and can return pytorch layer
 #       types and activations. OptimizerHyperParams can
 #       return different optimizers.
-def select_activation(activation):
+def get_activation(activation):
     """
     Parameters
     ----------

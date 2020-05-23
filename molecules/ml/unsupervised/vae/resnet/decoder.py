@@ -1,7 +1,7 @@
 import torch
 from torch import nn
 from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
-                                                 select_activation, init_weights)
+                                                 get_activation, init_weights)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
@@ -44,8 +44,6 @@ class ResnetDecoder(nn.Module):
 
         res_input_shape = (1, self.hparams.latent_dim)
 
-        print(f'ResnetDecoder::_decoder_layers res_input_shape: {res_input_shape}')
-
         for lidx in range(self.hparams.dec_reslayers):
 
             filters = self.hparams.dec_filters * self.hparams.dec_filter_growth_rate**lidx
@@ -78,7 +76,7 @@ class ResnetDecoder(nn.Module):
                                 stride=1,
                                 padding=padding))
 
-        layers.append(select_activation(self.hparams.output_activation))
+        layers.append(get_activation(self.hparams.output_activation))
 
 
         return nn.Sequential(*layers)

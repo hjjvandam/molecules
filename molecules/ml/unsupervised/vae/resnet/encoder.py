@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from math import sqrt
 from molecules.ml.unsupervised.vae.utils import (conv_output_dim, conv_output_shape,
-                                                 same_padding, select_activation,
+                                                 same_padding, get_activation,
                                                  init_weights)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
@@ -38,13 +38,7 @@ class ResnetEncoder(nn.Module):
         init_weights(self.logvar)
 
     def forward(self, x):
-        # TODO: reshape in dataloader during preprocessing. Add flatten option to dataset class
-        #x = x.view(-1, self.input_shape[1], self.input_shape[1])
-
-
-        #print('ResnetEncoder::forward before encoder x.shape: ', tuple(x.shape))
         x = self.encoder(x)
-        #print('ResnetEncoder::forward after encoder x.shape: ', tuple(x.shape))
         return self.mu(x), self.logvar(x)
 
     def encode(self, x):
@@ -69,13 +63,14 @@ class ResnetEncoder(nn.Module):
                                 stride=1,
                                 padding=padding))
 
-        layers.append(select_activation(self.hparams.activation))
+        layers.append(get_activation(self.hparams.activation))
 
-        res_input_shape = conv_output_shape(self.input_shape[1], kernel_size=5,
-                                            stride=1, padding=padding,
-                                            num_filters=self.hparams.enc_filters, dim=1)
-
-        print('res_input_shape: ',res_input_shape)
+        res_input_shape = conv_output_shape(self.input_shape[1],
+                                            kernel_size=5,
+                                            stride=1,
+                                            padding=padding,
+                                            num_filters=self.hparams.enc_filters,
+                                            dim=1)
 
         # Add residual layers
         for lidx in range(self.hparams.enc_reslayers):
@@ -83,7 +78,6 @@ class ResnetEncoder(nn.Module):
             filters = self.hparams.enc_filters * self.hparams.enc_filter_growth_fac**lidx
             filters = round(filters) # To nearest int
 
-            #print('res_input_shape: ',res_input_shape)
             layers.append(ResidualConv1d(res_input_shape,
                                          filters,
                                          self.hparams.enc_kernel_size,

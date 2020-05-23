@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from math import isclose
 from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
-                                                 select_activation, init_weights)
+                                                 get_activation, init_weights)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 class SymmetricEncoderConv2d(nn.Module):
@@ -73,7 +73,7 @@ class SymmetricEncoderConv2d(nn.Module):
                                     stride=stride,
                                     padding=padding))
 
-            layers.append(select_activation(self.hparams.activation))
+            layers.append(get_activation(self.hparams.activation))
 
             # Subsequent layers in_channels is the current layers number of filters
             in_channels = filter_
@@ -103,7 +103,7 @@ class SymmetricEncoderConv2d(nn.Module):
             layers.append(nn.Linear(in_features=in_features,
                                     out_features=width))
 
-            layers.append(select_activation(self.hparams.activation))
+            layers.append(get_activation(self.hparams.activation))
 
             if not isclose(dropout, 0):
                 layers.append(nn.Dropout(p=dropout))
