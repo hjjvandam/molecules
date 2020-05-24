@@ -80,6 +80,7 @@ class VAE:
     def __init__(self, input_shape,
                  hparams=SymmetricVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams(),
+                 checkpoint=None,
                  loss=None,
                  cuda=True):
 
@@ -87,6 +88,7 @@ class VAE:
         optimizer_hparams.validate()
 
         self.input_shape = input_shape
+        self.checkpoint = checkpoint
 
         # TODO: consider passing in device (this will allow the ability to set the train/test
         #       data to cuda as well, since device will be a variable in the user space)
@@ -103,14 +105,19 @@ class VAE:
     def __repr__(self):
         return str(self.model)
 
-    def train(self, train_loader, test_loader, epochs):
+    def train(self, train_loader, test_loader, epochs=1,
+              checkpoint_path=None):
+
+        if checkpoint_path is not None:
+            # TODO: load checkpoint set epochs
+            pass
+
+
         for epoch in range(1, epochs + 1):
             self._train(train_loader, epoch)
             self._test(test_loader)
 
-    def _train(self, train_loader, epoch,
-               checkpoint=None, callbacks=None,
-               log_interval=2):
+    def _train(self, train_loader, epoch, log_interval=2):
         """
         Effects
         -------
@@ -159,8 +166,14 @@ class VAE:
                     100. * batch_idx / len(train_loader),
                     loss.item() / len(data)))
 
+            if self.checkpoint and self.checkpoint.per_batch(batch_idx):
+                self._save_checkpoint(epoch, train_loss)
+
         print('====> Epoch: {} Average loss: {:.4f}'.format(
               epoch, train_loss / len(train_loader.dataset)))
+
+        if self.checkpoint and self.checkpoint.per_epoch():
+            self._save_checkpoint(epoch, train_loss)
 
 
     def _test(self, test_loader):
@@ -174,6 +187,23 @@ class VAE:
 
         test_loss /= len(test_loader.dataset)
         print('====> Test set loss: {:.4f}'.format(test_loss))
+
+    def _save_checkpoint(self, epoch, loss):
+        """
+        Saves optimizer state, encoder weights, decoder weights.
+        """
+
+        self.checkpoint.save({
+            'encoder_state_dict': self.model.encoder.state_dict(),
+            'decoder_state_dict': self.model.decoder.state_dict(),
+            'optimizer_state_dict': self.optimizer.state_dict(),
+            'epoch': epoch,
+            'loss': loss
+            })
+
+    def _load_checkpoint(self, path):
+        # TODO: implement resume training from checkpoint
+        pass
 
     def encode(self, x):
         """
