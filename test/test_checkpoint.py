@@ -1,4 +1,5 @@
 import os
+import glob
 import shutil
 import pytest
 import numpy as np
@@ -30,16 +31,17 @@ class TestVAE:
         self.batch_size = 50
         self.input_shape = (22, 22) # Use FSPeptide sized contact maps
 
+
+        self.train_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
+                                  batch_size=self.batch_size, shuffle=True)
+        self.test_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
+                                 batch_size=self.batch_size, shuffle=True)
+
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
         self.checkpoint_dir = os.path.join('.', 'test', 'test_checkpoint')
-   
-    def test_checkpoint_per_epoch(self):
 
-        train_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
-                                  batch_size=self.batch_size, shuffle=True)
-        test_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
-                                 batch_size=self.batch_size, shuffle=True)
+        # Save checkpoint to test loading
 
         checkpoint = Checkpoint(directory=self.checkpoint_dir,
                                 interval=0) # Once per epoch
@@ -49,14 +51,25 @@ class TestVAE:
         vae = VAE(self.input_shape, hparams, self.optimizer_hparams,
                   checkpoint=checkpoint)
 
-        vae.train(train_loader, test_loader, self.epochs)
+        vae.train(self.train_loader, self.test_loader, epochs=2)
+
+        # Get checkpoint after 2nd epoch
+        file = os.path.join(self.checkpoint_dir, '*')
+        self.checkpoint_file = sorted(glob.glob(file))[-1]
+
+    def test_checkpoint_per_epoch(self):
+
+        checkpoint = Checkpoint(directory=self.checkpoint_dir,
+                                interval=0) # Once per epoch
+
+        hparams = ResnetVAEHyperparams(self.input_shape, latent_dim=11)
+
+        vae = VAE(self.input_shape, hparams, self.optimizer_hparams,
+                  checkpoint=checkpoint)
+
+        vae.train(self.train_loader, self.test_loader, self.epochs)
 
     def test_checkpoint_per_batch(self):
-
-        train_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
-                                  batch_size=self.batch_size, shuffle=True)
-        test_loader = DataLoader(TestVAE.DummyContactMap(self.input_shape),
-                                 batch_size=self.batch_size, shuffle=True)
 
         hparams = ResnetVAEHyperparams(self.input_shape, latent_dim=11)
 
@@ -66,7 +79,20 @@ class TestVAE:
         vae = VAE(self.input_shape, hparams, self.optimizer_hparams,
                   checkpoint=checkpoint)
 
-        vae.train(train_loader, test_loader, self.epochs)
+        vae.train(self.train_loader, self.test_loader, self.epochs)
+
+    def test_load_checkpoint(self):
+
+        hparams = ResnetVAEHyperparams(self.input_shape, latent_dim=11)
+
+        checkpoint = Checkpoint(directory=self.checkpoint_dir)
+
+        vae = VAE(self.input_shape, hparams, self.optimizer_hparams,
+                  checkpoint=checkpoint)
+
+        # Train for 2 more additional epochs i.e. epochs=4
+        vae.train(self.train_loader, self.test_loader, epochs=4,
+                  checkpoint=self.checkpoint_file)
 
     @classmethod
     def teardown_class(self):
