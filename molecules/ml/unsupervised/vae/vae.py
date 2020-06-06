@@ -11,6 +11,7 @@ class VAEModel(nn.Module):
     def __init__(self, input_shape, hparams):
         super(VAEModel, self).__init__()
 
+        # Select encoder/decoder models by the type of the hparams
         if isinstance(hparams, SymmetricVAEHyperparams):
             from .symmetric import SymmetricEncoderConv2d, SymmetricDecoderConv2d
             self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
@@ -81,7 +82,6 @@ class VAE:
     def __init__(self, input_shape,
                  hparams=SymmetricVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams(),
-                 checkpoint=None,
                  loss=None,
                  cuda=True,
                  verbose=True):
@@ -90,7 +90,6 @@ class VAE:
         optimizer_hparams.validate()
 
         self.input_shape = input_shape
-        self.checkpoint = checkpoint
         self.verbose = verbose
 
         # TODO: consider passing in device (this will allow the ability to set the train/test
@@ -198,9 +197,6 @@ class VAE:
             train_loss += loss.item()
             self.optimizer.step()
 
-            if self.checkpoint and self.checkpoint.per_batch(batch_idx):
-                self._save_checkpoint(epoch)
-
             if callbacks:
                 logs['train_loss'] = loss.item() / len(data)
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
@@ -214,16 +210,14 @@ class VAE:
                       100. * batch_idx / len(train_loader),
                       loss.item() / len(data)))
 
-        if self.checkpoint and self.checkpoint.per_epoch():
-            self._save_checkpoint(epoch)
+        train_loss /= len(train_loader.dataset)
 
         if callbacks:
-                logs['train_loss'] = train_loss / len(train_loader.dataset)
+                logs['train_loss'] = train_loss
                 logs['global_step'] = epoch
 
         if self.verbose:
-            print('====> Epoch: {} Average loss: {:.4f}'.format(
-                  epoch, train_loss / len(train_loader.dataset)))
+            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
 
     def _validate(self, valid_loader, callbacks, logs):
         """
@@ -257,24 +251,6 @@ class VAE:
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))
 
-    def _save_checkpoint(self, epoch):
-        """
-        Saves optimizer state and encoder/decoder weights.
-
-        Parameters
-        ----------
-        epoch : int
-            Current epoch of training, used to resume training
-            after loading checkpoint.
-        """
-
-        self.checkpoint.save({
-            'encoder_state_dict': self.model.encoder.state_dict(),
-            'decoder_state_dict': self.model.decoder.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'epoch': epoch,
-            }, epoch)
-
     def _load_checkpoint(self, path):
         """
         Loads checkpoint file containing optimizer state and
@@ -290,7 +266,7 @@ class VAE:
         Epoch of training corresponding to the saved checkpoint.
         """
 
-        cp = self.checkpoint.load(path)
+        cp = torch.load(path)
         self.model.encoder.load_state_dict(cp['encoder_state_dict'])
         self.model.decoder.load_state_dict(cp['decoder_state_dict'])
         self.optimizer.load_state_dict(cp['optimizer_state_dict'])

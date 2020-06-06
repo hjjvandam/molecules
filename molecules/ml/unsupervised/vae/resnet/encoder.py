@@ -1,6 +1,5 @@
 import torch
 from torch import nn
-from math import sqrt
 from molecules.ml.unsupervised.vae.utils import (conv_output_dim, conv_output_shape,
                                                  same_padding, get_activation,
                                                  init_weights)
