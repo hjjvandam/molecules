@@ -37,7 +37,6 @@ class ResnetDecoder(nn.Module):
     def load_weights(self, path):
         self.load_state_dict(torch.load(path))
 
-
     def _decoder_layers(self):
 
         layers = []

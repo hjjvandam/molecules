@@ -5,12 +5,15 @@ from .resnet import ResnetVAEHyperparams
 from .symmetric import SymmetricVAEHyperparams
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 
+__all__ = ['VAE']
+
 class VAEModel(nn.Module):
     def __init__(self, input_shape, hparams):
         super(VAEModel, self).__init__()
 
+        # Select encoder/decoder models by the type of the hparams
         if isinstance(hparams, SymmetricVAEHyperparams):
-            from .symmetric import (SymmetricEncoderConv2d, SymmetricDecoderConv2d)
+            from .symmetric import SymmetricEncoderConv2d, SymmetricDecoderConv2d
             self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
             self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.encoder_dim)
 
@@ -73,20 +76,82 @@ def vae_loss(recon_x, x, mu, logvar):
     return BCE + KLD
 
 
+# TODO: set weight initialization hparams
 class VAE:
-    # TODO: set weight initialization hparams
+    """
+    Provides high level interface for training, testing and saving VAE
+    models. Takes arbitrary encoder/decoder models specified by the choice
+    of hyperparameters. Assumes the shape of the data is square.
+
+    Attributes
+    ----------
+    input_shape : tuple
+        shape of incomming data.
+
+    model : torch.nn.Module (VAEModel)
+        Underlying Pytorch model with encoder/decoder attributes.
+
+    optimizer : torch.optim.Optimizer
+        Pytorch optimizer used to train model.
+
+    loss_func : function
+        Loss function used to train model.
+
+    Methods
+    -------
+    train(train_loader, valid_loader, epochs=1, checkpoint='', callbacks=[])
+        Train model
+
+    encode(x)
+        Embed data into the latent space.
+
+    decode(embedding)
+        Generate matrices from embeddings.
+
+    save_weights(enc_path, dec_path)
+        Save encoder/decoder weights.
+
+    load_weights(enc_path, dec_path)
+        Load saved encoder/decoder weights.
+    """
+
     def __init__(self, input_shape,
                  hparams=SymmetricVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams(),
-                 checkpoint=None,
                  loss=None,
-                 cuda=True):
+                 cuda=True,
+                 verbose=True):
+        """
+        Parameters
+        ----------
+        input_shape : tuple
+            shape of incomming data.
+            Note: For use with SymmetricVAE use (1, num_residues, num_residues)
+                  For use with ResnetVAE use (num_residues, num_residues)
+
+        hparams : molecules.ml.hyperparams.Hyperparams
+            Defines the model architecture hyperparameters. Currently implemented
+            are SymmetricVAEHyperparams and ResnetVAEHyperparams.
+
+        optimizer_hparams : molecules.ml.hyperparams.OptimizerHyperparams
+            Defines the optimizer type and corresponding hyperparameters.
+
+        loss: : function, optional
+            Defines an optional loss function with inputs (recon_x, x, mu, logvar)
+            and ouput torch loss.
+
+        cuda : bool
+            True specifies to use cuda if it is available. False uses cpu.
+
+        verbose : bool
+            True prints training and validation loss to stdout.
+        """
 
         hparams.validate()
         optimizer_hparams.validate()
 
         self.input_shape = input_shape
-        self.checkpoint = checkpoint
+        self.verbose = verbose
 
         # TODO: consider passing in device (this will allow the ability to set the train/test
         #       data to cuda as well, since device will be a variable in the user space)
@@ -98,12 +163,13 @@ class VAE:
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
         self.optimizer = get_optimizer(self.model, optimizer_hparams)
 
-        self.loss = vae_loss if loss is None else loss
+        self.loss_fnc = vae_loss if loss is None else loss
 
     def __repr__(self):
         return str(self.model)
 
-    def train(self, train_loader, valid_loader, epochs=1, checkpoint=''):
+    def train(self, train_loader, valid_loader, epochs=1, checkpoint='',
+              callbacks=[]):
         """
         Train model
 
@@ -121,18 +187,40 @@ class VAE:
         checkpoint : str
             Path to checkpoint file to load and resume training
             from the epoch when the checkpoint was saved.
+
+        callbacks : list
+            Contains molecules.utils.callback.Callback objects
+            which are called during training.
         """
+
+        if callbacks:
+            logs = {'model': self.model, 'optimizer': self.optimizer}
+        else:
+            logs = {}
 
         start_epoch = 1
 
         if checkpoint:
             start_epoch += self._load_checkpoint(checkpoint)
 
-        for epoch in range(start_epoch, epochs + 1):
-            self._train(train_loader, epoch)
-            self._validate(valid_loader)
+        for callback in callbacks:
+            callback.on_train_begin(logs)
 
-    def _train(self, train_loader, epoch, log_interval=2):
+        for epoch in range(start_epoch, epochs + 1):
+
+            for callback in callbacks:
+                callback.on_epoch_begin(epoch, logs)
+
+            self._train(train_loader, epoch, callbacks, logs)
+            self._validate(valid_loader, callbacks, logs)
+
+            for callback in callbacks:
+                callback.on_epoch_end(epoch, logs)
+
+        for callback in callbacks:
+            callback.on_train_end(logs)
+
+    def _train(self, train_loader, epoch, callbacks, logs):
         """
         Train for 1 epoch
 
@@ -143,38 +231,56 @@ class VAE:
 
         epoch : int
             Current epoch of training
+
+        callbacks : list
+            Contains molecules.utils.callback.Callback objects
+            which are called during training.
+
+        logs : dict
+            Filled with data for callbacks
         """
 
         self.model.train()
-        train_loss = 0
+        train_loss = 0.
         for batch_idx, data in enumerate(train_loader):
+
+            if callbacks:
+                pass # TODO: add more to logs
+
+            for callback in callbacks:
+                callback.on_batch_begin(batch_idx, epoch, logs)
+
             data = data.to(self.device)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
-            loss = self.loss(recon_batch, data, mu, logvar)
+            loss = self.loss_fnc(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
             self.optimizer.step()
 
+            if callbacks:
+                logs['train_loss'] = loss.item() / len(data)
+                logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
-            # TODO: Handle logging (use tensorboard)
-            if batch_idx % log_interval == 0:
+            for callback in callbacks:
+                callback.on_batch_end(batch_idx, epoch, logs)
+
+            if self.verbose:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                    epoch, batch_idx * len(data), len(train_loader.dataset),
-                    100. * batch_idx / len(train_loader),
-                    loss.item() / len(data)))
+                      epoch, batch_idx * len(data), len(train_loader.dataset),
+                      100. * batch_idx / len(train_loader),
+                      loss.item() / len(data)))
 
-            if self.checkpoint and self.checkpoint.per_batch(batch_idx):
-                self._save_checkpoint(epoch)
+        train_loss /= len(train_loader.dataset)
 
-        if self.checkpoint and self.checkpoint.per_epoch():
-            self._save_checkpoint(epoch)
+        if callbacks:
+                logs['train_loss'] = train_loss
+                logs['global_step'] = epoch
 
-        print('====> Epoch: {} Average loss: {:.4f}'.format(
-              epoch, train_loss / len(train_loader.dataset)))
+        if self.verbose:
+            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
 
-
-    def _validate(self, valid_loader):
+    def _validate(self, valid_loader, callbacks, logs):
         """
         Test model on validation set.
 
@@ -182,6 +288,13 @@ class VAE:
         ----------
         valid_loader : torch.utils.data.dataloader.DataLoader
             Contains validation data
+
+        callbacks : list
+            Contains molecules.utils.callback.Callback objects
+            which are called during training.
+
+        logs : dict
+            Filled with data for callbacks
         """
         self.model.eval()
         valid_loss = 0
@@ -189,28 +302,15 @@ class VAE:
             for data in valid_loader:
                 data = data.to(self.device)
                 recon_batch, mu, logvar = self.model(data)
-                valid_loss += self.loss(recon_batch, data, mu, logvar).item()
+                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
 
         valid_loss /= len(valid_loader.dataset)
-        print('====> Validation loss: {:.4f}'.format(valid_loss))
 
-    def _save_checkpoint(self, epoch):
-        """
-        Saves optimizer state and encoder/decoder weights.
+        if callbacks:
+            logs['valid_loss'] = valid_loss
 
-        Parameters
-        ----------
-        epoch : int
-            Current epoch of training, used to resume training
-            after loading checkpoint.
-        """
-
-        self.checkpoint.save({
-            'encoder_state_dict': self.model.encoder.state_dict(),
-            'decoder_state_dict': self.model.decoder.state_dict(),
-            'optimizer_state_dict': self.optimizer.state_dict(),
-            'epoch': epoch,
-            }, epoch)
+        if self.verbose:
+            print('====> Validation loss: {:.4f}'.format(valid_loss))
 
     def _load_checkpoint(self, path):
         """
@@ -227,7 +327,7 @@ class VAE:
         Epoch of training corresponding to the saved checkpoint.
         """
 
-        cp = self.checkpoint.load(path)
+        cp = torch.load(path)
         self.model.encoder.load_state_dict(cp['encoder_state_dict'])
         self.model.decoder.load_state_dict(cp['decoder_state_dict'])
         self.optimizer.load_state_dict(cp['optimizer_state_dict'])
@@ -235,7 +335,7 @@ class VAE:
 
     def encode(self, x):
         """
-        Embed a datapoint into the latent space.
+        Embed data into the latent space.
 
         Parameters
         ----------
