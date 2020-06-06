@@ -76,15 +76,76 @@ def vae_loss(recon_x, x, mu, logvar):
     return BCE + KLD
 
 
+# TODO: set weight initialization hparams
 class VAE:
-    # TODO: set weight initialization hparams
-    # TODO: implement checkpoint as callback
+    """
+    Provides high level interface for training, testing and saving VAE
+    models. Takes arbitrary encoder/decoder models specified by the choice
+    of hyperparameters. Assumes the shape of the data is square.
+
+    Attributes
+    ----------
+    input_shape : tuple
+        shape of incomming data.
+
+    model : torch.nn.Module (VAEModel)
+        Underlying Pytorch model with encoder/decoder attributes.
+
+    optimizer : torch.optim.Optimizer
+        Pytorch optimizer used to train model.
+
+    loss_func : function
+        Loss function used to train model.
+
+    Methods
+    -------
+    train(train_loader, valid_loader, epochs=1, checkpoint='', callbacks=[])
+        Train model
+
+    encode(x)
+        Embed data into the latent space.
+
+    decode(embedding)
+        Generate matrices from embeddings.
+
+    save_weights(enc_path, dec_path)
+        Save encoder/decoder weights.
+
+    load_weights(enc_path, dec_path)
+        Load saved encoder/decoder weights.
+    """
+
     def __init__(self, input_shape,
                  hparams=SymmetricVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams(),
                  loss=None,
                  cuda=True,
                  verbose=True):
+        """
+        Parameters
+        ----------
+        input_shape : tuple
+            shape of incomming data.
+            Note: For use with SymmetricVAE use (1, num_residues, num_residues)
+                  For use with ResnetVAE use (num_residues, num_residues)
+
+        hparams : molecules.ml.hyperparams.Hyperparams
+            Defines the model architecture hyperparameters. Currently implemented
+            are SymmetricVAEHyperparams and ResnetVAEHyperparams.
+
+        optimizer_hparams : molecules.ml.hyperparams.OptimizerHyperparams
+            Defines the optimizer type and corresponding hyperparameters.
+
+        loss: : function, optional
+            Defines an optional loss function with inputs (recon_x, x, mu, logvar)
+            and ouput torch loss.
+
+        cuda : bool
+            True specifies to use cuda if it is available. False uses cpu.
+
+        verbose : bool
+            True prints training and validation loss to stdout.
+        """
 
         hparams.validate()
         optimizer_hparams.validate()
@@ -274,7 +335,7 @@ class VAE:
 
     def encode(self, x):
         """
-        Embed a datapoint into the latent space.
+        Embed data into the latent space.
 
         Parameters
         ----------
