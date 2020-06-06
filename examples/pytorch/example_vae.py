@@ -1,8 +1,10 @@
 import click
+from os.path import join
 from torchsummary import summary
 from torch.utils.data import Dataset, DataLoader
 from molecules.utils import open_h5
 from molecules.ml.hyperparams import OptimizerHyperparams
+from molecules.utils.callback import LossCallback, CheckpointCallback, EmbeddingCallback
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
 
 import torch
@@ -35,6 +37,14 @@ class ContactMap(Dataset):
 
         self.data = torch.from_numpy(self.data.reshape(shape)).to(torch.float32)
 
+    # TODO: not optimal. requries loading entire data set into memory again.
+    #       This function is only used by EmbeddingCallback.
+    @property
+    def sample(self):
+        """Returns a random sample of 100 contact matrices"""
+        idx = torch.randint(len(self.data), (100,))
+        return self.data[idx]
+
     def __len__(self):
         return len(self.data)
 
@@ -57,10 +67,10 @@ class ContactMap(Dataset):
 @click.option('-g', '--gpu', default=0, type=int,
               help='GPU id')
 
-@click.option('-e', '--epochs', default=100, type=int,
+@click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
 
-@click.option('-b', '--batch_size', default=512, type=int,
+@click.option('-b', '--batch_size', default=128, type=int,
               help='Batch size for training')
 
 @click.option('-t', '--model_type', default='resnet',
@@ -72,8 +82,12 @@ class ContactMap(Dataset):
 def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
-    if model_type is 'symmetric':
+    assert model_type in ['symmetric', 'resnet']
 
+    # Note: See SymmetricVAEHyperparams, ResnetVAEHyperparams class definitions
+    #       for hyperparameter options. 
+
+    if model_type == 'symmetric':
         # Optimal Fs-peptide params
         fs_peptide_hparams ={'filters': [100, 100, 100, 100],
                              'kernels': [5, 5, 5, 5],
@@ -86,9 +100,9 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
         squeeze = False
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
 
-    elif model_type is 'resnet':
+    elif model_type == 'resnet':
         input_shape = (22, 22)
-        squeeze = True
+        squeeze = True # Specify no ones in training data shape
         hparams = ResnetVAEHyperparams(input_shape, latent_dim=11)
 
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
@@ -99,16 +113,48 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     print(vae)
     summary(vae.model, input_shape)
 
-
+    # Load training and validation data
     train_loader = DataLoader(ContactMap(input_path, split='train', squeeze=squeeze),
                               batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(ContactMap(input_path, split='valid', squeeze=squeeze),
-                             batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(ContactMap(input_path, split='valid', squeeze=squeeze),
+                              batch_size=batch_size, shuffle=True)
 
+    # For ease of training multiple models
+    model_path = join(out_path, f'model-{model_id}')
 
-    vae.train(train_loader, test_loader, epochs)
+    # Optional callbacks
+    loss_callback = LossCallback()
+    checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
+    embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample)
 
+    # Train model with callbacks
+    vae.train(train_loader, valid_loader, epochs,
+              callbacks=[loss_callback, checkpoint_callback, embedding_callback])
+
+    # Save loss history and embedddings history to disk.
+    loss_callback.save(join(model_path, 'loss.pt'))
+    embedding_callback.save(join(model_path, 'embed.pt'))
+
+    # Save hparams to disk
+    hparams.save(join(model_path, 'model-hparams.pkl'))
+    optimizer_hparams.save(join(model_path, 'optimizer-hparams.pkl'))
+
+    # Save final model weights to disk
+    vae.save_weights(join(model_path, 'encoder-weights.pt'),
+                     join(model_path, 'decoder-weights.pt'))
+
+    # Output directory structure
+    #  out_path
+    # ├── model_path
+    # │   ├── checkpoint
+    # │   │   ├── epoch-1-20200606-125334.pt
+    # │   │   └── epoch-2-20200606-125338.pt
+    # │   ├── decoder-weights.pt
+    # │   ├── embed.pt
+    # │   ├── encoder-weights.pt
+    # │   ├── loss.pt
+    # │   ├── model-hparams.pkl
+    # │   └── optimizer-hparams.pkl
 
 if __name__ == '__main__':
     main()
-
