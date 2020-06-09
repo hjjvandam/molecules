@@ -28,7 +28,6 @@ class ContactMap(Dataset):
 
         # TODO: this reshape code may not be the best solution. revisit
         num_residues = self.data.shape[2]
-        assert num_residues == 22
 
         if squeeze:
             shape = (-1, num_residues, num_residues)
