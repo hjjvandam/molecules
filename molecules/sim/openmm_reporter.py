@@ -17,7 +17,7 @@ class ContactMapReporter:
 
         u = Universe(native_pdb)
         self._native_positions = u.select_atoms('protein').positions()
-        self._native_ca_positions = u.select_atoms('CA').positions()
+        self._native_ca_positions = u.select_atoms('name CA').positions()
 
     def __del__(self):
         self._file.close()
