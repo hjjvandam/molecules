@@ -95,6 +95,7 @@ class CheckpointCallback(Callback):
         path = os.path.join(self.directory, time_stamp)
         torch.save(checkpoint, path)
 
+# TODO: add numba dependency to conda env
 import numba
 @numba.jit
 def minmax(x):

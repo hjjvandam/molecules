@@ -14,7 +14,7 @@ class ContactMap(Dataset):
     def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
         with open_h5(path) as input_file:
             # Access contact matrix data from h5 file
-            data = np.array(input_file['contact_maps'])
+            data = np.array(input_file['contact_maps'])[:500]
 
         # 80-20 train validation split index
         split_ind = int(split_ptc * len(data))
@@ -38,10 +38,9 @@ class ContactMap(Dataset):
 
     # TODO: not optimal. requries loading entire data set into memory again.
     #       This function is only used by EmbeddingCallback.
-    @property
-    def sample(self):
+    def sample(self, num):
         """Returns a random sample of 100 contact matrices"""
-        idx = torch.randint(len(self.data), (100,))
+        idx = torch.randint(len(self.data), (num,))
         return self.data[idx]
 
     def __len__(self):
@@ -124,7 +123,8 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     # Optional callbacks
     loss_callback = LossCallback()
     checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
-    embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample)
+    embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample(500),
+                                           rmsd=np.random.normal(size=(500,)))
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
