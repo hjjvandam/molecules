@@ -100,33 +100,46 @@ class TestVAE:
     def test_padding(self):
         from molecules.ml.unsupervised.vae.utils import same_padding
 
-        input_dim = 22
+
+        # Square input_dim and padding
+        input_dim = (22, 22)
         kernel_size = 3
 
-        assert same_padding(input_dim, kernel_size, stride=1) == 1 # Stride 1
-        assert same_padding(input_dim, kernel_size, stride=2) == 1 # Test fs-peptide
-        assert same_padding(input_dim, 5, stride=1) == 2 # Optimal fs-peptide
-        assert same_padding(input_dim, 5, stride=2) == 1 # Optimal fs-peptide
-        assert same_padding(75, 2, 2) == 1 # Resnet Autoencoder
+        assert same_padding(input_dim, kernel_size, stride=1) == (1, 1) # Stride 1
+        assert same_padding(input_dim, kernel_size, stride=2) == (1, 1) # Test fs-peptide
+        assert same_padding(input_dim, 5, stride=1) == (2, 2) # Optimal fs-peptide
+        assert same_padding(input_dim, 5, stride=2) == (1, 1) # Optimal fs-peptide
+        assert same_padding((75, 75), 2, 2) == (1, 1) # Resnet Autoencoder
 
-        assert same_padding(5, 2, 2) == 1
+        assert same_padding((5, 5), 2, 2) == (1, 1)
+
+        # Rectangular input_dim and padding
+        assert same_padding((22, 10), kernel_size, stride=1) == (1, 1)
+        assert same_padding((22, 15), kernel_size, stride=1) == (1, 1)
+        assert same_padding((22, 3), kernel_size, stride=1) == (1, 1)
+
+        assert same_padding((75, 5), 2, stride=2) == (1, 1)
+
 
 
     def test_conv_output_shape(self):
         from molecules.ml.unsupervised.vae.utils import conv_output_shape
 
         # Optimal fs-peptide
-        assert conv_output_shape(input_dim=22, kernel_size=5, stride=1, padding=2,
+        assert conv_output_shape(input_dim=(22, 22), kernel_size=5, stride=1, padding=(2, 2),
                                  num_filters=100) == (100, 22, 22)
-        assert conv_output_shape(input_dim=22, kernel_size=5, stride=2, padding=1,
+        assert conv_output_shape(input_dim=(22, 22), kernel_size=5, stride=2, padding=(1, 1),
                                  num_filters=100) == (100, 10, 10)
         # Test fs-peptide
-        assert conv_output_shape(input_dim=22, kernel_size=3, stride=1, padding=1,
+        assert conv_output_shape(input_dim=(22, 22), kernel_size=3, stride=1, padding=(1, 1),
                                  num_filters=64) == (64, 22, 22)
-        assert conv_output_shape(input_dim=22, kernel_size=3, stride=2, padding=1,
+        assert conv_output_shape(input_dim=(22, 22), kernel_size=3, stride=2, padding=(1, 1),
                                  num_filters=64) == (64, 11, 11)
 
-    def _test_pytorch_cvae_real_data(self):
+        assert conv_output_shape(input_dim=(10, 10), kernel_size=5, stride=2,
+                                 num_filters=100, padding=(1,1), transpose=True) == (100, 22, 22)
+
+    def test_pytorch_cvae_real_data(self):
 
         path = './test/cvae_input.h5'
 
@@ -174,10 +187,10 @@ class TestVAE:
         encoder.load_weights(self.enc_path)
 
         decoder = SymmetricDecoderConv2d(self.input_shape, self.hparams,
-                                         encoder.encoder_dim)
+                                         encoder.shape)
         decoder.load_weights(self.dec_path)
 
-    def test_resnet_vae(self):
+    def _test_resnet_vae(self):
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 
         input_shape = (1200, 1200)
