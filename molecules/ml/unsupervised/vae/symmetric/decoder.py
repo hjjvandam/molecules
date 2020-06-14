@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
-                                                 get_activation, init_weights)
+from molecules.ml.unsupervised.vae.utils import (conv_output_shape, same_padding,
+                                                 get_activation, init_weights, prod)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 def reversedzip(*iterables):
@@ -28,15 +28,14 @@ def reversedzip(*iterables):
         yield tup
 
 class SymmetricDecoderConv2d(nn.Module):
-    def __init__(self, output_shape, hparams, encoder_dim):
+    def __init__(self, output_shape, hparams, encoder_shape):
         super(SymmetricDecoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
         hparams.validate()
 
-        # Assume input is square matrix
         self.output_shape = output_shape
-        self.encoder_dim = encoder_dim
+        self.encoder_shape = encoder_shape
         self.hparams = hparams
 
         self.affine_layers = nn.Sequential(*self._affine_layers())
@@ -52,9 +51,7 @@ class SymmetricDecoderConv2d(nn.Module):
         """
         Reshape flattened x as a tensor (channels, output, output)
         """
-        new_shape = (-1, self.hparams.filters[-1],
-                     self.encoder_dim, self.encoder_dim)
-        return x.view(new_shape)
+        return x.view((-1, *self.encoder_shape))
 
     def forward(self, x):
         x = self.affine_layers(x)
@@ -83,10 +80,7 @@ class SymmetricDecoderConv2d(nn.Module):
         """
         layers = []
 
-        in_channels = self.hparams.filters[-1]
-
-        # Dimension of square matrix
-        input_dim = self.output_shape[1]
+        shape = self.encoder_shape
 
         # Set last filter to be the number of channels in the reconstructed image.
         tmp = self.hparams.filters[0]
@@ -96,9 +90,9 @@ class SymmetricDecoderConv2d(nn.Module):
                                                    self.hparams.kernels,
                                                    self.hparams.strides):
 
-            padding = same_padding(input_dim, kernel, stride)
+            padding = same_padding(shape[1:], kernel, stride)
 
-            layers.append(nn.ConvTranspose2d(in_channels=in_channels,
+            layers.append(nn.ConvTranspose2d(in_channels=shape[0],
                                              out_channels=filter_,
                                              kernel_size=kernel,
                                              stride=stride,
@@ -107,21 +101,23 @@ class SymmetricDecoderConv2d(nn.Module):
 
             # TODO: revist output_padding, see github issue.
             #       This code may not generalize to other examples. Needs testing.
+            #       this also needs to be addressed in conv_output_dim
 
             layers.append(get_activation(self.hparams.activation))
 
-            # Subsequent layers in_channels is the current layers number of filters
-            # Except for the last layer which is 1 (or output_shape channels)
-            in_channels = filter_
-
-            # Compute non-channel dimension given to next layer
-            input_dim = conv_output_dim(input_dim, kernel, stride, padding, transpose=True)
+            # Output shape is (channels, height, width)
+            shape = conv_output_shape(shape[1:], kernel, stride, padding,
+                                      filter_, transpose=True)
 
         # Overwrite output activation
         layers[-1] = get_activation(self.hparams.output_activation)
 
         # Restore invariant state
         self.hparams.filters[0] = tmp
+
+        # If this assert fails, it likely means that there is a bug in
+        # conv_output_shape due to the output_padding. See above TODO
+        assert shape == self.output_shape
 
         return layers
 
@@ -156,8 +152,7 @@ class SymmetricDecoderConv2d(nn.Module):
         # Add last layer with dims to connect the last linear layer to
         # the first convolutional decoder layer
         layers.append(nn.Linear(in_features=self.hparams.affine_widths[0],
-                                   out_features=self.hparams.filters[-1] * self.encoder_dim**2))
+                                out_features=prod(self.encoder_shape)))
         layers.append(get_activation(self.hparams.activation))
-
 
         return layers

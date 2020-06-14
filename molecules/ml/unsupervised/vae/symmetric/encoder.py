@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
-                                                 get_activation, init_weights)
+from molecules.ml.unsupervised.vae.utils import (conv_output_shape, same_padding,
+                                                 get_activation, init_weights, prod)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 class SymmetricEncoderConv2d(nn.Module):
@@ -12,10 +12,10 @@ class SymmetricEncoderConv2d(nn.Module):
         assert isinstance(hparams, SymmetricVAEHyperparams)
         hparams.validate()
 
-        # Assume input is square matrix
         self.input_shape = input_shape
+        # Stores (channels, height, width) of the last conv layer
+        self.shape = input_shape
         self.hparams = hparams
-        self.encoder_dim = input_shape[1]
 
         self.encoder = nn.Sequential(*self._conv_layers(),
                                      nn.Flatten(),
@@ -58,16 +58,13 @@ class SymmetricEncoderConv2d(nn.Module):
 
         layers = []
 
-        # Contact matrices have one channel
-        in_channels = self.input_shape[0]
-
         for filter_, kernel, stride in zip(self.hparams.filters,
                                            self.hparams.kernels,
                                            self.hparams.strides):
 
-            padding = same_padding(self.encoder_dim, kernel, stride)
+            padding = same_padding(self.shape[1:], kernel, stride)
 
-            layers.append(nn.Conv2d(in_channels=in_channels,
+            layers.append(nn.Conv2d(in_channels=self.shape[0],
                                     out_channels=filter_,
                                     kernel_size=kernel,
                                     stride=stride,
@@ -75,10 +72,9 @@ class SymmetricEncoderConv2d(nn.Module):
 
             layers.append(get_activation(self.hparams.activation))
 
-            # Subsequent layers in_channels is the current layers number of filters
-            in_channels = filter_
-
-            self.encoder_dim = conv_output_dim(self.encoder_dim, kernel, stride, padding)
+            # Output shape is (channels, height, width)
+            self.shape = conv_output_shape(self.shape[1:], kernel,
+                                           stride, padding, filter_)
 
         return layers
 
@@ -95,7 +91,7 @@ class SymmetricEncoderConv2d(nn.Module):
         layers = []
 
         # First layer gets flattened convolutional output
-        in_features = self.hparams.filters[-1] * self.encoder_dim**2
+        in_features = prod(self.shape)
 
         for width, dropout in zip(self.hparams.affine_widths,
                                   self.hparams.affine_dropouts):
