@@ -22,7 +22,9 @@ def conv_output_dim(input_dim, kernel_size, stride, padding,
     """
 
     if transpose:
+        # TODO: see symmetric decoder _conv_layers
         output_padding = 1 if stride != 1 else 0
+        output_padding = 0
         return (input_dim - 1) * stride + kernel_size - 2*padding + output_padding
 
     return (2*padding + input_dim - kernel_size) // stride + 1
@@ -58,6 +60,9 @@ def conv_output_shape(input_dim, kernel_size, stride, padding,
     (channels, height, width) tuple
 
     """
+    if isinstance(input_dim, int):
+        input_dim, padding = [input_dim], [padding]
+
     dims = [conv_output_dim(d, kernel_size, stride, p, transpose)
             for d,p in zip(input_dim, padding)]
 
@@ -97,8 +102,9 @@ def same_padding(input_dim, kernel_size, stride):
 
     Parameters
     ----------
-    input_dim : tuple
-        (height, width) dimensions for convolution input
+    input_dim : tuple, int
+        (height, width) dimensions for Conv2d input
+        int for Conv1d input
 
     kernel_size : int
         filter size
@@ -106,6 +112,11 @@ def same_padding(input_dim, kernel_size, stride):
     stride : int
         stride length
     """
+
+    # Handle Conv1d case
+    if isinstance(input_dim, int):
+        return _same_padding(input_dim, kernel_size, stride)
+
     h_pad = _same_padding(input_dim[0], kernel_size, stride)
     # If square input, no need to compute width padding
     if input_dim[0] == input_dim[1]:

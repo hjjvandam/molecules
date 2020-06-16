@@ -14,7 +14,7 @@ class SymmetricEncoderConv2d(nn.Module):
 
         self.input_shape = input_shape
         # Stores (channels, height, width) of the last conv layer
-        self.shape = input_shape
+        self.shapes = [input_shape]
         self.hparams = hparams
 
         self.encoder = nn.Sequential(*self._conv_layers(),
@@ -62,9 +62,9 @@ class SymmetricEncoderConv2d(nn.Module):
                                            self.hparams.kernels,
                                            self.hparams.strides):
 
-            padding = same_padding(self.shape[1:], kernel, stride)
+            padding = same_padding(self.shapes[-1][1:], kernel, stride)
 
-            layers.append(nn.Conv2d(in_channels=self.shape[0],
+            layers.append(nn.Conv2d(in_channels=self.shapes[-1][0],
                                     out_channels=filter_,
                                     kernel_size=kernel,
                                     stride=stride,
@@ -73,8 +73,8 @@ class SymmetricEncoderConv2d(nn.Module):
             layers.append(get_activation(self.hparams.activation))
 
             # Output shape is (channels, height, width)
-            self.shape = conv_output_shape(self.shape[1:], kernel,
-                                           stride, padding, filter_)
+            self.shapes.append(conv_output_shape(self.shapes[-1][1:], kernel,
+                                                 stride, padding, filter_))
 
         return layers
 
@@ -91,7 +91,7 @@ class SymmetricEncoderConv2d(nn.Module):
         layers = []
 
         # First layer gets flattened convolutional output
-        in_features = prod(self.shape)
+        in_features = prod(self.shapes[-1])
 
         for width, dropout in zip(self.hparams.affine_widths,
                                   self.hparams.affine_dropouts):
