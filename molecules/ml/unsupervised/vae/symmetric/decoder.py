@@ -89,13 +89,14 @@ class SymmetricDecoderConv2d(nn.Module):
 
         act = get_activation(self.hparams.activation)
 
-        # Set last filter to be the number of channels in the reconstructed image.
-        tmp, self.hparams.filters[0] = self.hparams.filters[0], self.output_shape[0]
+        # The first out_channels should be the second to last filter size
+        tmp = self.hparams.filters.pop()
 
-        for i, (filter_, kernel, stride) in enumerate(reversedzip(self.hparams.filters,
-                                                          self.hparams.kernels,
-                                                          self.hparams.strides)):
-
+        # self.output_shape[0] Needs to be the last out_channels to match the input matrix
+        for i, (filter_, kernel, stride) in enumerate(reversedzip((self.output_shape[0],
+                                                                  *self.hparams.filters),
+                                                                  self.hparams.kernels,
+                                                                  self.hparams.strides)):
             shape = self.encoder_shapes[-1*i -1]
 
             # TODO: this is a quick fix but might not generalize to models
@@ -123,7 +124,7 @@ class SymmetricDecoderConv2d(nn.Module):
         activations[-1] = get_activation(self.hparams.output_activation)
 
         # Restore invariant state
-        self.hparams.filters[0] = tmp
+        self.hparams.filters.append(tmp)
 
         return nn.ModuleList(layers), activations
 

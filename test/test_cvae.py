@@ -83,6 +83,13 @@ class TestVAE:
                               'affine_dropouts': [0],
                               'latent_dim': 10}
 
+        diff_filters_hparams = {'filters': [100, 64, 64, 100],
+                                'kernels': [5, 5, 3, 7],
+                                'strides': [1, 2, 1, 2],
+                                'affine_widths': [64],
+                                'affine_dropouts': [0],
+                                'latent_dim': 10}
+
         strided_hparams = {'filters': [100, 100, 100, 100],
                            'kernels': [5, 5, 5, 5],
                            'strides': [1, 2, 2, 1],
@@ -97,7 +104,7 @@ class TestVAE:
                    'affine_dropouts': [0],
                    'latent_dim': 3}
 
-        self.hparams = SymmetricVAEHyperparams(**strided_hparams)
+        self.hparams = SymmetricVAEHyperparams(**diff_filters_hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
         # For testing saving and loading weights
@@ -166,7 +173,7 @@ class TestVAE:
     def test_rectangular_data_symmetric_vae(self):
 
         rectangular_shape = (1, 22, 22)
-        #rectangular_shape = (1, 24, 524) # (1, 24, 524)
+        rectangular_shape = (1, 24, 524)
 
         train_loader = DataLoader(TestVAE.DummyContactMap(rectangular_shape),
                                   batch_size=self.batch_size, shuffle=True)
