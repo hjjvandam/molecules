@@ -2,13 +2,10 @@ import torch
 from torch import nn
 from molecules.ml.unsupervised.vae.utils import (conv_output_dim, conv_output_shape,
                                                  same_padding, get_activation,
-                                                 init_weights)
+                                                 init_weights, prod)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
-# Helper function to return product of elements in a tuple
-from functools import reduce
-prod = lambda tup: reduce((lambda x, y: x * y), tup)
 
 class ResnetEncoder(nn.Module):
     def __init__(self, input_shape, hparams):
