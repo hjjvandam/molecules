@@ -41,6 +41,8 @@ class SymmetricDecoderConv2d(nn.Module):
         self.affine_layers = nn.Sequential(*self._affine_layers())
         self.conv_layers, self.conv_acts = self._conv_layers()
         self.conv_output_sizes = list(reversed(self.encoder_shapes[:-1]))
+        # Reshape flattened x as a tensor (channels, output1, output2)
+        self.reshape = (-1, *self.encoder_shapes[-1])
 
         self.init_weights()
 
@@ -48,15 +50,8 @@ class SymmetricDecoderConv2d(nn.Module):
         self.affine_layers.apply(init_weights)
         self.conv_layers.apply(init_weights)
 
-    def reshape(self, x):
-        """
-        Reshape flattened x as a tensor (channels, output, output)
-        """
-        return x.view((-1, *self.encoder_shapes[-1]))
-
     def forward(self, x):
-        x = self.affine_layers(x)
-        x = self.reshape(x)
+        x = self.affine_layers(x).view(self.reshape)
         batch_size = x.size()[0]
         for conv_t, act, output_size in \
             zip(self.conv_layers, self.conv_acts, self.conv_output_sizes):
