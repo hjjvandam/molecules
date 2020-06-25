@@ -92,17 +92,18 @@ class SymmetricDecoderConv2d(nn.Module):
         # Set last filter to be the number of channels in the reconstructed image.
         tmp, self.hparams.filters[0] = self.hparams.filters[0], self.output_shape[0]
 
-        for filter_, kernel, stride, shape in reversedzip(self.hparams.filters,
+        for i, (filter_, kernel, stride) in enumerate(reversedzip(self.hparams.filters,
                                                           self.hparams.kernels,
-                                                          self.hparams.strides,
-                                                          self.encoder_shapes[1:]):
+                                                          self.hparams.strides)):
+
+            shape = self.encoder_shapes[-1*i -1]
 
             # TODO: this is a quick fix but might not generalize to models
             #       with more than one strided conv
             if stride == 1:
                 padding = same_padding(shape[1:], kernel, stride)
             else:
-                padding = tuple(int(dim % 2 == 0) for dim in self.output_shape[1:])
+                padding = tuple(int(dim % 2 == 0) for dim in self.encoder_shapes[-1*i -2][1:])
 
             layers.append(nn.ConvTranspose2d(in_channels=shape[0],
                                              out_channels=filter_,

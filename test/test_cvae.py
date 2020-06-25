@@ -83,6 +83,13 @@ class TestVAE:
                               'affine_dropouts': [0],
                               'latent_dim': 10}
 
+        strided_hparams = {'filters': [100, 100, 100, 100],
+                           'kernels': [5, 5, 5, 5],
+                           'strides': [1, 2, 2, 1],
+                           'affine_widths': [64],
+                           'affine_dropouts': [0],
+                           'latent_dim': 10}
+
         hparams = {'filters': [64, 64, 64, 64],
                    'kernels': [3, 3, 3, 3],
                    'strides': [1, 2, 1, 1],
@@ -90,7 +97,7 @@ class TestVAE:
                    'affine_dropouts': [0],
                    'latent_dim': 3}
 
-        self.hparams = SymmetricVAEHyperparams(**hparams)
+        self.hparams = SymmetricVAEHyperparams(**strided_hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
         # For testing saving and loading weights
