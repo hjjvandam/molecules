@@ -15,7 +15,7 @@ class VAEModel(nn.Module):
         if isinstance(hparams, SymmetricVAEHyperparams):
             from .symmetric import SymmetricEncoderConv2d, SymmetricDecoderConv2d
             self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
-            self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.encoder_dim)
+            self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.shapes)
 
         elif isinstance(hparams, ResnetVAEHyperparams):
             from .resnet import ResnetEncoder, ResnetDecoder

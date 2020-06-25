@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import (conv_output_dim, same_padding,
-                                                 get_activation, init_weights)
+from molecules.ml.unsupervised.vae.utils import (conv_output_shape, same_padding,
+                                                 get_activation, init_weights, prod)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 def reversedzip(*iterables):
@@ -28,19 +28,21 @@ def reversedzip(*iterables):
         yield tup
 
 class SymmetricDecoderConv2d(nn.Module):
-    def __init__(self, output_shape, hparams, encoder_dim):
+    def __init__(self, output_shape, hparams, encoder_shapes):
         super(SymmetricDecoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
         hparams.validate()
 
-        # Assume input is square matrix
         self.output_shape = output_shape
-        self.encoder_dim = encoder_dim
+        self.encoder_shapes = encoder_shapes
         self.hparams = hparams
 
         self.affine_layers = nn.Sequential(*self._affine_layers())
-        self.conv_layers = nn.Sequential(*self._conv_layers())
+        self.conv_layers, self.conv_acts = self._conv_layers()
+        self.conv_output_sizes = list(reversed(self.encoder_shapes[:-1]))
+        # Reshape flattened x as a tensor (channels, output1, output2)
+        self.reshape = (-1, *self.encoder_shapes[-1])
 
         self.init_weights()
 
@@ -48,18 +50,13 @@ class SymmetricDecoderConv2d(nn.Module):
         self.affine_layers.apply(init_weights)
         self.conv_layers.apply(init_weights)
 
-    def reshape(self, x):
-        """
-        Reshape flattened x as a tensor (channels, output, output)
-        """
-        new_shape = (-1, self.hparams.filters[-1],
-                     self.encoder_dim, self.encoder_dim)
-        return x.view(new_shape)
-
     def forward(self, x):
-        x = self.affine_layers(x)
-        x = self.reshape(x)
-        return self.conv_layers(x)
+        x = self.affine_layers(x).view(self.reshape)
+        batch_size = x.size()[0]
+        for conv_t, act, output_size in \
+            zip(self.conv_layers, self.conv_acts, self.conv_output_sizes):
+            x = act(conv_t(x, output_size=(batch_size, *output_size)))
+        return x
 
     def decode(self, embedding):
         self.eval()
@@ -80,50 +77,48 @@ class SymmetricDecoderConv2d(nn.Module):
         -------
         layers : list
             Convolution layers
+        activations : list
+            Activation functions
         """
-        layers = []
+        layers, activations = [], []
 
-        in_channels = self.hparams.filters[-1]
+        act = get_activation(self.hparams.activation)
 
-        # Dimension of square matrix
-        input_dim = self.output_shape[1]
+        # The first out_channels should be the second to last filter size
+        tmp = self.hparams.filters.pop()
 
-        # Set last filter to be the number of channels in the reconstructed image.
-        tmp = self.hparams.filters[0]
-        self.hparams.filters[0] = self.output_shape[0]
+        # self.output_shape[0] Needs to be the last out_channels to match the input matrix
+        for i, (filter_, kernel, stride) in enumerate(reversedzip((self.output_shape[0],
+                                                                  *self.hparams.filters),
+                                                                  self.hparams.kernels,
+                                                                  self.hparams.strides)):
+            shape = self.encoder_shapes[-1*i -1]
 
-        for filter_, kernel, stride in reversedzip(self.hparams.filters,
-                                                   self.hparams.kernels,
-                                                   self.hparams.strides):
+            # TODO: this is a quick fix but might not generalize to some architectures
+            if stride == 1:
+                padding = same_padding(shape[1:], kernel, stride)
+            else:
+                padding = tuple(int(dim % 2 == 0) for dim in self.encoder_shapes[-1*i -2][1:])
 
-            padding = same_padding(input_dim, kernel, stride)
-
-            layers.append(nn.ConvTranspose2d(in_channels=in_channels,
+            layers.append(nn.ConvTranspose2d(in_channels=shape[0],
                                              out_channels=filter_,
                                              kernel_size=kernel,
                                              stride=stride,
-                                             padding=padding,
-                                             output_padding=1 if stride != 1 else 0))
+                                             padding=padding))
 
-            # TODO: revist output_padding, see github issue.
+            # TODO: revist padding, output_padding, see github issue.
             #       This code may not generalize to other examples. Needs testing.
+            #       this also needs to be addressed in conv_output_dim
 
-            layers.append(get_activation(self.hparams.activation))
-
-            # Subsequent layers in_channels is the current layers number of filters
-            # Except for the last layer which is 1 (or output_shape channels)
-            in_channels = filter_
-
-            # Compute non-channel dimension given to next layer
-            input_dim = conv_output_dim(input_dim, kernel, stride, padding, transpose=True)
+            activations.append(act)
 
         # Overwrite output activation
-        layers[-1] = get_activation(self.hparams.output_activation)
+        activations[-1] = get_activation(self.hparams.output_activation)
 
         # Restore invariant state
-        self.hparams.filters[0] = tmp
+        self.hparams.filters.append(tmp)
 
-        return layers
+        return nn.ModuleList(layers), activations
 
     def _affine_layers(self):
         """
@@ -137,6 +132,8 @@ class SymmetricDecoderConv2d(nn.Module):
 
         layers = []
 
+        act = get_activation(self.hparams.activation)
+
         in_features = self.hparams.latent_dim
 
         for width, dropout in reversedzip(self.hparams.affine_widths,
@@ -145,7 +142,7 @@ class SymmetricDecoderConv2d(nn.Module):
             layers.append(nn.Linear(in_features=in_features,
                                     out_features=width))
 
-            layers.append(get_activation(self.hparams.activation))
+            layers.append(act)
 
             if not isclose(dropout, 0):
                 layers.append(nn.Dropout(p=dropout))
@@ -156,8 +153,7 @@ class SymmetricDecoderConv2d(nn.Module):
         # Add last layer with dims to connect the last linear layer to
         # the first convolutional decoder layer
         layers.append(nn.Linear(in_features=self.hparams.affine_widths[0],
-                                   out_features=self.hparams.filters[-1] * self.encoder_dim**2))
-        layers.append(get_activation(self.hparams.activation))
-
+                                out_features=prod(self.encoder_shapes[-1])))
+        layers.append(act)
 
         return layers
