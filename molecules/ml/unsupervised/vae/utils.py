@@ -64,7 +64,7 @@ def conv_output_shape(input_dim, kernel_size, stride, padding,
         input_dim, padding = [input_dim], [padding]
 
     dims = [conv_output_dim(d, kernel_size, stride, p, transpose)
-            for d,p in zip(input_dim, padding)]
+            for d, p in zip(input_dim, padding)]
 
     if dim == 1:
         return num_filters, dims[0]
@@ -93,7 +93,7 @@ def _same_padding(input_dim, kernel_size, stride):
         if alpha <= input_dim:
             return input_dim - alpha
 
-    raise Exception(f'No padding found')
+    raise Exception('No padding found')
 
 def same_padding(input_dim, kernel_size, stride):
     """
