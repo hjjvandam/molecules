@@ -94,8 +94,7 @@ class SymmetricDecoderConv2d(nn.Module):
                                                                   self.hparams.strides)):
             shape = self.encoder_shapes[-1*i -1]
 
-            # TODO: this is a quick fix but might not generalize to models
-            #       with more than one strided conv
+            # TODO: this is a quick fix but might not generalize to some architectures
             if stride == 1:
                 padding = same_padding(shape[1:], kernel, stride)
             else:
@@ -110,8 +109,6 @@ class SymmetricDecoderConv2d(nn.Module):
             # TODO: revist padding, output_padding, see github issue.
             #       This code may not generalize to other examples. Needs testing.
             #       this also needs to be addressed in conv_output_dim
-            #       to see a case that breaks this use matrices (1, 25, 525).
-            #       changing the padding to 0 if stride > 1 else padding fixes that
 
             activations.append(act)
 
