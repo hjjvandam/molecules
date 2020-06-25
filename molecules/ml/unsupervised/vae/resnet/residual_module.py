@@ -5,7 +5,7 @@ from molecules.ml.unsupervised.vae.utils import (same_padding,
 
 class ResidualConv1d(nn.Module):
     def __init__(self, input_shape, filters, kernel_size,
-                 activation='ReLU', shrink=False, kfac=2, depth=1):
+                 activation='ReLU', shrink=False, kfac=2):
         super(ResidualConv1d, self).__init__()
 
         self.input_shape = input_shape
@@ -15,10 +15,26 @@ class ResidualConv1d(nn.Module):
         self.activation = activation
         self.shrink = shrink
         self.kfac = kfac
-        # Depth of residual module
-        self.depth = depth
+
+        print('res ctor input_shape: ', self.input_shape)
+        print('filters: ', self.filters)
 
         self.residual = self._residual_layers()
+        padding = same_padding(self.input_shape[1], 1, 1)
+        self.conv = nn.Conv1d(self.input_shape[0],
+                              self.filters,
+                              kernel_size=1,
+                              stride=1,
+                              padding=padding)
+
+        self.temp = conv_output_shape(input_dim=self.input_shape[1],
+                                kernel_size=1,
+                                stride=1,
+                                padding=padding,
+                                num_filters=self.filters,
+                                dim=1)
+
+        print('res ctor shape: ', self.temp)
 
         self.activation_fnc = get_activation(self.activation)
 
@@ -28,10 +44,16 @@ class ResidualConv1d(nn.Module):
     def forward(self, x):
 
         # TODO: should we use activation here?
-        x = self.activation_fnc(x + self.residual(x))
+        res = self.residual(x)
+        print('res shape: ', res.size())
+        conv = self.conv(x)
+        print('conv shape: ', conv.size())
+        x = self.activation_fnc(conv + res)
 
         if self.shrink:
             x = self.shrink_layer(x)
+
+        print('end res: ', x.size())
 
         return x
 
@@ -41,52 +63,67 @@ class ResidualConv1d(nn.Module):
         # TODO: prefer wide layers and shallower autoencoder
         #       see https://arxiv.org/pdf/1605.07146.pdf
 
+        assert len(self.input_shape) == 2
+
         layers = []
 
         # First add bottleneck layer
 
-        bottleneck_padding = same_padding(self.input_shape[1], kernel_size=1, stride=1)
+        # bottleneck_padding = same_padding(self.input_shape[1], kernel_size=1, stride=1)
 
-        layers.append(nn.Conv1d(in_channels=self.input_shape[0],
-                                out_channels=self.filters,
-                                kernel_size=1,
-                                stride=1,
-                                padding=bottleneck_padding))
+        # layers.append(nn.Conv1d(in_channels=self.input_shape[0],
+        #                         out_channels=self.filters,
+        #                         kernel_size=1,
+        #                         stride=1,
+        #                         padding=bottleneck_padding))
 
-        shape = (self.filters, self.input_shape[1])
+        # shape = (self.filters, self.input_shape[1])
+
+        shape = self.input_shape
 
         # Now add residual layers
-        for _ in range(self.depth):
-            layers.append(nn.BatchNorm1d(num_features=self.filters))
 
-            layers.append(get_activation(self.activation))
-
-            padding = same_padding(shape[1], self.kernel_size, stride=1)
-
-            layers.append(nn.Conv1d(in_channels=shape[0],
-                                    out_channels=self.filters,
-                                    kernel_size=self.kernel_size,
-                                    stride=1,
-                                    padding=padding))
-
-            shape = conv_output_shape(input_dim=shape[1],
-                                      kernel_size=self.kernel_size,
-                                      stride=1,
-                                      padding=padding,
-                                      num_filters=self.filters,
-                                      dim=1)
-
-        # Project back up (undo bottleneck)
-        layers.append(nn.BatchNorm1d(num_features=self.filters))
+        layers.append(nn.BatchNorm1d(num_features=shape[0]))
 
         layers.append(get_activation(self.activation))
 
-        # TODO: this does not appear to be in keras code (it uses self.kernel_size)
-        layers.append(nn.Conv1d(in_channels=self.filters,
-                                out_channels=self.input_shape[0],
-                                kernel_size=1,
+        padding = same_padding(shape[1], self.kernel_size, stride=1)
+
+        layers.append(nn.Conv1d(in_channels=shape[0],
+                                out_channels=self.filters,
+                                kernel_size=self.kernel_size,
                                 stride=1,
-                                padding=bottleneck_padding))
+                                padding=padding))
+
+        shape = conv_output_shape(input_dim=shape[1],
+                                  kernel_size=self.kernel_size,
+                                  stride=1,
+                                  padding=padding,
+                                  num_filters=self.filters,
+                                  dim=1)
+
+        # Project back up (undo bottleneck)
+        layers.append(nn.BatchNorm1d(num_features=shape[0]))
+
+        layers.append(get_activation(self.activation))
+
+        # TODO: in_channels=shape[0]
+        # TODO: this does not appear to be in keras code (it uses self.kernel_size)
+        # TODO: address above TODOs and test using self.kernel_size
+        # layers.append(nn.Conv1d(in_channels=shape[0],
+        #                         out_channels=self.input_shape[0],
+        #                         kernel_size=1,
+        #                         stride=1,
+        #                         padding=bottleneck_padding))
+
+        padding = same_padding(shape[1], self.kernel_size, stride=1)
+
+        layers.append(nn.Conv1d(in_channels=shape[0],
+                                out_channels=self.filters,
+                                kernel_size=self.kernel_size,
+                                stride=1,
+                                padding=padding))
+
 
         return nn.Sequential(*layers)
 
@@ -97,17 +134,17 @@ class ResidualConv1d(nn.Module):
         #       Consider if it should be wrapped activation(x + residual).
         #       See forward function.
 
-        padding = same_padding(self.input_shape[1], self.kfac, self.kfac)
+        padding = same_padding(self.temp[1], self.kfac, self.kfac)
 
-        conv = nn.Conv1d(in_channels=self.input_shape[0],
+        conv = nn.Conv1d(in_channels=self.temp[0],
                          out_channels=self.filters,
                          kernel_size=self.kfac,
                          stride=self.kfac,
                          padding=padding)
 
-        act = get_activation(self.activation)
+        #act = get_activation(self.activation)
 
-        shape = conv_output_shape(input_dim=self.input_shape[1],
+        shape = conv_output_shape(input_dim=self.temp[1],
                                   kernel_size=self.kfac,
                                   stride=self.kfac,
                                   padding=padding,
@@ -122,4 +159,4 @@ class ResidualConv1d(nn.Module):
         #       f'\t stride: {self.kfac}\n',
         #       f'\t padding: {padding}\n\n')
 
-        return nn.Sequential(conv, act), shape
+        return nn.Sequential(conv), shape

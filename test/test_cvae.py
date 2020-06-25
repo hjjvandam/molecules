@@ -156,7 +156,7 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def test_rectangular_data_symmetric_vae(self):
+    def _test_rectangular_data_symmetric_vae(self):
 
         rectangular_shape = (1, 22, 30)
         rectangular_shape = (1, 25, 525) # (1, 24, 524)
@@ -173,9 +173,11 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def _test_rectangular_data_resnet_vae(self):
+    def test_rectangular_data_resnet_vae(self):
 
-        rectangular_shape = (22, 30)
+        max_len, nchars = 22, 22
+
+        rectangular_shape = (max_len, nchars)
 
         train_loader = DataLoader(TestVAE.DummyContactMap(rectangular_shape),
                                   batch_size=self.batch_size, shuffle=True)
@@ -183,7 +185,7 @@ class TestVAE:
                                  batch_size=self.batch_size, shuffle=True)
 
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
-        hparams = ResnetVAEHyperparams(nchars=30, max_len=22, latent_dim=11,
+        hparams = ResnetVAEHyperparams(max_len=max_len, nchars=nchars, latent_dim=11,
                                        dec_filters=22)
 
         vae = VAE(rectangular_shape, hparams, self.optimizer_hparams)

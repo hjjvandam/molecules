@@ -1,6 +1,6 @@
 import torch
 from torch import nn
-from molecules.ml.unsupervised.vae.utils import (conv_output_dim, conv_output_shape,
+from molecules.ml.unsupervised.vae.utils import (conv_output_shape,
                                                  same_padding, get_activation,
                                                  init_weights, prod)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
@@ -14,7 +14,7 @@ class ResnetEncoder(nn.Module):
         assert isinstance(hparams, ResnetVAEHyperparams)
         hparams.validate()
 
-        # input_shape is of dimension (N,N) where N is
+        # input_shape is of dimension (N1, N2) where N1, N2 are the
         # number of residues, treat 1st dim of contact matrix as
         # channel
 
@@ -50,6 +50,9 @@ class ResnetEncoder(nn.Module):
 
     def _encoder_layers(self):
         layers = []
+
+        # input_shape[0] is max_len
+        # input_shape[1] is nchars
 
         padding = same_padding(self.input_shape[1], kernel_size=5, stride=1)
 
