@@ -25,7 +25,6 @@ class ResnetDecoder(nn.Module):
 
     def forward(self, x):
         x = x.view(x.shape[0], x.shape[1], 1)
-        print('decoder forward: ', x.shape)
         return self.decoder(x)
 
     def decode(self, embedding):
@@ -53,8 +52,6 @@ class ResnetDecoder(nn.Module):
             if self.hparams.shrink_rounds:
                 self.hparams.shrink_rounds -= 1
 
-            print('decoder res_input_shape: ', res_input_shape)
-
             layers.append(ResidualConv1d(res_input_shape,
                                          filters,
                                          self.hparams.dec_kernel_size,
@@ -73,7 +70,6 @@ class ResnetDecoder(nn.Module):
                     res_input_shape = (res_input_shape[1] * scale_factor, res_input_shape[1] * scale_factor)
                 else:
                     res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
-                print('decoder update res_input_shape ', res_input_shape)
 
         padding = same_padding(res_input_shape[1],
                                self.hparams.dec_kernel_size,

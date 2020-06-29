@@ -42,27 +42,18 @@ class ResidualConv1d(nn.Module):
 
     def forward(self, x):
         # TODO: should we use activation here?
-        print('residual forward x.shape: ', x.shape)
         bn = self.bn(x)
         if bn.shape[2] == 1:
             bn = bn.view(-1, 1, bn.shape[1])
-            print('reshape bn ', bn.shape)
-        print('bn shape: ', bn.shape)
         res = self.residual(bn)
-        # res = self.residual[0](x)
-        # for item in self.residual[1:]:
-        #     res = item(res)
 
         if x.shape[2] == 1:
             x = x.view(-1, x.shape[2], x.shape[1])
-            print('x reshape: ', x.shape)
         conv = self.conv(x)
         x = self.activation_fnc(conv + res)
 
         if self.shrink:
             x = self.shrink_layer(x)
-
-        print('residual end forward x.shape: ', x.shape)
 
         return x
 
@@ -86,18 +77,12 @@ class ResidualConv1d(nn.Module):
 
         # shape = (self.filters, self.input_shape[1])
 
-        # (1, 11) # forward (11, 1)
         shape = self.input_shape
-        # if shape[0] == 1:
-        #     shape = (shape[1], shape[0])
-
         # Now add residual layers
 
         self.bn = nn.BatchNorm1d(num_features=shape[1] if shape[0] == 1 else shape[0])
 
         layers.append(get_activation(self.activation))
-
-        print("BUILD RESNET shape: ", shape)
 
         padding = same_padding(shape[1], self.kernel_size, stride=1)
 

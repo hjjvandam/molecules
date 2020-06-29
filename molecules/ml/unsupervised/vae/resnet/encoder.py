@@ -35,9 +35,7 @@ class ResnetEncoder(nn.Module):
 
     def forward(self, x):
         x = self.encoder(x)
-        m,v = self.mu(x), self.logvar(x)
-        print('encoder forward outshape: ', m.shape)
-        return m, v
+        return self.mu(x), self.logvar(x)
 
     def encode(self, x):
         self.eval()

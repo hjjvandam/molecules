@@ -175,7 +175,9 @@ class TestVAE:
 
     def test_rectangular_data_resnet_vae(self):
 
-        max_len, nchars = 22, 22
+        max_len, nchars = 24, 524
+
+        # (22, 22) input use latent_dim=11, dec_filters=22
 
         rectangular_shape = (max_len, nchars)
 
@@ -185,8 +187,8 @@ class TestVAE:
                                  batch_size=self.batch_size, shuffle=True)
 
         from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
-        hparams = ResnetVAEHyperparams(max_len=max_len, nchars=nchars, latent_dim=11,
-                                       dec_filters=22)
+        hparams = ResnetVAEHyperparams(max_len=max_len, nchars=nchars, latent_dim=12,
+                                       dec_filters=24)
 
         vae = VAE(rectangular_shape, hparams, self.optimizer_hparams)
 
