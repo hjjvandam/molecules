@@ -24,7 +24,7 @@ class ResnetDecoder(nn.Module):
         self.decoder.apply(init_weights)
 
     def forward(self, x):
-        x = x.view(x.shape[0], 1, x.shape[1])
+        x = x.view(x.shape[0], x.shape[1], 1)
         print('decoder forward: ', x.shape)
         return self.decoder(x)
 
@@ -69,7 +69,11 @@ class ResnetDecoder(nn.Module):
                 scale_factor = 2
                 layers.append(nn.Upsample(scale_factor=scale_factor))
                 self.hparams.upsample_rounds -= 1
-                res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
+                if res_input_shape[0] == 1:
+                    res_input_shape = (res_input_shape[1] * scale_factor, res_input_shape[1] * scale_factor)
+                else:
+                    res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
+                print('decoder update res_input_shape ', res_input_shape)
 
         padding = same_padding(res_input_shape[1],
                                self.hparams.dec_kernel_size,

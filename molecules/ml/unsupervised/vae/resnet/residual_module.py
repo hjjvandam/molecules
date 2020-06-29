@@ -16,25 +16,24 @@ class ResidualConv1d(nn.Module):
         self.shrink = shrink
         self.kfac = kfac
 
-        print('res ctor input_shape: ', self.input_shape)
-        print('filters: ', self.filters)
-
         self.residual = self._residual_layers()
-        padding = same_padding(self.input_shape[1], 1, 1)
-        self.conv = nn.Conv1d(self.input_shape[0],
+
+        shape = self.input_shape
+        if shape[1] == 1:
+            shape = (shape[1], shape[0])
+        padding = same_padding(shape[1], 1, 1)
+        self.conv = nn.Conv1d(shape[0],
                               self.filters,
                               kernel_size=1,
                               stride=1,
                               padding=padding)
 
-        self.temp = conv_output_shape(input_dim=self.input_shape[1],
+        self.temp = conv_output_shape(input_dim=shape[1],
                                 kernel_size=1,
                                 stride=1,
                                 padding=padding,
                                 num_filters=self.filters,
                                 dim=1)
-
-        print('res ctor shape: ', self.temp)
 
         self.activation_fnc = get_activation(self.activation)
 
@@ -42,18 +41,28 @@ class ResidualConv1d(nn.Module):
             self.shrink_layer, self.output_shape = self._shrink_layer()
 
     def forward(self, x):
-
         # TODO: should we use activation here?
-        res = self.residual(x)
-        print('res shape: ', res.size())
+        print('residual forward x.shape: ', x.shape)
+        bn = self.bn(x)
+        if bn.shape[2] == 1:
+            bn = bn.view(-1, 1, bn.shape[1])
+            print('reshape bn ', bn.shape)
+        print('bn shape: ', bn.shape)
+        res = self.residual(bn)
+        # res = self.residual[0](x)
+        # for item in self.residual[1:]:
+        #     res = item(res)
+
+        if x.shape[2] == 1:
+            x = x.view(-1, x.shape[2], x.shape[1])
+            print('x reshape: ', x.shape)
         conv = self.conv(x)
-        print('conv shape: ', conv.size())
         x = self.activation_fnc(conv + res)
 
         if self.shrink:
             x = self.shrink_layer(x)
 
-        print('end res: ', x.size())
+        print('residual end forward x.shape: ', x.shape)
 
         return x
 
@@ -62,8 +71,6 @@ class ResidualConv1d(nn.Module):
         # TODO: could add activation for bottleneck layers
         # TODO: prefer wide layers and shallower autoencoder
         #       see https://arxiv.org/pdf/1605.07146.pdf
-
-        assert len(self.input_shape) == 2
 
         layers = []
 
@@ -79,13 +86,18 @@ class ResidualConv1d(nn.Module):
 
         # shape = (self.filters, self.input_shape[1])
 
+        # (1, 11) # forward (11, 1)
         shape = self.input_shape
+        # if shape[0] == 1:
+        #     shape = (shape[1], shape[0])
 
         # Now add residual layers
 
-        layers.append(nn.BatchNorm1d(num_features=shape[0]))
+        self.bn = nn.BatchNorm1d(num_features=shape[1] if shape[0] == 1 else shape[0])
 
         layers.append(get_activation(self.activation))
+
+        print("BUILD RESNET shape: ", shape)
 
         padding = same_padding(shape[1], self.kernel_size, stride=1)
 
@@ -95,6 +107,8 @@ class ResidualConv1d(nn.Module):
                                 stride=1,
                                 padding=padding))
 
+        # N, 22, 11 output
+
         shape = conv_output_shape(input_dim=shape[1],
                                   kernel_size=self.kernel_size,
                                   stride=1,
@@ -102,6 +116,7 @@ class ResidualConv1d(nn.Module):
                                   num_filters=self.filters,
                                   dim=1)
 
+        # 
         # Project back up (undo bottleneck)
         layers.append(nn.BatchNorm1d(num_features=shape[0]))
 
