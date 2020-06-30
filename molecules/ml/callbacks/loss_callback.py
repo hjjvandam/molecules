@@ -12,6 +12,7 @@ class LossCallback(Callback):
         writer : torch.utils.tensorboard.SummaryWriter
         """
         self.writer = writer
+        self.path = path
 
     def on_train_begin(self, logs):
         self.epochs = []
@@ -44,19 +45,23 @@ class LossCallback(Callback):
             Path to save train and validation loss history
         """
 
-        with open(path, 'w') as f:
-            # Happens when loading from a checkpoint
-            if self.epochs[0] != 1:
+        # Happens when loading from a checkpoint
+        if self.epochs[0] != 1:
+            with open(path) as f:
                 data = json.load(f)
                 if data:
                     # Prepend data from checkpointed model to the start of the
                     # current logs. This avoids needing to load the data every
                     # time the logs are saved.
-                    self.epochs = data['epochs'].extend(self.epochs)
-                    self.train_losses = data['train_loss'].extend(self.train_losses)
-                    self.valid_losses = data['valid_loss'].extend(self.valid_losses)
+                    data['epochs'].extend(self.epochs)
+                    data['train_loss'].extend(self.train_losses)
+                    data['valid_loss'].extend(self.valid_losses)
+                    self.epochs = data['epochs']
+                    self.train_losses = data['train_loss']
+                    self.valid_losses = data['valid_loss']
 
-            # Write history to disk
-            json.dumps({'train_loss': self.train_losses,
-                        'valid_loss': self.valid_losses,
-                        'epochs': self.epochs}, f)
+        # Write history to disk
+        with open(path, 'w') as f:
+            json.dump({'train_loss': self.train_losses,
+                       'valid_loss': self.valid_losses,
+                       'epochs': self.epochs}, f)
