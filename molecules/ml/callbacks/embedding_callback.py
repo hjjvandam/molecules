@@ -70,7 +70,7 @@ class EmbeddingCallback(Callback):
     def tsne_plot(self, logs):
         # Outputs 3D embeddings using all available processors
         tsne = TSNE(n_components=3, n_jobs=-1)
-        embeddings = tsne.fit_transform(logs['model'].encode(self.data)) # TODO: convert to np?
+        embeddings = tsne.fit_transform(logs['model'].encode(self.data).cpu().numpy())# TODO: convert to np?
 
         z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
 

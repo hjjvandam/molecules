@@ -48,7 +48,7 @@ class ContactMap(Dataset):
         # Random selection
         #idx = torch.randint(len(self.data), (num,))
         # Take every 100 elements
-        idx = np.arange(0, len(self.data), 100)
+        idx = np.arange(0, len(self.data), 20)
         return self.data[idx], rmsd[idx]
 
     def __len__(self):
@@ -103,7 +103,7 @@ def main(input_path, out_path, model_id, gpu, epochs,
                              'affine_dropouts': [0],
                              'latent_dim': latent_dim}
 
-        input_shape = (1, 22, 22)
+        input_shape = (1, 24, 524)
         squeeze = False
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
 
