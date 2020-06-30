@@ -33,8 +33,8 @@ class EmbeddingCallback(Callback):
     def __init__(self, data, directory, rmsd=None, writer=None):
 
         os.makedirs(directory, exist_ok=True)
-        # TODO: put data to_device
-        self.data = data
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.data = data.to(device)
         self.directory = directory
         self.writer = writer
 
