@@ -1,7 +1,14 @@
+import os
+import time
 import torch
+import matplotlib
+import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+import numpy as np
+from sklearn.manifold import TSNE
 from .callback import Callback
 
-# TODO: add numba dependency to conda env
+# TODO: add numba, tensorboard, Pillow dependency to conda env
 import numba
 @numba.jit
 def minmax(x):
@@ -23,27 +30,26 @@ class EmbeddingCallback(Callback):
         Dataset from which to sample for embeddings.
 
     """
-    def __init__(self, data, rmsd=None):
+    def __init__(self, data, directory, rmsd=None, writer=None):
+
+        os.makedirs(directory, exist_ok=True)
         # TODO: put data to_device
         self.data = data
-        self.i = 0
+        self.directory = directory
+        self.writer = writer
 
         if rmsd is not None:
             self._init_plot(rmsd)
 
     def _init_plot(self, rmsd):
-        import matplotlib
-        import matplotlib.pyplot as plt
-        from mpl_toolkits.mplot3d import Axes3D
-
-        fig = plt.figure()
-        self.ax = fig.add_subplot(111, projection='3d')
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(111, projection='3d')
 
         cmi = plt.get_cmap('jet')
         cnorm = matplotlib.colors.Normalize(vmin=min(rmsd), vmax=max(rmsd))
         scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
         scalar_map.set_array(rmsd)
-        fig.colorbar(scalar_map)
+        self.fig.colorbar(scalar_map)
 
         self.color = scalar_map.to_rgba(rmsd)
 
@@ -58,14 +64,10 @@ class EmbeddingCallback(Callback):
         self.data_index.append(idx)
         self.embeddings.append(embedding)
 
-        if hasattr(self, 'ax'):
+        if hasattr(self, 'fig'):
             self.tsne_plot(logs)
 
     def tsne_plot(self, logs):
-        # TODO: factor out imports. put this callback in it's own file
-        import numpy as np
-        import matplotlib.pyplot as plt
-        from sklearn.manifold import TSNE
         # Outputs 3D embeddings using all available processors
         tsne = TSNE(n_components=3, n_jobs=-1)
         embeddings = tsne.fit_transform(logs['model'].encode(self.data)) # TODO: convert to np?
@@ -79,13 +81,12 @@ class EmbeddingCallback(Callback):
         self.ax.set_xlabel(r'$z_1$')
         self.ax.set_ylabel(r'$z_2$')
         self.ax.set_zlabel(r'$z_3$')
-        self.ax.set_title(f'RMSD to native state after epoch {self.i}')
-        plt.savefig(f'./encoded_train-{self.i}.png', dpi=300)
+        self.ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
+        time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
+        plt.savefig(os.path.join(self.directory, time_stamp), dpi=300)
+        if self.writer is not None:
+            self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
         self.ax.clear()
-
-        # TODO: add filename member var and remove self.i,
-        #       format: filename-epoch-i-timestamp.png
-        self.i += 1
 
     def save(self, path):
         """
@@ -97,5 +98,4 @@ class EmbeddingCallback(Callback):
             Path to save embeddings and indices
 
         """
-
         torch.save({'embeddings': self.embeddings, 'indices': self.data_index}, path)

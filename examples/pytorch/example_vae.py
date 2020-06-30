@@ -4,12 +4,14 @@ from torchsummary import summary
 from torch.utils.data import Dataset, DataLoader
 from molecules.utils import open_h5
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.utils.callback import LossCallback, CheckpointCallback, EmbeddingCallback
+from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
 
 import torch
 import numpy as np
 # TODO: this class is temporary. Will eventually be added to the package.
+#       add this hdf5 dataset class:
+#       https://towardsdatascience.com/hdf5-datasets-for-pytorch-631ff1d750f5
 class ContactMap(Dataset):
     def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
         with open_h5(path) as input_file:
@@ -121,18 +123,22 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     model_path = join(out_path, f'model-{model_id}')
 
     # Optional callbacks
-    loss_callback = LossCallback()
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
     embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample(500),
-                                           rmsd=np.random.normal(size=(500,)))
+                                           directory=join(model_path, 'embedddings'),
+                                           rmsd=np.random.normal(size=(500,)),
+                                           writer=writer)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
               callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history and embedddings history to disk.
-    loss_callback.save(join(model_path, 'loss.pt'))
-    embedding_callback.save(join(model_path, 'embed.pt'))
+    loss_callback.save(join(model_path, 'loss.json'))
+    #embedding_callback.save(join(model_path, 'embed.pt'))
 
     # Save hparams to disk
     hparams.save(join(model_path, 'model-hparams.pkl'))
