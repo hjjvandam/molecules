@@ -14,6 +14,8 @@ import numpy as np
 #       https://towardsdatascience.com/hdf5-datasets-for-pytorch-631ff1d750f5
 class ContactMap(Dataset):
     def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
+        # TODO: path is only here for rmsd. probably a better way.
+        self.path = path
         with open_h5(path) as input_file:
             # Access contact matrix data from h5 file
             data = np.array(input_file['contact_maps'])[:500]
@@ -41,9 +43,13 @@ class ContactMap(Dataset):
     # TODO: not optimal. requries loading entire data set into memory again.
     #       This function is only used by EmbeddingCallback.
     def sample(self, num):
-        """Returns a random sample of 100 contact matrices"""
+        """Returns a random sample of num contact matrices with the
+           correspoinding RMSD to native state."""
+        with open_h5(self.path) as input_file:
+            rmsd = np.array(input_file['RMSD'])
+
         idx = torch.randint(len(self.data), (num,))
-        return self.data[idx]
+        return self.data[idx], rmsd[idx]
 
     def __len__(self):
         return len(self.data)
@@ -127,9 +133,12 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
-    embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample(500),
+
+    embedding_data = ContactMap(input_path, split='valid', squeeze=squeeze)
+    data, rmsd = embedding_data.sample(500)
+    embedding_callback = EmbeddingCallback(data,
                                            directory=join(model_path, 'embedddings'),
-                                           rmsd=np.random.normal(size=(500,)),
+                                           rmsd=rmsd,#np.random.normal(size=(500,)),
                                            writer=writer)
 
     # Train model with callbacks
