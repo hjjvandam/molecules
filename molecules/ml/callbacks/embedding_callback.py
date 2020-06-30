@@ -46,7 +46,7 @@ class EmbeddingCallback(Callback):
         self.ax = self.fig.add_subplot(111, projection='3d')
 
         cmi = plt.get_cmap('jet')
-        cnorm = matplotlib.colors.Normalize(vmin=min(rmsd), vmax=max(rmsd))
+        cnorm = matplotlib.colors.Normalize(vmin=np.min(rmsd), vmax=np.max(rmsd))
         scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
         scalar_map.set_array(rmsd)
         self.fig.colorbar(scalar_map)

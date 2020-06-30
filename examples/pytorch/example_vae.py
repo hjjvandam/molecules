@@ -14,11 +14,11 @@ import numpy as np
 #       https://towardsdatascience.com/hdf5-datasets-for-pytorch-631ff1d750f5
 class ContactMap(Dataset):
     def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
-        # TODO: path is only here for rmsd. probably a better way.
+        # TODO: self.path is only here for rmsd. probably a better way.
         self.path = path
         with open_h5(path) as input_file:
             # Access contact matrix data from h5 file
-            data = np.array(input_file['contact_maps'])[:500]
+            data = np.array(input_file['contact_maps'])
 
         # 80-20 train validation split index
         split_ind = int(split_ptc * len(data))
@@ -30,25 +30,25 @@ class ContactMap(Dataset):
         else:
             raise ValueError(f'Parameter split={split} is invalid.')
 
-        # TODO: this reshape code may not be the best solution. revisit
-        num_residues = self.data.shape[2]
-
         if squeeze:
-            shape = (-1, num_residues, num_residues)
+            shape = (-1, self.data.shape[1], self.data.shape[2])
         else:
-            shape = (-1, 1, num_residues, num_residues)
+            shape = (-1, 1, self.data.shape[1], self.data.shape[2])
 
         self.data = torch.from_numpy(self.data.reshape(shape)).to(torch.float32)
 
     # TODO: not optimal. requries loading entire data set into memory again.
     #       This function is only used by EmbeddingCallback.
-    def sample(self, num):
+    def sample(self):
         """Returns a random sample of num contact matrices with the
            correspoinding RMSD to native state."""
         with open_h5(self.path) as input_file:
-            rmsd = np.array(input_file['RMSD'])
+            rmsd = np.array(input_file['rmsd'])[:, 2]
 
-        idx = torch.randint(len(self.data), (num,))
+        # Random selection
+        #idx = torch.randint(len(self.data), (num,))
+        # Take every 100 elements
+        idx = np.arange(0, len(self.data), 100)
         return self.data[idx], rmsd[idx]
 
     def __len__(self):
@@ -85,7 +85,8 @@ class ContactMap(Dataset):
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, latent_dim):
+def main(input_path, out_path, model_id, gpu, epochs,
+         batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
@@ -135,10 +136,11 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
 
     embedding_data = ContactMap(input_path, split='valid', squeeze=squeeze)
-    data, rmsd = embedding_data.sample(500)
+    data, rmsd = embedding_data.sample()
+
     embedding_callback = EmbeddingCallback(data,
                                            directory=join(model_path, 'embedddings'),
-                                           rmsd=rmsd,#np.random.normal(size=(500,)),
+                                           rmsd=rmsd,
                                            writer=writer)
 
     # Train model with callbacks
