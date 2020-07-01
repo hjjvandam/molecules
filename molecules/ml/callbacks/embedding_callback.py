@@ -58,7 +58,6 @@ class EmbeddingCallback(Callback):
         self.data_index = []
 
     def on_epoch_end(self, epoch, logs):
-        # TODO: may need to change the torch device
         idx = torch.randint(len(self.data), (1,))
         embedding = logs['model'].encode(self.data[idx])
         self.data_index.append(idx)
@@ -68,9 +67,19 @@ class EmbeddingCallback(Callback):
             self.tsne_plot(logs)
 
     def tsne_plot(self, logs):
+        # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
+        #       then run tSNE on outputs of PCA. This works for sparse matrices
+        #       https://pytorch.org/docs/master/generated/torch.pca_lowrank.html
+
+        # TODO: plot different charts using different perplexity values
+
         # Outputs 3D embeddings using all available processors
         tsne = TSNE(n_components=3, n_jobs=-1)
-        embeddings = tsne.fit_transform(logs['model'].encode(self.data).cpu().numpy())# TODO: convert to np?
+
+        # TODO: running on cpu as a numpy array may be an issue for large systems
+        #       consider using pytorch tSNE implemenation. Drawback is that
+        #       so far there are only 2D versions implemented.
+        embeddings = tsne.fit_transform(logs['model'].encode(self.data).cpu().numpy())
 
         z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
 
