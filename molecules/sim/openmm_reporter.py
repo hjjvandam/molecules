@@ -8,7 +8,7 @@ from MDAnalysis.analysis import distances, rms
 
 # TODO: this class needs testing for the RMSD addtions.
 class ContactMapReporter:
-    def __init__(self, file, report_interval, native_pdb=''):
+    def __init__(self, file, report_interval, native_pdb):
         self._report_interval = report_interval
         self._file = h5py.File(file, 'w', libver='latest', swmr=True)
         self._cm_dset = self._file.create_dataset('contact_maps', shape=(2,0), maxshape=(None, None))
