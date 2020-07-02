@@ -4,14 +4,18 @@ from torchsummary import summary
 from torch.utils.data import Dataset, DataLoader
 from molecules.utils import open_h5
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.utils.callback import LossCallback, CheckpointCallback, EmbeddingCallback
+from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
 
 import torch
 import numpy as np
 # TODO: this class is temporary. Will eventually be added to the package.
+#       add this hdf5 dataset class:
+#       https://towardsdatascience.com/hdf5-datasets-for-pytorch-631ff1d750f5
 class ContactMap(Dataset):
     def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
+        # TODO: self.path is only here for rmsd. probably a better way.
+        self.path = path
         with open_h5(path) as input_file:
             # Access contact matrix data from h5 file
             data = np.array(input_file['contact_maps'])
@@ -26,23 +30,26 @@ class ContactMap(Dataset):
         else:
             raise ValueError(f'Parameter split={split} is invalid.')
 
-        # TODO: this reshape code may not be the best solution. revisit
-        num_residues = self.data.shape[2]
-
         if squeeze:
-            shape = (-1, num_residues, num_residues)
+            shape = (-1, self.data.shape[1], self.data.shape[2])
         else:
-            shape = (-1, 1, num_residues, num_residues)
+            shape = (-1, 1, self.data.shape[1], self.data.shape[2])
 
         self.data = torch.from_numpy(self.data.reshape(shape)).to(torch.float32)
 
     # TODO: not optimal. requries loading entire data set into memory again.
     #       This function is only used by EmbeddingCallback.
-    @property
     def sample(self):
-        """Returns a random sample of 100 contact matrices"""
-        idx = torch.randint(len(self.data), (100,))
-        return self.data[idx]
+        """Returns a random sample of num contact matrices with the
+           correspoinding RMSD to native state."""
+        with open_h5(self.path) as input_file:
+            rmsd = np.array(input_file['rmsd'])[:, 2]
+
+        # Random selection
+        #idx = torch.randint(len(self.data), (num,))
+        # Take every 100 elements
+        idx = np.arange(0, len(self.data), 20)
+        return self.data[idx], rmsd[idx]
 
     def __len__(self):
         return len(self.data)
@@ -78,7 +85,8 @@ class ContactMap(Dataset):
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, latent_dim):
+def main(input_path, out_path, model_id, gpu, epochs,
+         batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
@@ -95,7 +103,7 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
                              'affine_dropouts': [0],
                              'latent_dim': latent_dim}
 
-        input_shape = (1, 22, 22)
+        input_shape = (1, 24, 524)
         squeeze = False
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
 
@@ -122,17 +130,26 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     model_path = join(out_path, f'model-{model_id}')
 
     # Optional callbacks
-    loss_callback = LossCallback()
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
-    embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample)
+
+    embedding_data = ContactMap(input_path, split='valid', squeeze=squeeze)
+    data, rmsd = embedding_data.sample()
+
+    embedding_callback = EmbeddingCallback(data,
+                                           directory=join(model_path, 'embedddings'),
+                                           rmsd=rmsd,
+                                           writer=writer)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
               callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history and embedddings history to disk.
-    loss_callback.save(join(model_path, 'loss.pt'))
-    embedding_callback.save(join(model_path, 'embed.pt'))
+    loss_callback.save(join(model_path, 'loss.json'))
+    #embedding_callback.save(join(model_path, 'embed.pt'))
 
     # Save hparams to disk
     hparams.save(join(model_path, 'model-hparams.pkl'))
