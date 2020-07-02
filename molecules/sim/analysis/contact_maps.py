@@ -1,6 +1,5 @@
 import os
 import tables
-
 import MDAnalysis as mda
 from MDAnalysis.analysis import contacts, distances
 
@@ -30,3 +29,12 @@ def contact_maps_from_traj(pdb_file, traj_file, contact_cutoff=8.0, savefile=Non
         outfile.close() 
 
     return contact_matrices
+
+# TODO: implement for pytorch
+def fraction_of_contacts(cm, ref_cm):
+    """Computes the fraction of contacts shared between two contact matrices."""
+    # if isinstance(cm, np.ndarray):
+    #     return (cm == ref_cm).mean()
+    # else torch.Tensor
+    #return (cm == ref_cm).sum() / (cm.shape[0] * cm.shape[1])
+    pass

@@ -7,9 +7,9 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from sklearn.manifold import TSNE
 from .callback import Callback
-
-# TODO: add numba, tensorboard, Pillow dependency to conda env
 import numba
+
+# Helper function. Returns tuple of min and max of 1d np.ndarray.
 @numba.jit
 def minmax(x):
     max_, min_ = x[0], x[0]
