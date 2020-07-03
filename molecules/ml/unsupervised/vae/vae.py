@@ -267,8 +267,8 @@ class VAE:
 
             if self.verbose:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                      epoch, batch_idx * len(data), len(train_loader.dataset),
-                      100. * batch_idx / len(train_loader),
+                      epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
+                      100. * (batch_idx + 1) / len(train_loader),
                       loss.item() / len(data)))
 
         train_loss /= len(train_loader.dataset)
