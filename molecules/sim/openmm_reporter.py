@@ -10,8 +10,21 @@ from MDAnalysis.analysis import distances, rms
 class ContactMapReporter:
     def __init__(self, file, report_interval, native_pdb):
         self._report_interval = report_interval
+        # TODO: May want to use chunked storage. Could chunk into sizes manageable for training.
+        #       If chunked storage is not used, then finding continuous disk space as the data
+        #       set grows may lead to overhead. Might implicitly happen already since we set maxshape.
+        #       http://docs.h5py.org/en/stable/high/dataset.html#chunked-storage
+
+        # TODO: Consider using compression. Might have big disk space savings given the sparsity.
+        #       http://docs.h5py.org/en/stable/high/dataset.html#filter-pipeline
+
+        # TODO: Use checksum to check for data corruption.
+        #       http://docs.h5py.org/en/stable/high/dataset.html#fletcher32-filter
         self._file = h5py.File(file, 'w', libver='latest', swmr=True)
-        self._cm_dset = self._file.create_dataset('contact_maps', shape=(2,0), maxshape=(None, None))
+
+        # TODO: test the dtype feature.
+        self._cm_dset = self._file.create_dataset('contact_maps', dtype='i1',
+                                                  shape=(2,0), maxshape=(None, None))
         self._rmsd_dset = self._file.create_dataset('rmsd', shape=(1,1), maxshape=(None,1))
 
         self._native_positions = Universe(native_pdb).select_atoms('protein').positions()
@@ -24,17 +37,19 @@ class ContactMapReporter:
         return (steps, True, False, False, False, None)
 
     def _report_contact_maps(self, simulation, state, ca_positions):
-        # TODO: can we store contact_map dtype as bool?
+        # TODO: http://docs.h5py.org/en/stable/faq.html
+        #       h5py supported integer types: 1, 2, 4 or 8 byte, BE/LE, signed/unsigned.
+        #       store as 1 byte int
         contact_map = (distances.self_distance_array(ca_positions) < 8.) * 1.
 
-        self._cm_dset.resize((len(contact_map), self._cm_dset.shape[1] + 1))
+        self._cm_dset.resize(self._cm_dset.shape[1] + 1, axis=0)
         self._cm_dset[:, -1] = contact_map
 
     def _report_rmsd(self, simulation, state, positions):
         # RMSD of all protein atoms
         rmsd = rms.rmsd(positions, self._native_positions)
 
-        self._rmsd_dset.resize(1, self._rmsd_dset.shape[1] + 1)
+        self._rmsd_dset.resize(self._rmsd_dset.shape[1] + 1, axis=0)
         self._rmsd_dset[0, -1] = rmsd
 
     def _report(self, simulation, state):
