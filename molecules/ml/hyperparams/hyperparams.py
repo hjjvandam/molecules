@@ -14,6 +14,8 @@ class Hyperparams(metaclass=ABCMeta):
     def validate(self):
         raise NotImplementedError('Must implement validate().')
 
+    # TODO: swtich from pickle to json
+
     def save(self, path):
         """Write HyperParams object to disk."""
         with open(path, 'wb') as file:
