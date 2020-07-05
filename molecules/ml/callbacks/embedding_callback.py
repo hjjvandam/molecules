@@ -81,6 +81,7 @@ class EmbeddingCallback(Callback):
     def batches(self):
         """
         Generator to return batches of contact map dset.
+        Batches consist of every self.sample_interval'th point.
         NOTE: last batch may have diferent size.
         """
         start, step = 0, self.sample_interval * self.batch_size
