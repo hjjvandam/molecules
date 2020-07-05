@@ -5,7 +5,7 @@ from .callback import Callback
 
 class CheckpointCallback(Callback):
     def __init__(self, interval=0,
-                 directory=os.path.join('.', 'checkpoints')):
+                 out_dir=os.path.join('.', 'checkpoints')):
         """
         Checkpoint interface for saving dictionary objects to disk
         during training. Typically used to save model state_dict
@@ -14,7 +14,7 @@ class CheckpointCallback(Callback):
 
         Parameters
         ----------
-        directory : str
+        out_dir : str
             Directory to store checkpoint files.
             Files are named 'epoch-{e}-%Y%m%d-%H%M%S.pt'
 
@@ -25,10 +25,10 @@ class CheckpointCallback(Callback):
         if interval < 0:
             raise ValueError('Checkpoint interval must be non-negative')
 
-        os.makedirs(directory, exist_ok=True)
+        os.makedirs(out_dir, exist_ok=True)
 
         self.interval = interval
-        self.directory = directory
+        self.out_dir = out_dir
 
     def on_batch_end(self, batch, epoch, logs):
         if self.interval and batch % self.interval == 0:
@@ -49,6 +49,5 @@ class CheckpointCallback(Callback):
             }
 
         time_stamp = time.strftime(f'epoch-{epoch}-%Y%m%d-%H%M%S.pt')
-        path = os.path.join(self.directory, time_stamp)
+        path = os.path.join(self.out_dir, time_stamp)
         torch.save(checkpoint, path)
-
