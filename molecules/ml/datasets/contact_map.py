@@ -52,7 +52,6 @@ class ContactMapDataset(Dataset):
         return len(self.dset) - self.split_ind
 
     def __getitem__(self, idx):
-        import time; start = time.time()
         if self.split == 'valid':
             idx += self.split_ind
         return torch.from_numpy(np.array(self.dset[idx]) \
