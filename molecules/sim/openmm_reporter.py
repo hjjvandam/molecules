@@ -23,6 +23,9 @@ class ContactMapReporter:
         self._file = h5py.File(file, 'w', libver='latest', swmr=True)
 
         # TODO: test the dtype feature.
+        # TODO: when reading in data, can convert type to what is needed with
+        #       >>> with dset.astype('int16'):
+        #       ...     out = dset[:]
         self._cm_dset = self._file.create_dataset('contact_maps', dtype='i1',
                                                   shape=(2,0), maxshape=(None, None))
         self._rmsd_dset = self._file.create_dataset('rmsd', shape=(1,1), maxshape=(None,1))
