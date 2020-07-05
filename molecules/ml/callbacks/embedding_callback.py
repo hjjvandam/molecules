@@ -79,13 +79,16 @@ class EmbeddingCallback(Callback):
         self._init_plot(h5_file)
 
     def batches(self):
-        """Generator to return batches of contact map dset."""
-        start = 0
-        for idx in range(0, len(self.dset), self.sample_interval * self.batch_size):
-            yield torch.from_numpy(np.array(self.dset[start: start + self.sample_interval*self.batch_size: self.sample_interval]) \
+        """
+        Generator to return batches of contact map dset.
+        NOTE: last batch may have diferent size.
+        """
+        start, step = 0, self.sample_interval * self.batch_size
+        for idx in range(0, len(self.dset), step):
+            yield torch.from_numpy(
+                     np.array(self.dset[start: start + step: self.sample_interval]) \
                        .reshape(-1, *self.shape)).to(torch.float32).to(self.device)
-            start += self.sample_interval * self.batch_size
-
+            start += step
 
     def sample(self, h5_file):
 
