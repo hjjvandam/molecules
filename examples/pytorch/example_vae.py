@@ -20,8 +20,10 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-m', '--model_id', required=True,
               help='Model ID in for file naming')
 
-@click.option('-g', '--gpu', default=0, type=int,
-              help='GPU id')
+@click.option('-E', '--encoder_gpu', default=None, type=int,
+              help='Encoder GPU id')
+@click.option('-D', '--decoder_gpu', default=None, type=int,
+              help='Decoder GPU id')
 
 @click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
@@ -35,8 +37,8 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, gpu, epochs,
-         batch_size, model_type, latent_dim):
+def main(input_path, out_path, model_id, encoder_gpu,
+         decoder_gpu, epochs, batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
@@ -64,7 +66,8 @@ def main(input_path, out_path, model_id, gpu, epochs,
 
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
-    vae = VAE(input_shape, hparams, optimizer_hparams)
+    vae = VAE(input_shape, hparams, optimizer_hparams,
+              gpu=(encoder_gpu, decoder_gpu))
 
     # Diplay model
     print(vae)
@@ -72,9 +75,9 @@ def main(input_path, out_path, model_id, gpu, epochs,
 
     # Load training and validation data
     train_loader = DataLoader(ContactMapDataset(input_path, split='train', squeeze=squeeze),
-                              batch_size=batch_size, shuffle=True, num_workers=4)
+                              batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
     valid_loader = DataLoader(ContactMapDataset(input_path, split='valid', squeeze=squeeze),
-                              batch_size=batch_size, shuffle=True, num_workers=4)
+                              batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
