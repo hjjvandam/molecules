@@ -293,6 +293,25 @@ class TestVAE:
             x = x.view(-1, *input_shape)
             out = res(x)
 
+    def test_resnet_big_input(self):
+        big_shape = (3768, 3768) # GB: 0.113582592
+
+        train_loader = DataLoader(TestVAE.DummyContactMap(big_shape, size=5),
+                                  batch_size=2, shuffle=True)
+        test_loader = DataLoader(TestVAE.DummyContactMap(big_shape, size=5),
+                                 batch_size=5, shuffle=True)
+
+
+        from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
+        hparams = ResnetVAEHyperparams(nchars=3768, max_len=3768, latent_dim=24)
+
+        vae = VAE(big_shape, hparams, self.optimizer_hparams)
+
+        print(vae)
+        summary(vae.model, big_shape)
+
+        vae.train(train_loader, test_loader, self.epochs)
+
     @classmethod
     def teardown_class(self):
         # Delete file to clean testing directories
