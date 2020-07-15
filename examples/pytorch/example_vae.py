@@ -100,8 +100,8 @@ def main(input_path, out_path, model_id, encoder_gpu,
     loss_callback.save(join(model_path, 'loss.json'))
 
     # Save hparams to disk
-    hparams.save(join(model_path, 'model-hparams.pkl'))
-    optimizer_hparams.save(join(model_path, 'optimizer-hparams.pkl'))
+    hparams.save(join(model_path, 'model-hparams.json'))
+    optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
 
     # Save final model weights to disk
     vae.save_weights(join(model_path, 'encoder-weights.pt'),

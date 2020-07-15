@@ -1,4 +1,4 @@
-import pickle
+import json
 from abc import ABCMeta, abstractmethod
 
 class Hyperparams(metaclass=ABCMeta):
@@ -14,16 +14,14 @@ class Hyperparams(metaclass=ABCMeta):
     def validate(self):
         raise NotImplementedError('Must implement validate().')
 
-    # TODO: swtich from pickle to json
-
     def save(self, path):
         """Write HyperParams object to disk."""
-        with open(path, 'wb') as file:
-            pickle.dump(self, file)
+        with open(path, 'w') as file:
+            json.dump(self.__dict__, file)
 
-    def load(path):
+    def load(self, path):
         """Load HyperParams object from disk."""
-        with open(path, 'rb') as file:
-            hparams = pickle.load(file)
-        hparams.validate()
-        return hparams
+        with open(path, 'r') as file:
+            self.__dict__ = json.load(file)
+        self.validate()
+        return self

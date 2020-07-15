@@ -10,7 +10,8 @@ class TestHyperParams:
 
     @classmethod
     def setup_class(self):
-        self.fname = os.path.join('.', 'test', 'data', 'encoder-hparams.pkl')
+        self.encoder_fname = os.path.join('.', 'test', 'data', 'encoder-hparams.json')
+        self.optimizer_fname = os.path.join('.', 'test', 'data', 'optimizer-hparams.json')
 
     def test_save_load_functions(self):
         # Set model hyperparameters for encoder
@@ -24,14 +25,14 @@ class TestHyperParams:
         hparams = SymmetricVAEHyperparams(**hparam_options)
 
         # Save model hyperparameters to disk
-        hparams.save(self.fname)
+        hparams.save(self.encoder_fname)
 
         # Check that 'encoder-hparams.pkl' is in ./test/data
-        assert os.path.basename(self.fname) \
-            in os.listdir(os.path.dirname(self.fname))
+        assert os.path.basename(self.encoder_fname) \
+            in os.listdir(os.path.dirname(self.encoder_fname))
 
         # Load saved hyperparameters from disk
-        loaded_hparams = SymmetricVAEHyperparams.load(self.fname)
+        loaded_hparams = SymmetricVAEHyperparams().load(self.encoder_fname)
 
         # Check that all attributes were read from disk correctly
         for key, val in hparam_options.items():
@@ -92,9 +93,18 @@ class TestHyperParams:
 
         optimizer_hparams = OptimizerHyperparams(name, hparams)
 
-        optimizer = get_optimizer(model, optimizer_hparams)
+        optimizer_hparams.save(self.optimizer_fname)
+
+        del optimizer_hparams
+        import gc
+        gc.collect()
+
+        loaded_hparams = OptimizerHyperparams().load(self.optimizer_fname)
+
+        optimizer = get_optimizer(model, loaded_hparams)
 
     @classmethod
     def teardown_class(self):
         # Delete file to clean testing directories
-        os.remove(self.fname)
+        os.remove(self.encoder_fname)
+        os.remove(self.optimizer_fname)
