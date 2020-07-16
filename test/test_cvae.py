@@ -14,15 +14,32 @@ class TestVAE:
     class DummyContactMap(Dataset):
             def __init__(self, input_shape, size=200):
                 self.maps = np.random.normal(size=(size, *input_shape))
-                #self.maps = np.array([self.maps for _ in range(size)])
-
-                # Creates size identity matrices. Total shape: (size, input_shape)
 
             def __len__(self):
                 return len(self.maps)
 
             def __getitem__(self, idx):
                 return torch.from_numpy(self.maps[idx]).to(torch.float32)
+
+    class SparseSquareContactMap(Dataset):
+            def __init__(self, input_shape, size=200):
+                self.input_shape = input_shape
+                self.maps = np.array([np.eye(input_shape[1]) for _ in range(size)])
+                # Creates size identity matrices. Total shape: (size, input_shape)
+
+            def __len__(self):
+                return len(self.maps)
+
+            def __getitem__(self, idx):
+                from scipy.sparse import coo_matrix
+                coo = coo_matrix(self.maps[idx])
+
+                values = coo.data
+                indices = np.vstack((coo.row, coo.col))
+                i = torch.LongTensor(indices)
+                v = torch.FloatTensor(values)
+
+                return torch.sparse.FloatTensor(i, v, torch.Size(coo.shape))
 
 
     # TODO: find elegant way to get the input_shape for the model initialization
@@ -170,7 +187,7 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def test_rectangular_data_symmetric_vae(self):
+    def _test_rectangular_data_symmetric_vae(self):
 
         rectangular_shape = (1, 22, 22)
         #rectangular_shape = (1, 24, 524)
@@ -184,6 +201,22 @@ class TestVAE:
 
         print(vae)
         summary(vae.model, rectangular_shape)
+
+        vae.train(train_loader, test_loader, self.epochs)
+
+    def test_sparse_data_symmetric_vae(self):
+
+        input_shape = (1, 22, 22)
+
+        train_loader = DataLoader(TestVAE.SparseSquareContactMap(input_shape),
+                                  batch_size=self.batch_size, shuffle=True)
+        test_loader = DataLoader(TestVAE.SparseSquareContactMap(input_shape),
+                                 batch_size=self.batch_size, shuffle=True)
+
+        vae = VAE(input_shape, self.hparams, self.optimizer_hparams)
+
+        print(vae)
+        summary(vae.model, input_shape)
 
         vae.train(train_loader, test_loader, self.epochs)
 
