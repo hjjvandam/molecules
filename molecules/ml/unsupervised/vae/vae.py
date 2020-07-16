@@ -39,9 +39,9 @@ class VAEModel(nn.Module):
         return mu + eps*std
 
     def forward(self, x):
-        mu, logvar = self.encoder(x)
-        x = self.reparameterize(mu, logvar).to(self.device.encoder)
-        x = self.decoder(x).to(self.device.decoder)
+        mu, logvar = self.encoder(x.to(self.device.encoder))
+        x = self.reparameterize(mu, logvar).to(self.device.decoder)
+        x = self.decoder(x).to(self.device.encoder)
         # TODO: see if we can remove this to speed things up
         #       or find an inplace way. Only necessary for bad
         #       hyperparam config such as optimizer learning rate
@@ -203,7 +203,7 @@ class VAE:
             device = torch.device(f'cuda:{gpu}')
             return device, device
         if isinstance(gpu, tuple) and len(gpu) == 2:
-            return torch.device(f'cuda{gpu[0]}'), torch.device(f'cuda{gpu[1]}')
+            return torch.device(f'cuda:{gpu[0]}'), torch.device(f'cuda:{gpu[1]}')
         raise ValueError('Specified GPU device is invalid. Should be int, 2-tuple or None.')
 
     def __repr__(self):
@@ -292,7 +292,7 @@ class VAE:
                 callback.on_batch_begin(batch_idx, epoch, logs)
 
             # TODO: Consider passing device argument into dataset class instead
-            data = data.to(self.device.encoder)
+            # data = data.to(self.device.encoder)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
             loss = self.loss_fnc(recon_batch, data, mu, logvar)
@@ -342,7 +342,7 @@ class VAE:
         valid_loss = 0
         with torch.no_grad():
             for data in valid_loader:
-                data = data.to(self.device)
+                # data = data.to(self.device)
                 recon_batch, mu, logvar = self.model(data)
                 valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
 
