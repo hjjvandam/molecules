@@ -93,9 +93,6 @@ class VAE:
 
     Attributes
     ----------
-    input_shape : tuple
-        shape of incomming data.
-
     model : torch.nn.Module (VAEModel)
         Underlying Pytorch model with encoder/decoder attributes.
 
@@ -161,7 +158,6 @@ class VAE:
         hparams.validate()
         optimizer_hparams.validate()
 
-        self.input_shape = input_shape
         self.verbose = verbose
 
         # Tuple of encoder, decoder device
@@ -383,7 +379,7 @@ class VAE:
         ----------
         x : torch.Tensor
             Data to encode, could be a batch of data with dimension
-            (batch-size, input_shape)
+            (batch_size, input_shape)
 
         Returns
         -------

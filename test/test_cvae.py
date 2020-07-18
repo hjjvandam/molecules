@@ -21,6 +21,7 @@ class TestVAE:
             def __getitem__(self, idx):
                 return torch.from_numpy(self.maps[idx]).to(torch.float32)
 
+
     class SparseSquareContactMap(Dataset):
             def __init__(self, input_shape, size=200):
                 self.input_shape = input_shape
@@ -206,7 +207,7 @@ class TestVAE:
 
     def test_sparse_data_symmetric_vae(self):
 
-        input_shape = (1, 22, 22)
+        input_shape = (22, 22)
 
         train_loader = DataLoader(TestVAE.SparseSquareContactMap(input_shape),
                                   batch_size=self.batch_size, shuffle=True)
