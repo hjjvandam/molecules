@@ -1,3 +1,4 @@
+import time
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -282,6 +283,9 @@ class VAE:
         train_loss = 0.
         for batch_idx, data in enumerate(train_loader):
 
+            if self.verbose:
+                start = time.time()
+
             if callbacks:
                 pass # TODO: add more to logs
 
@@ -302,10 +306,10 @@ class VAE:
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
                       epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data)))
+                      loss.item() / len(data), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
