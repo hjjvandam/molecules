@@ -39,7 +39,8 @@ class VAEModel(nn.Module):
         return mu + eps*std
 
     def forward(self, x):
-        mu, logvar = self.encoder(x.to(self.device.encoder))
+        # x should be placed on encoder gpu in the dataset class
+        mu, logvar = self.encoder(x)
         x = self.reparameterize(mu, logvar).to(self.device.decoder)
         x = self.decoder(x).to(self.device.encoder)
         # TODO: see if we can remove this to speed things up

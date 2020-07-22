@@ -1,3 +1,4 @@
+import os
 import click
 from os.path import join
 from torchsummary import summary
@@ -22,6 +23,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 
 @click.option('-E', '--encoder_gpu', default=None, type=int,
               help='Encoder GPU id')
+
 @click.option('-D', '--decoder_gpu', default=None, type=int,
               help='Decoder GPU id')
 
@@ -43,6 +45,15 @@ def main(input_path, out_path, model_id, encoder_gpu,
 
     assert model_type in ['symmetric', 'resnet']
 
+    # Add incoming devices to visible devices, or default to gpu:0
+    os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+    if None not in (encoder_gpu, decoder_gpu):
+        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join({str(encoder_gpu),
+                                                       str(decoder_gpu)})
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
+
+    print('CUDA devices: ', os.environ['CUDA_VISIBLE_DEVICES'])
     # Note: See SymmetricVAEHyperparams, ResnetVAEHyperparams class definitions
     #       for hyperparameter options. 
 
@@ -71,13 +82,20 @@ def main(input_path, out_path, model_id, encoder_gpu,
 
     # Diplay model
     print(vae)
-    summary(vae.model, input_shape)
+    # Only print summary when encoder_gpu is None or 0
+    #summary(vae.model, input_shape)
 
     # Load training and validation data
-    train_loader = DataLoader(ContactMapDataset(input_path, split='train', squeeze=squeeze),
-                              batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
-    valid_loader = DataLoader(ContactMapDataset(input_path, split='valid', squeeze=squeeze),
-                              batch_size=batch_size, shuffle=True, num_workers=4, pin_memory=True)
+    train_loader = DataLoader(ContactMapDataset(input_path,
+                                                split='train',
+                                                squeeze=squeeze,
+                                                gpu=encoder_gpu),
+                              batch_size=batch_size, shuffle=True)
+    valid_loader = DataLoader(ContactMapDataset(input_path,
+                                                split='valid',
+                                                squeeze=squeeze,
+                                                gpu=encoder_gpu),
+                              batch_size=batch_size, shuffle=True)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
