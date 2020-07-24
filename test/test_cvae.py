@@ -14,15 +14,33 @@ class TestVAE:
     class DummyContactMap(Dataset):
             def __init__(self, input_shape, size=200):
                 self.maps = np.random.normal(size=(size, *input_shape))
-                #self.maps = np.array([self.maps for _ in range(size)])
-
-                # Creates size identity matrices. Total shape: (size, input_shape)
 
             def __len__(self):
                 return len(self.maps)
 
             def __getitem__(self, idx):
                 return torch.from_numpy(self.maps[idx]).to(torch.float32)
+
+
+    class SparseSquareContactMap(Dataset):
+            def __init__(self, input_shape, size=200):
+                self.input_shape = input_shape
+                self.maps = np.array([np.eye(input_shape[1]) for _ in range(size)])
+                # Creates size identity matrices. Total shape: (size, input_shape)
+
+            def __len__(self):
+                return len(self.maps)
+
+            def __getitem__(self, idx):
+                from scipy.sparse import coo_matrix
+                coo = coo_matrix(self.maps[idx])
+
+                values = coo.data
+                indices = np.vstack((coo.row, coo.col))
+                i = torch.LongTensor(indices)
+                v = torch.FloatTensor(values)
+
+                return torch.sparse.FloatTensor(i, v, torch.Size(coo.shape))
 
 
     # TODO: find elegant way to get the input_shape for the model initialization
@@ -76,19 +94,33 @@ class TestVAE:
 
 
         # Optimal Fs-peptide params
-        fs_peptide_hparams ={'filters': [100, 100, 100, 100],
-                             'kernels': [5, 5, 5, 5],
-                             'strides': [1, 2, 1, 1],
-                             'affine_widths': [64],
-                             'affine_dropouts': [0],
-                             'latent_dim': 10}
+        fs_peptide_hparams = {'filters': [100, 100, 100, 100],
+                              'kernels': [5, 5, 5, 5],
+                              'strides': [1, 2, 1, 1],
+                              'affine_widths': [64],
+                              'affine_dropouts': [0],
+                              'latent_dim': 10}
 
-        hparams ={'filters': [64, 64, 64, 64],
-                  'kernels': [3, 3, 3, 3],
-                  'strides': [1, 2, 1, 1],
-                  'affine_widths': [128],
-                  'affine_dropouts': [0],
-                  'latent_dim': 3}
+        diff_filters_hparams = {'filters': [100, 64, 64, 100],
+                                'kernels': [5, 5, 3, 7],
+                                'strides': [1, 2, 1, 2],
+                                'affine_widths': [64],
+                                'affine_dropouts': [0],
+                                'latent_dim': 10}
+
+        strided_hparams = {'filters': [100, 100, 100, 100],
+                           'kernels': [5, 5, 5, 5],
+                           'strides': [1, 2, 2, 1],
+                           'affine_widths': [64],
+                           'affine_dropouts': [0],
+                           'latent_dim': 10}
+
+        hparams = {'filters': [64, 64, 64, 64],
+                   'kernels': [3, 3, 3, 3],
+                   'strides': [1, 2, 1, 1],
+                   'affine_widths': [128],
+                   'affine_dropouts': [0],
+                   'latent_dim': 3}
 
         self.hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
         self.optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
@@ -158,8 +190,8 @@ class TestVAE:
 
     def _test_rectangular_data_symmetric_vae(self):
 
-        rectangular_shape = (1, 22, 30)
-        rectangular_shape = (1, 25, 525) # (1, 24, 524)
+        rectangular_shape = (1, 22, 22)
+        #rectangular_shape = (1, 24, 524)
 
         train_loader = DataLoader(TestVAE.DummyContactMap(rectangular_shape),
                                   batch_size=self.batch_size, shuffle=True)
@@ -173,7 +205,23 @@ class TestVAE:
 
         vae.train(train_loader, test_loader, self.epochs)
 
-    def test_rectangular_data_resnet_vae(self):
+    def test_sparse_data_symmetric_vae(self):
+
+        input_shape = (22, 22)
+
+        train_loader = DataLoader(TestVAE.SparseSquareContactMap(input_shape),
+                                  batch_size=self.batch_size, shuffle=True)
+        test_loader = DataLoader(TestVAE.SparseSquareContactMap(input_shape),
+                                 batch_size=self.batch_size, shuffle=True)
+
+        vae = VAE(input_shape, self.hparams, self.optimizer_hparams)
+
+        print(vae)
+        summary(vae.model, input_shape)
+
+        vae.train(train_loader, test_loader, self.epochs)
+
+    def _test_rectangular_data_resnet_vae(self):
 
         #max_len, nchars = 24, 524
 

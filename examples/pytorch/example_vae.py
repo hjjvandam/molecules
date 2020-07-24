@@ -1,55 +1,12 @@
+import os
 import click
 from os.path import join
 from torchsummary import summary
-from torch.utils.data import Dataset, DataLoader
-from molecules.utils import open_h5
+from torch.utils.data import DataLoader
+from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.utils.callback import LossCallback, CheckpointCallback, EmbeddingCallback
+from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
-
-import torch
-import numpy as np
-# TODO: this class is temporary. Will eventually be added to the package.
-class ContactMap(Dataset):
-    def __init__(self, path, split_ptc=0.8, split='train', squeeze=False):
-        with open_h5(path) as input_file:
-            # Access contact matrix data from h5 file
-            data = np.array(input_file['contact_maps'])
-
-        # 80-20 train validation split index
-        split_ind = int(split_ptc * len(data))
-
-        if split == 'train':
-            self.data = data[:split_ind]
-        elif split == 'valid':
-            self.data = data[split_ind:]
-        else:
-            raise ValueError(f'Parameter split={split} is invalid.')
-
-        # TODO: this reshape code may not be the best solution. revisit
-        num_residues = self.data.shape[2]
-        assert num_residues == 22
-
-        if squeeze:
-            shape = (-1, num_residues, num_residues)
-        else:
-            shape = (-1, 1, num_residues, num_residues)
-
-        self.data = torch.from_numpy(self.data.reshape(shape)).to(torch.float32)
-
-    # TODO: not optimal. requries loading entire data set into memory again.
-    #       This function is only used by EmbeddingCallback.
-    @property
-    def sample(self):
-        """Returns a random sample of 100 contact matrices"""
-        idx = torch.randint(len(self.data), (100,))
-        return self.data[idx]
-
-    def __len__(self):
-        return len(self.data)
-
-    def __getitem__(self, idx):
-        return self.data[idx]
 
 
 @click.command()
@@ -64,8 +21,11 @@ class ContactMap(Dataset):
 @click.option('-m', '--model_id', required=True,
               help='Model ID in for file naming')
 
-@click.option('-g', '--gpu', default=0, type=int,
-              help='GPU id')
+@click.option('-E', '--encoder_gpu', default=None, type=int,
+              help='Encoder GPU id')
+
+@click.option('-D', '--decoder_gpu', default=None, type=int,
+              help='Decoder GPU id')
 
 @click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
@@ -79,11 +39,21 @@ class ContactMap(Dataset):
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, latent_dim):
+def main(input_path, out_path, model_id, encoder_gpu,
+         decoder_gpu, epochs, batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
 
+    # Add incoming devices to visible devices, or default to gpu:0
+    os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
+    if None not in (encoder_gpu, decoder_gpu):
+        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join({str(encoder_gpu),
+                                                       str(decoder_gpu)})
+    else:
+        os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
+
+    print('CUDA devices: ', os.environ['CUDA_VISIBLE_DEVICES'])
     # Note: See SymmetricVAEHyperparams, ResnetVAEHyperparams class definitions
     #       for hyperparameter options. 
 
@@ -107,37 +77,49 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
 
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
-    vae = VAE(input_shape, hparams, optimizer_hparams)
+    vae = VAE(input_shape, hparams, optimizer_hparams,
+              gpu=(encoder_gpu, decoder_gpu))
 
     # Diplay model
     print(vae)
-    summary(vae.model, input_shape)
+    # Only print summary when encoder_gpu is None or 0
+    #summary(vae.model, input_shape)
 
     # Load training and validation data
-    train_loader = DataLoader(ContactMap(input_path, split='train', squeeze=squeeze),
+    train_loader = DataLoader(ContactMapDataset(input_path,
+                                                split='train',
+                                                squeeze=squeeze,
+                                                gpu=encoder_gpu),
                               batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(ContactMap(input_path, split='valid', squeeze=squeeze),
+    valid_loader = DataLoader(ContactMapDataset(input_path,
+                                                split='valid',
+                                                squeeze=squeeze,
+                                                gpu=encoder_gpu),
                               batch_size=batch_size, shuffle=True)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
 
     # Optional callbacks
-    loss_callback = LossCallback()
-    checkpoint_callback = CheckpointCallback(directory=join(model_path, 'checkpoint'))
-    embedding_callback = EmbeddingCallback(ContactMap(input_path, split='valid', squeeze=squeeze).sample)
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
+    embedding_callback = EmbeddingCallback(input_path,
+                                           out_dir=join(model_path, 'embedddings'),
+                                           squeeze=squeeze,
+                                           writer=writer)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
               callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
-    # Save loss history and embedddings history to disk.
-    loss_callback.save(join(model_path, 'loss.pt'))
-    embedding_callback.save(join(model_path, 'embed.pt'))
+    # Save loss history to disk.
+    loss_callback.save(join(model_path, 'loss.json'))
 
     # Save hparams to disk
-    hparams.save(join(model_path, 'model-hparams.pkl'))
-    optimizer_hparams.save(join(model_path, 'optimizer-hparams.pkl'))
+    hparams.save(join(model_path, 'model-hparams.json'))
+    optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
 
     # Save final model weights to disk
     vae.save_weights(join(model_path, 'encoder-weights.pt'),
@@ -150,9 +132,8 @@ def main(input_path, out_path, model_id, gpu, epochs, batch_size, model_type, la
     # │   │   ├── epoch-1-20200606-125334.pt
     # │   │   └── epoch-2-20200606-125338.pt
     # │   ├── decoder-weights.pt
-    # │   ├── embed.pt
     # │   ├── encoder-weights.pt
-    # │   ├── loss.pt
+    # │   ├── loss.json
     # │   ├── model-hparams.pkl
     # │   └── optimizer-hparams.pkl
 

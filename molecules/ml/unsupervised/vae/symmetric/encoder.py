@@ -12,8 +12,7 @@ class SymmetricEncoderConv2d(nn.Module):
         assert isinstance(hparams, SymmetricVAEHyperparams)
         hparams.validate()
 
-        self.input_shape = input_shape
-        # Stores (channels, height, width) of the last conv layer
+        # Stores (channels, height, width) of conv layers
         self.shapes = [input_shape]
         self.hparams = hparams
 
@@ -58,6 +57,8 @@ class SymmetricEncoderConv2d(nn.Module):
 
         layers = []
 
+        act = get_activation(self.hparams.activation)
+
         for filter_, kernel, stride in zip(self.hparams.filters,
                                            self.hparams.kernels,
                                            self.hparams.strides):
@@ -70,7 +71,7 @@ class SymmetricEncoderConv2d(nn.Module):
                                     stride=stride,
                                     padding=padding))
 
-            layers.append(get_activation(self.hparams.activation))
+            layers.append(act)
 
             # Output shape is (channels, height, width)
             self.shapes.append(conv_output_shape(self.shapes[-1][1:], kernel,

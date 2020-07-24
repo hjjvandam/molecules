@@ -22,8 +22,9 @@ def conv_output_dim(input_dim, kernel_size, stride, padding,
     """
 
     if transpose:
-        # TODO: see symmetric decoder _conv_layers
-        output_padding = 1 if stride != 1 else 0
+        # TODO: see symmetric decoder _conv_layers,
+        #       may have bugs for transpose layers
+        output_padding = 1 if stride > 1 else 0
         output_padding = 0
         return (input_dim - 1) * stride + kernel_size - 2*padding + output_padding
 
@@ -91,7 +92,9 @@ def _same_padding(input_dim, kernel_size, stride):
     for i in reversed(range((input_dim - kernel_size) // stride + 1)):
         alpha = kernel_size + i*stride
         if alpha <= input_dim:
-            return input_dim - alpha
+            # TODO: see symmetric decoder
+            # adjustment = int(input_dim % 2 == 0)
+            return input_dim - alpha # + adjustment
 
     raise Exception('No padding found')
 
