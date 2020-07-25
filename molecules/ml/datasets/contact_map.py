@@ -9,7 +9,7 @@ class ContactMapDataset(Dataset):
     files and only reads into memory what is necessary for one batch.
     """
     def __init__(self, path, split_ptc=0.8, split='train',
-                 squeeze=False, gpu=None):
+                 squeeze=False, sparse=False, gpu=None):
         """
         Parameters
         ----------
@@ -26,6 +26,16 @@ class ContactMapDataset(Dataset):
         squeeze : bool
             If True, data is reshaped to (H, W) else if False data
             is reshaped to (1, H, W).
+
+        sparse : bool
+            If True, process data as sparse row/col COO format. Data
+            should not contain any values because they are all 1's and
+            generated on the fly. If False, input data is normal tensor.
+
+        gpu : int, None
+            If None, then data will be put onto the default GPU if CUDA
+            is available and otherwise is put onto a CPU. If gpu is int
+            type, then data is put onto the specified GPU.
         """
         if split not in ('train', 'valid'):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
@@ -35,12 +45,19 @@ class ContactMapDataset(Dataset):
         # Open h5 file. Python's garbage collector closes the
         # file when class is destructed.
         h5_file = open_h5(path)
-        # contact_maps dset has shape (N, W, H, 1)
-        self.dset = h5_file['contact_maps']
+
+        if sparse:
+            group = h5_file['contact_maps']
+            self.row_dset = group.get('row')
+            self.col_dset = group.get('col')
+        else:
+            # contact_maps dset has shape (N, W, H, 1)
+            self.dset = h5_file['contact_maps']
  
         # train validation split index
         self.split_ind = int(split_ptc * len(self.dset))
         self.split = split
+        self.sparse = sparse
 
         if squeeze:
             self.shape = (self.dset.shape[1], self.dset.shape[2])
@@ -60,5 +77,16 @@ class ContactMapDataset(Dataset):
     def __getitem__(self, idx):
         if self.split == 'valid':
             idx += self.split_ind
-        return torch.from_numpy(np.array(self.dset[idx]) \
-                 .reshape(self.shape)).to(self.device).to(torch.float32)
+
+        if self.sparse:
+            indices = torch.from_numpy(np.vstack((self.row_dset[idx],
+                                                  self.col_dset[idx]))) \
+                                      .to(self.device).to(torch.long)
+            values = torch.ones(indices.shape[1], dtype=torch.float32,
+                                device=self.device)
+            data = torch.sparse.FloatTensor(indices, values).to_dense()
+        else:
+            data = torch.from_numpy(np.array(self.dset[idx]))
+
+        return data.view(self.shape).to(self.device).to(torch.float32)
+
