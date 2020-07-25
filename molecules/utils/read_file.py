@@ -16,7 +16,7 @@ def read_h5_RMSD(filename):
     return RMSD
 
 
-def open_h5(h5_file, libver='latest', swmr=True):
+def open_h5(h5_file, mode='r', libver='latest', swmr=True):
     """
     Opens file in single write multiple reader mode
     libver specifies newest available version,
@@ -26,6 +26,9 @@ def open_h5(h5_file, libver='latest', swmr=True):
     ----------
     h5_file : str
         name of h5 file to open
+
+    mode : str
+        mode to open the file in 'r' or 'w'
 
     libver : str
         version argument for h5py
@@ -38,4 +41,4 @@ def open_h5(h5_file, libver='latest', swmr=True):
     open h5py file to be used in a context manager
 
     """
-    return h5py.File(h5_file, 'r', libver=libver, swmr=swmr)
+    return h5py.File(h5_file, mode, libver=libver, swmr=swmr)
