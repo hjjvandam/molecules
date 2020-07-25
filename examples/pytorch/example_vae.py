@@ -21,6 +21,12 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-m', '--model_id', required=True,
               help='Model ID in for file naming')
 
+@click.option('-h', '--dim1', required=True, type=int,
+              help='H of (H,W) shaped contact matrix')
+
+@click.option('-w', '--dim2', required=True, type=int,
+              help='W of (H,W) shaped contact matrix')
+
 @click.option('-E', '--encoder_gpu', default=None, type=int,
               help='Encoder GPU id')
 
@@ -39,7 +45,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, encoder_gpu,
+def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu,
          decoder_gpu, epochs, batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
@@ -66,14 +72,20 @@ def main(input_path, out_path, model_id, encoder_gpu,
                              'affine_dropouts': [0],
                              'latent_dim': latent_dim}
 
-        input_shape = (1, 22, 22)
+        input_shape = (1, dim1, dim2)
         squeeze = False
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
 
     elif model_type == 'resnet':
-        input_shape = (22, 22)
+
+        resnet_hparams = {'max_len': dim1,
+                          'nchars': dim2,
+                          'latent_dim': latent_dim,
+                          'dec_filters': dim1}
+
+        input_shape = (dim1, dim1)
         squeeze = True # Specify no ones in training data shape
-        hparams = ResnetVAEHyperparams(input_shape, latent_dim=11)
+        hparams = ResnetVAEHyperparams(**resnet_hparams)
 
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
@@ -83,7 +95,7 @@ def main(input_path, out_path, model_id, encoder_gpu,
     # Diplay model
     print(vae)
     # Only print summary when encoder_gpu is None or 0
-    #summary(vae.model, input_shape)
+    summary(vae.model, input_shape)
 
     # Load training and validation data
     train_loader = DataLoader(ContactMapDataset(input_path,
@@ -105,14 +117,14 @@ def main(input_path, out_path, model_id, encoder_gpu,
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    embedding_callback = EmbeddingCallback(input_path,
-                                           out_dir=join(model_path, 'embedddings'),
-                                           squeeze=squeeze,
-                                           writer=writer)
+    #embedding_callback = EmbeddingCallback(input_path,
+    #                                       out_dir=join(model_path, 'embedddings'),
+    #                                       squeeze=squeeze,
+    #                                       writer=writer)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
-              callbacks=[loss_callback, checkpoint_callback, embedding_callback])
+              callbacks=[loss_callback, checkpoint_callback])# embedding_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))
