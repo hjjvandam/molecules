@@ -27,6 +27,9 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-w', '--dim2', required=True, type=int,
               help='W of (H,W) shaped contact matrix')
 
+@click.option('-s', '--sparse', is_flag=True,
+              help='Specifiy whether input matrices are sparse format')
+
 @click.option('-E', '--encoder_gpu', default=None, type=int,
               help='Encoder GPU id')
 
@@ -45,7 +48,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu,
+def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
          decoder_gpu, epochs, batch_size, model_type, latent_dim):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
@@ -73,7 +76,6 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu,
                              'latent_dim': latent_dim}
 
         input_shape = (1, dim1, dim2)
-        squeeze = False
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
 
     elif model_type == 'resnet':
@@ -84,7 +86,6 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu,
                           'dec_filters': dim1}
 
         input_shape = (dim1, dim1)
-        squeeze = True # Specify no ones in training data shape
         hparams = ResnetVAEHyperparams(**resnet_hparams)
 
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
@@ -99,13 +100,15 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu,
 
     # Load training and validation data
     train_loader = DataLoader(ContactMapDataset(input_path,
+                                                input_shape,
                                                 split='train',
-                                                squeeze=squeeze,
+                                                sparse=sparse,
                                                 gpu=encoder_gpu),
                               batch_size=batch_size, shuffle=True)
     valid_loader = DataLoader(ContactMapDataset(input_path,
+                                                input_shape,
                                                 split='valid',
-                                                squeeze=squeeze,
+                                                sparse=sparse,
                                                 gpu=encoder_gpu),
                               batch_size=batch_size, shuffle=True)
 
@@ -118,8 +121,8 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu,
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
     #embedding_callback = EmbeddingCallback(input_path,
+    #                                       input_shape,
     #                                       out_dir=join(model_path, 'embedddings'),
-    #                                       squeeze=squeeze,
     #                                       writer=writer)
 
     # Train model with callbacks

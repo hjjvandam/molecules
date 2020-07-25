@@ -8,13 +8,16 @@ class ContactMapDataset(Dataset):
     PyTorch Dataset class to load contact matrix data. Uses HDF5
     files and only reads into memory what is necessary for one batch.
     """
-    def __init__(self, path, split_ptc=0.8, split='train',
-                 squeeze=False, sparse=False, gpu=None):
+    def __init__(self, path, input_shape, split_ptc=0.8,
+                 split='train', sparse=False, gpu=None):
         """
         Parameters
         ----------
         path : str
             Path to h5 file containing contact matrices.
+
+        input_shape : tuple
+            Shape of contact matrices (H, W), may be (1, H, W).
 
         split_ptc : float
             Percentage of total data to be used as training set.
@@ -22,10 +25,6 @@ class ContactMapDataset(Dataset):
         split : str
             Either 'train' or 'valid', specifies whether this
             dataset returns train or validation data.
-
-        squeeze : bool
-            If True, data is reshaped to (H, W) else if False data
-            is reshaped to (1, H, W).
 
         sparse : bool
             If True, process data as sparse row/col COO format. Data
@@ -50,19 +49,17 @@ class ContactMapDataset(Dataset):
             group = h5_file['contact_maps']
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
+            self.len = len(self.row_set)
         else:
             # contact_maps dset has shape (N, W, H, 1)
             self.dset = h5_file['contact_maps']
+            self.len = len(self.dset)
  
         # train validation split index
-        self.split_ind = int(split_ptc * len(self.dset))
+        self.split_ind = int(split_ptc * self.len)
         self.split = split
         self.sparse = sparse
-
-        if squeeze:
-            self.shape = (self.dset.shape[1], self.dset.shape[2])
-        else:
-            self.shape = (1, self.dset.shape[1], self.dset.shape[2])
+        self.shape = input_shape
 
         if gpu is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -72,7 +69,7 @@ class ContactMapDataset(Dataset):
     def __len__(self):
         if self.split == 'train':
             return self.split_ind
-        return len(self.dset) - self.split_ind
+        return self.len - self.split_ind
 
     def __getitem__(self, idx):
         if self.split == 'valid':
