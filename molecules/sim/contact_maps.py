@@ -29,13 +29,29 @@ def contact_maps_from_traj(pdb_file, traj_file, contact_cutoff=8.0, savefile=Non
 
     return contact_matrices
 
+def _save_sparse_contact_maps(savefile, row, col):
+    """Helper function. Saves COO row/col matrices to file."""
+    import h5py
+    import numpy as np
+    from molecules.utils import open_h5
+
+    h5_file = open_h5(savefile, 'w')
+    group = h5_file.create_group('contact_maps')
+    # Specify variable length arrays
+    dt = h5py.vlen_dtype(np.dtype('int16'))
+    # The i'th element of both row,col dset will be
+    # arrays of the same length. However, neighboring
+    # arrays may be any variable length.
+    group.create_dataset('row', dtype=dt, data=row)
+    group.create_dataset('col', dtype=dt, data=col)
+
+    h5_file.flush()
+    h5_file.close()
 
 def sparse_contact_maps_from_traj(pdb_file, traj_file,
                                   contact_cutoff=8., savefile=None):
-    """Get contact map from trajectory."""
-
-    import h5py
-    from molecules.utils import open_h5
+    """Get contact map from trajectory. Requires all row,col indicies
+    from the traj to fit into memory at the same time."""
     from scipy.sparse import coo_matrix
 
     sim = mda.Universe(pdb_file, traj_file)
@@ -52,17 +68,23 @@ def sparse_contact_maps_from_traj(pdb_file, traj_file,
         col.append(coo.col.astype('int16'))
 
     if savefile:
-        with open_h5(savfile, 'w') as h5_file:
-            group = file.create_group('contact_maps')
+        _save_sparse_contact_maps(savefile, row, col)
 
-            # Specify variable length arrays
-            dt = h5py.vlen_dtype(np.dtype('int16'))
+    return row, col
 
-            # The i'th element of both row,col dset will be
-            # arrays of the same length. However, neighboring
-            # arrays may be any variable length.
-            group.create_dataset('row', dtype=dt, data=row)
-            group.create_dataset('col', dtype=dt, data=col)
+def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
+    """Convert normal contact matrices to sparse format."""
+    from scipy.sparse import coo_matrix
+
+    row, col = [], []
+    for cm in map(lambda cm: cm.squeeze(), contact_maps):
+        # Represent contact matrix in COO sparse format
+        coo = coo_matrix(cm, shape=cm.shape)
+        row.append(coo.row.astype('int16'))
+        col.append(coo.col.astype('int16'))
+
+    if savefile:
+        _save_sparse_contact_maps(savefile, row, col)
 
     return row, col
 
