@@ -66,10 +66,8 @@ class ResnetDecoder(nn.Module):
                 scale_factor = 2
                 layers.append(nn.Upsample(scale_factor=scale_factor))
                 self.hparams.upsample_rounds -= 1
-                if res_input_shape[0] == 1:
-                    res_input_shape = (res_input_shape[1] * scale_factor, res_input_shape[1] * scale_factor)
-                else:
-                    res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
+                res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
+
 
         padding = same_padding(res_input_shape[1],
                                self.hparams.dec_kernel_size,

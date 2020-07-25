@@ -28,12 +28,12 @@ class ResidualConv1d(nn.Module):
                               stride=1,
                               padding=padding)
 
-        self.temp = conv_output_shape(input_dim=shape[1],
-                                kernel_size=1,
-                                stride=1,
-                                padding=padding,
-                                num_filters=self.filters,
-                                dim=1)
+        self.output_shape  = conv_output_shape(input_dim=shape[1],
+                                               kernel_size=1,
+                                               stride=1,
+                                               padding=padding,
+                                               num_filters=self.filters,
+                                               dim=1)
 
         self.activation_fnc = get_activation(self.activation)
 
@@ -42,13 +42,14 @@ class ResidualConv1d(nn.Module):
 
     def forward(self, x):
         # TODO: should we use activation here?
-        bn = self.bn(x)
-        if bn.shape[2] == 1:
-            bn = bn.view(-1, 1, bn.shape[1])
-        res = self.residual(bn)
 
         if x.shape[2] == 1:
             x = x.view(-1, x.shape[2], x.shape[1])
+
+
+        bn = self.bn(x)
+        res = self.residual(bn)
+
         conv = self.conv(x)
         x = self.activation_fnc(conv + res)
 
@@ -80,7 +81,7 @@ class ResidualConv1d(nn.Module):
         shape = self.input_shape
         # Now add residual layers
 
-        self.bn = nn.BatchNorm1d(num_features=shape[1] if shape[0] == 1 else shape[0])
+        self.bn = nn.BatchNorm1d(num_features=shape[0])
 
         layers.append(get_activation(self.activation))
 
@@ -101,7 +102,6 @@ class ResidualConv1d(nn.Module):
                                   num_filters=self.filters,
                                   dim=1)
 
-        # 
         # Project back up (undo bottleneck)
         layers.append(nn.BatchNorm1d(num_features=shape[0]))
 
@@ -134,9 +134,9 @@ class ResidualConv1d(nn.Module):
         #       Consider if it should be wrapped activation(x + residual).
         #       See forward function.
 
-        padding = same_padding(self.temp[1], self.kfac, self.kfac)
+        padding = same_padding(self.output_shape[1], self.kfac, self.kfac)
 
-        conv = nn.Conv1d(in_channels=self.temp[0],
+        conv = nn.Conv1d(in_channels=self.output_shape[0],
                          out_channels=self.filters,
                          kernel_size=self.kfac,
                          stride=self.kfac,
@@ -144,7 +144,7 @@ class ResidualConv1d(nn.Module):
 
         #act = get_activation(self.activation)
 
-        shape = conv_output_shape(input_dim=self.temp[1],
+        shape = conv_output_shape(input_dim=self.output_shape[1],
                                   kernel_size=self.kfac,
                                   stride=self.kfac,
                                   padding=padding,
