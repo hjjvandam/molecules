@@ -35,6 +35,8 @@ def _save_sparse_contact_maps(savefile, row, col):
     import numpy as np
     from molecules.utils import open_h5
 
+    kwargs = {'fletcher32': True}
+
     h5_file = open_h5(savefile, 'w')
     group = h5_file.create_group('contact_maps')
     # Specify variable length arrays
@@ -42,8 +44,8 @@ def _save_sparse_contact_maps(savefile, row, col):
     # The i'th element of both row,col dset will be
     # arrays of the same length. However, neighboring
     # arrays may be any variable length.
-    group.create_dataset('row', dtype=dt, data=row)
-    group.create_dataset('col', dtype=dt, data=col)
+    group.create_dataset('row', dtype=dt, data=row, **kwargs)
+    group.create_dataset('col', dtype=dt, data=col, **kwargs)
 
     h5_file.flush()
     h5_file.close()
