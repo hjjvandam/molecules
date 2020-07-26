@@ -49,7 +49,7 @@ class ContactMapDataset(Dataset):
             group = h5_file['contact_maps']
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
-            self.len = len(self.row_set)
+            self.len = len(self.row_dset)
         else:
             # contact_maps dset has shape (N, W, H, 1)
             self.dset = h5_file['contact_maps']
@@ -81,7 +81,9 @@ class ContactMapDataset(Dataset):
                                       .to(self.device).to(torch.long)
             values = torch.ones(indices.shape[1], dtype=torch.float32,
                                 device=self.device)
-            data = torch.sparse.FloatTensor(indices, values).to_dense()
+            # Set shape to the last 2 elements of self.shape.
+            # Handles (1, W, H) and (W, H)
+            data = torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense()
         else:
             data = torch.from_numpy(np.array(self.dset[idx]))
 
