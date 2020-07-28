@@ -24,7 +24,8 @@ class ResnetDecoder(nn.Module):
         self.decoder.apply(init_weights)
 
     def forward(self, x):
-        return self.decoder(x.view(-1, 1, x.shape[1]))
+        x = x.view(x.shape[0], x.shape[1], 1)
+        return self.decoder(x)
 
     def decode(self, embedding):
         self.eval()
@@ -62,15 +63,18 @@ class ResnetDecoder(nn.Module):
             if self.hparams.upsample_rounds:
                 # TODO: consider upsample mode nearest neightbor etc.
                 #       https://pytorch.org/docs/master/generated/torch.nn.Upsample.html
-                layers.append(nn.Upsample(scale_factor=2))
+                scale_factor = 2
+                layers.append(nn.Upsample(scale_factor=scale_factor))
                 self.hparams.upsample_rounds -= 1
+                res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
+
 
         padding = same_padding(res_input_shape[1],
                                self.hparams.dec_kernel_size,
                                stride=1)
 
         layers.append(nn.Conv1d(in_channels=res_input_shape[0],
-                                out_channels=self.output_shape[1], # should be num_residues
+                                out_channels=self.output_shape[1], # should be num_residues i.e. nchars
                                 kernel_size=self.hparams.dec_kernel_size,
                                 stride=1,
                                 padding=padding))

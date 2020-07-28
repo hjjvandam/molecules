@@ -1,14 +1,18 @@
+import time
 import torch
 from torch import nn
 from torch.nn import functional as F
+from collections import namedtuple
 from .resnet import ResnetVAEHyperparams
 from .symmetric import SymmetricVAEHyperparams
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 
 __all__ = ['VAE']
 
+Device = namedtuple('Device', ['encoder', 'decoder'])
+
 class VAEModel(nn.Module):
-    def __init__(self, input_shape, hparams):
+    def __init__(self, input_shape, hparams, device):
         super(VAEModel, self).__init__()
 
         # Select encoder/decoder models by the type of the hparams
@@ -25,15 +29,21 @@ class VAEModel(nn.Module):
         else:
             raise TypeError(f'Invalid hparams type: {type(hparams)}.')
 
+        self.encoder.to(device.encoder)
+        self.decoder.to(device.decoder)
+
+        self.device = device
+
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
         eps = torch.randn_like(std)
         return mu + eps*std
 
     def forward(self, x):
+        # x should be placed on encoder gpu in the dataset class
         mu, logvar = self.encoder(x)
-        x = self.reparameterize(mu, logvar)
-        x = self.decoder(x)
+        x = self.reparameterize(mu, logvar).to(self.device.decoder)
+        x = self.decoder(x).to(self.device.encoder)
         # TODO: see if we can remove this to speed things up
         #       or find an inplace way. Only necessary for bad
         #       hyperparam config such as optimizer learning rate
@@ -85,9 +95,6 @@ class VAE:
 
     Attributes
     ----------
-    input_shape : tuple
-        shape of incomming data.
-
     model : torch.nn.Module (VAEModel)
         Underlying Pytorch model with encoder/decoder attributes.
 
@@ -119,7 +126,7 @@ class VAE:
                  hparams=SymmetricVAEHyperparams(),
                  optimizer_hparams=OptimizerHyperparams(),
                  loss=None,
-                 cuda=True,
+                 gpu=None,
                  verbose=True):
         """
         Parameters
@@ -140,8 +147,11 @@ class VAE:
             Defines an optional loss function with inputs (recon_x, x, mu, logvar)
             and ouput torch loss.
 
-        cuda : bool
-            True specifies to use cuda if it is available. False uses cpu.
+        gpu : int, tuple, or None
+            Encoder and decoder will train on ...
+            If None, cuda GPU device if it is available, otherwise CPU.
+            If int, the specified GPU.
+            If tuple, the first and second GPUs respectively.
 
         verbose : bool
             True prints training and validation loss to stdout.
@@ -150,20 +160,49 @@ class VAE:
         hparams.validate()
         optimizer_hparams.validate()
 
-        self.input_shape = input_shape
         self.verbose = verbose
 
-        # TODO: consider passing in device (this will allow the ability to set the train/test
-        #       data to cuda as well, since device will be a variable in the user space)
-        self.device = torch.device('cuda' if cuda and torch.cuda.is_available() else 'cpu')
+        # Tuple of encoder, decoder device
+        self.device = Device(*self._configure_device(gpu))
 
-        self.model = VAEModel(input_shape, hparams).to(self.device)
+        self.model = VAEModel(input_shape, hparams, self.device)
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
         self.optimizer = get_optimizer(self.model, optimizer_hparams)
 
         self.loss_fnc = vae_loss if loss is None else loss
+
+    def _configure_device(self, gpu):
+        """
+        Configures GPU/CPU device for training VAE. Allows encoder
+        and decoder to be trained on seperate devices.
+
+        Parameters
+        ----------
+        gpu : int, tuple, or None
+            Encoder and decoder will train on ...
+            If None, cuda GPU device if it is available, otherwise CPU.
+            If int, the specified GPU.
+            If tuple, the first and second GPUs respectively or None
+            option if tuple contains None.
+
+        Returns
+        -------
+        2-tuple of encoder_device, decoder_device
+        """
+
+        if gpu is None or (isinstance(gpu, tuple) and None in gpu):
+            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            return device, device
+        if not torch.cuda.is_available():
+            raise ValueError('Specified GPU training but CUDA is not available.')
+        if isinstance(gpu, int):
+            device = torch.device(f'cuda:{gpu}')
+            return device, device
+        if isinstance(gpu, tuple) and len(gpu) == 2:
+            return torch.device(f'cuda:{gpu[0]}'), torch.device(f'cuda:{gpu[1]}')
+        raise ValueError('Specified GPU device is invalid. Should be int, 2-tuple or None.')
 
     def __repr__(self):
         return str(self.model)
@@ -244,13 +283,17 @@ class VAE:
         train_loss = 0.
         for batch_idx, data in enumerate(train_loader):
 
+            if self.verbose:
+                start = time.time()
+
             if callbacks:
                 pass # TODO: add more to logs
 
             for callback in callbacks:
                 callback.on_batch_begin(batch_idx, epoch, logs)
 
-            data = data.to(self.device)
+            # TODO: Consider passing device argument into dataset class instead
+            # data = data.to(self.device.encoder)
             self.optimizer.zero_grad()
             recon_batch, mu, logvar = self.model(data)
             loss = self.loss_fnc(recon_batch, data, mu, logvar)
@@ -263,10 +306,10 @@ class VAE:
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
                       epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data)))
+                      loss.item() / len(data), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
@@ -300,7 +343,7 @@ class VAE:
         valid_loss = 0
         with torch.no_grad():
             for data in valid_loader:
-                data = data.to(self.device)
+                # data = data.to(self.device)
                 recon_batch, mu, logvar = self.model(data)
                 valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
 
@@ -341,7 +384,7 @@ class VAE:
         ----------
         x : torch.Tensor
             Data to encode, could be a batch of data with dimension
-            (batch-size, input_shape)
+            (batch_size, input_shape)
 
         Returns
         -------

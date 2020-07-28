@@ -43,37 +43,37 @@ def get_optimizer(model, hparams):
 
     try:
 
-        if hparams.name is 'Adadelta':
+        if hparams.name == 'Adadelta':
             return optim.Adadelta(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'Adagrad':
+        elif hparams.name == 'Adagrad':
             return optim.Adagrad(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'Adam':
+        elif hparams.name == 'Adam':
             return optim.Adam(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'AdamW':
+        elif hparams.name == 'AdamW':
             return optim.AdamW(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'SparseAdam':
+        elif hparams.name == 'SparseAdam':
             return optim.SparseAdam(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'Adamax':
+        elif hparams.name == 'Adamax':
             return optim.Adamax(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'ASGD':
+        elif hparams.name == 'ASGD':
             return optim.ASGD(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'LBFGS':
+        elif hparams.name == 'LBFGS':
             return optim.LBFGS(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'RMSprop':
+        elif hparams.name == 'RMSprop':
             return optim.RMSprop(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'Rprop':
+        elif hparams.name == 'Rprop':
             return optim.Rprop(model.parameters(), **hparams.hparams)
 
-        elif hparams.name is 'SGD':
+        elif hparams.name == 'SGD':
             return optim.SGD(model.parameters(), **hparams.hparams)
 
     except TypeError as e:

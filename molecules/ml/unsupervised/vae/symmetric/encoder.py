@@ -12,8 +12,7 @@ class SymmetricEncoderConv2d(nn.Module):
         assert isinstance(hparams, SymmetricVAEHyperparams)
         hparams.validate()
 
-        self.input_shape = input_shape
-        # Stores (channels, height, width) of the last conv layer
+        # Stores (channels, height, width) of conv layers
         self.shapes = [input_shape]
         self.hparams = hparams
 
