@@ -1,8 +1,9 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from hyperparams import AAE3dHyperparams
-from molecules.ml.unsupervised.vae.utils import init_weights
+from molecules.ml.unsupervised.aae.utils.hyperparams import AAE3dHyperparams
+from molecules.ml.unsupervised.aae.utils import init_weights
+from molecules.ml.unsupervised.aae.losses import chamfer_loss as cl
 
 class Generator(nn.Module):
     def __init__(self, num_points, hparams, device):
@@ -271,13 +272,13 @@ class AAE3dModel(nn.Module):
         self.discriminator = self.discriminator.to(device)
 
     def forward(self, x):
-        x, mu, logvar = self.encoder(x)
-        x = self.generator(x)
+        z, mu, logvar = self.encoder(x)
+        x = self.generator(z)
         return x, mu, logvar
         
     def encode(self, x):
-        z, _, _ = self.encoder(x)
-        return z
+        z, mu, logvar = self.encoder(x)
+        return z, mu, logvar
 
     def generate(self, z):
         x = self.generator(z)
@@ -336,7 +337,7 @@ class AAE3d(object):
     """
     
     def __init__(self, num_points,
-                     hparams=SymmetricVAEHyperparams(),
+                     hparams = AAE3dHyperparams(),
                      optimizer_hparams=OptimizerHyperparams(),
                      loss=None,
                      gpu=None,
@@ -375,14 +376,25 @@ class AAE3d(object):
         # Tuple of encoder, decoder device
         self.device = Device(*self._configure_device(gpu))
 
+        # model
         self.model = AAE3dModel(num_points, hparams, self.device)
+        
+        # fixed noise vector
+        self.normal_mu = hparams.normal_mu
+        self.normal_std = hparams.normal_std
+        self.fixed_noise = torch.FloatTensor(hparams.batch_size, hparams.latent_dim, 1).to(self.device[0])
+        self.fixed_noise.normal_(mean = self.normal_mu, std = self.normal_std)
+        self.noise = torch.FloatTensor(hparams.batch_size, hparams.latent_dim, 1).to(self.device[0])
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
-        self.optimizer = get_optimizer(self.model, optimizer_hparams)
+        self.optimizer_d = get_optimizer(self.model.discriminator.parameters(), optimizer_hparams)
+        self.optimizer_eg = get_optimizer(chain(self.model.encoder.parameters(), self.model.generator.parameters()), 
+                                        optimizer_hparams)
 
-        self.loss_fnc = vae_loss if loss is None else loss
-    
+        # loss parameters
+        self.lambda_gp = hparams.lambda_gp
+        self.rec_loss = cl.ChamferLoss()
     
     def _configure_device(self, gpu):
         """
@@ -421,6 +433,36 @@ class AAE3d(object):
 
     def __repr__(self):
         return str(self.model)
+
+    def _loss_fnc_d(self, noise, real_logits, codes, fake_logits):
+        # classification loss (critic)
+        loss = torch.mean(fake_logits) - torch.mean(real_logits)
+        
+        # gradient penalty
+        alpha = torch.rand(self.batch_size, 1).to(self.device)
+        interpolates = noise + alpha * (codes - noise)
+        disc_interpolates = self.model.discriminate(interpolates)
+        
+        gradients = grad(outputs=disc_interpolates,
+                        inputs=interpolates,
+                        grad_outputs=torch.ones_like(disc_interpolates).to(self.device),
+                        create_graph=True,
+                        retain_graph=True,
+                        only_inputs=True)[0]
+        slopes = torch.sqrt(torch.sum(gradients ** 2, dim=1))
+        gradient_penalty = ((slopes - 1) ** 2).mean()
+        loss += self.lambda_gp * gradient_penalty
+        
+        return loss
+        
+    def _loss_fnc_eg(self, data, rec_batch, fake_logit):
+        # generator loss
+        loss = -torch.mean(fake_logit)
+        
+        # reconstruction loss
+        loss += self.lambda_rec * torch.mean(self.rec_loss(rec_batch, data))
+        
+        return loss
 
     def train(self, train_loader, valid_loader, epochs=1, checkpoint='', callbacks=[]):
         """
@@ -494,7 +536,8 @@ class AAE3d(object):
         """
 
         self.model.train()
-        train_loss = 0.
+        train_loss_d = 0.
+        train_loss_eg = 0.
         for batch_idx, data in enumerate(train_loader):
 
             if self.verbose:
@@ -505,33 +548,67 @@ class AAE3d(object):
 
             for callback in callbacks:
                 callback.on_batch_begin(batch_idx, epoch, logs)
+            
+            # get reconstruction
+            codes, mu, logvar = self.model.encode(data)
+            
+            # get noise
+            self.noise.normal_(mean = self.normal_mu, std = self.normal_std)
+            
+            # get logits
+            real_logits = self.model.discriminate(self.noise)
+            fake_logits = self.model.discriminate(codes)
+            
+            # get loss
+            loss_d = self._loss_fnc_d(self.noise, real_logits, code, fake_logits)
+            
+            # backward pass
+            self.optimizer_d.zero_grad()
+            self.model.discriminator.zero_grad()
+            loss_d.backward(retain_graph = True)
+            
+            # optimizer step
+            train_loss_d += loss_d.item()
+            self.optimizer_d.step()
 
-            # TODO: Consider passing device argument into dataset class instead
-            # data = data.to(self.device.encoder)
-            self.optimizer.zero_grad()
-            recon_batch, mu, logvar = self.model(data)
-            loss = self.loss_fnc(recon_batch, data, mu, logvar)
-            loss.backward()
-            train_loss += loss.item()
-            self.optimizer.step()
+            # eg step
+            rec_batch = self.model.generate(codes)
+            fake_logit = self.model.discriminate(codes)
+            
+            # get loss
+            loss_eg = self._loss_fnc_eg(data, rec_batch, fake_logit)
+            
+            # backward pass
+            self.optimizer_eg.zero_grad()
+            self.model.generator.zero_grad()
+            self.model.encoder.zero_grad()
+            loss_eg.backward()
+            
+            # optimizer step
+            train_loss_eg += loss_eg.item()
+            self.optimizer_eg.step()
 
             if callbacks:
-                logs['train_loss'] = loss.item() / len(data)
+                logs['train_loss_d'] = loss_d.item() / len(data)
+                logs['train_loss_eg'] = loss_eg.item() / len(data)
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
-
+            
             if self.verbose:
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss_d: {:.6f}\tLoss_eg: {:.6f}\tTime: {:.3f}'.format(
                       epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data), time.time() - start))
+                      loss_d.item() / len(data), loss_eg.item() / len(data), 
+                      time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
 
-            train_loss /= len(train_loader.dataset)
+            train_loss_d /= len(train_loader.dataset)
+            train_loss_eg /= len(train_loader.dataset)
 
             if callbacks:
-                logs['train_loss'] = train_loss
+                logs['train_loss_d'] = train_loss_d
+                logs['train_loss_eg'] = train_loss_eg
                 logs['global_step'] = epoch
 
             if self.verbose:
@@ -557,9 +634,9 @@ class AAE3d(object):
         valid_loss = 0
         with torch.no_grad():
             for data in valid_loader:
-                # data = data.to(self.device)
-                recon_batch, mu, logvar = self.model(data)
-                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
+                # just reconstruction loss is important here
+                recons_batch, mu, logvar = self.model(data)
+                valid_loss += self.loss_fnc_eg(data, rec_batch, None).item()
 
         valid_loss /= len(valid_loader.dataset)
 
