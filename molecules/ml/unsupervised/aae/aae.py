@@ -61,6 +61,7 @@ class Generator(nn.Module):
         #
         #    nn.Linear(in_features=1024, out_features=2048 * 3, bias=self.use_bias),
         #)
+        
     def init_weights(self):
         self.model.apply(init_weights)
         
@@ -304,7 +305,7 @@ class AAE3d(object):
 
     Attributes
     ----------
-    model : torch.nn.Module (VAEModel)
+    model : torch.nn.Module (AAE3dModel)
         Underlying Pytorch model with encoder/decoder attributes.
 
     optimizer : torch.optim.Optimizer
@@ -321,12 +322,339 @@ class AAE3d(object):
     encode(x)
         Embed data into the latent space.
 
-    decode(embedding)
+    generate(embedding)
+        Generate matrices from embeddings.
+    
+    discriminator(embedding)
+        Score embedding.
+
+    save_weights(enc_path, gen_path, disc_path)
+        Save encoder/generator/discriminator weights.
+
+    load_weights(enc_path, gen_path, disc_path)
+        Load saved encoder/generator/discriminator weights.
+    """
+    
+    def __init__(self, num_points,
+                     hparams=SymmetricVAEHyperparams(),
+                     optimizer_hparams=OptimizerHyperparams(),
+                     loss=None,
+                     gpu=None,
+                     verbose=True):
+        """
+        Parameters
+        ----------
+        num_points : integer
+            number of points.
+
+        hparams : molecules.ml.hyperparams.Hyperparams
+            Defines the model architecture hyperparameters. Currently implemented
+            are AAE3dHyperparams.
+
+        optimizer_hparams : molecules.ml.hyperparams.OptimizerHyperparams
+            Defines the optimizer type and corresponding hyperparameters.
+
+        loss: : function, optional
+            Defines an optional loss function with inputs (recon_x, x, mu, logvar)
+            and ouput torch loss.
+
+        gpu : int, tuple, or None
+            Encoder and decoder will train on ...
+            If None, cuda GPU device if it is available, otherwise CPU.
+            If int, the specified GPU.
+            If tuple, the first and second GPUs respectively.
+
+        verbose : bool
+            True prints training and validation loss to stdout.
+        """
+        hparams.validate()
+        optimizer_hparams.validate()
+
+        self.verbose = verbose
+
+        # Tuple of encoder, decoder device
+        self.device = Device(*self._configure_device(gpu))
+
+        self.model = AAE3dModel(num_points, hparams, self.device)
+
+        # TODO: consider making optimizer_hparams a member variable
+        # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
+        self.optimizer = get_optimizer(self.model, optimizer_hparams)
+
+        self.loss_fnc = vae_loss if loss is None else loss
+    
+    
+    def _configure_device(self, gpu):
+        """
+        Configures GPU/CPU device for training AAE. Allows encoder
+        and decoder to be trained on seperate devices.
+
+        Parameters
+        ----------
+        gpu : int, tuple, or None
+            Encoder and decoder will train on ...
+            If None, cuda GPU device if it is available, otherwise CPU.
+            If int, the specified GPU.
+            If tuple, the first and second GPUs respectively or None
+            option if tuple contains None.
+
+        Returns
+        -------
+        2-tuple of encoder_device, generator_device
+        """
+
+        if (gpu is None) or (isinstance(gpu, tuple) and (None in gpu)):
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            return device, device
+
+        if not torch.cuda.is_available():
+            raise ValueError("Specified GPU training but CUDA is not available.")
+
+        if isinstance(gpu, int):
+            device = torch.device(f"cuda:{gpu}")
+            return device, device
+
+        if isinstance(gpu, tuple) and len(gpu) == 2:
+            return torch.device(f"cuda:{gpu[0]}"), torch.device(f"cuda:{gpu[1]}")
+
+        raise ValueError("Specified GPU device is invalid. Should be int, 2-tuple or None.")
+
+    def __repr__(self):
+        return str(self.model)
+
+    def train(self, train_loader, valid_loader, epochs=1, checkpoint='', callbacks=[]):
+        """
+        Train model
+
+        Parameters
+        ----------
+        train_loader : torch.utils.data.dataloader.DataLoader
+            Contains training data
+
+        valid_loader : torch.utils.data.dataloader.DataLoader
+            Contains validation data
+
+        epochs : int
+            Number of epochs to train for
+
+        checkpoint : str
+            Path to checkpoint file to load and resume training
+            from the epoch when the checkpoint was saved.
+
+        callbacks : list
+            Contains molecules.utils.callback.Callback objects
+            which are called during training.
+        """
+        
+        if callbacks:
+            logs = {'model': self.model, 'optimizer': self.optimizer}
+        else:
+            logs = {}
+
+        start_epoch = 1
+
+        if checkpoint:
+            start_epoch += self._load_checkpoint(checkpoint)
+
+        for callback in callbacks:
+            callback.on_train_begin(logs)
+        
+        for epoch in range(start_epoch, epochs + 1):
+
+            for callback in callbacks:
+                callback.on_epoch_begin(epoch, logs)
+
+            self._train(train_loader, epoch, callbacks, logs)
+            self._validate(valid_loader, callbacks, logs)
+
+            for callback in callbacks:
+                callback.on_epoch_end(epoch, logs)
+
+        for callback in callbacks:
+            callback.on_train_end(logs)
+        
+    def _train(self, train_loader, epoch, callbacks, logs):
+        """
+        Train for 1 epoch
+
+        Parameters
+        ----------
+        train_loader : torch.utils.data.dataloader.DataLoader
+            Contains training data
+
+        epoch : int
+            Current epoch of training
+
+        callbacks : list
+            Contains molecules.utils.callback.Callback objects
+            which are called during training.
+
+        logs : dict
+            Filled with data for callbacks
+        """
+
+        self.model.train()
+        train_loss = 0.
+        for batch_idx, data in enumerate(train_loader):
+
+            if self.verbose:
+                start = time.time()
+
+            if callbacks:
+                pass # TODO: add more to logs
+
+            for callback in callbacks:
+                callback.on_batch_begin(batch_idx, epoch, logs)
+
+            # TODO: Consider passing device argument into dataset class instead
+            # data = data.to(self.device.encoder)
+            self.optimizer.zero_grad()
+            recon_batch, mu, logvar = self.model(data)
+            loss = self.loss_fnc(recon_batch, data, mu, logvar)
+            loss.backward()
+            train_loss += loss.item()
+            self.optimizer.step()
+
+            if callbacks:
+                logs['train_loss'] = loss.item() / len(data)
+                logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
+
+            if self.verbose:
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
+                      epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
+                      100. * (batch_idx + 1) / len(train_loader),
+                      loss.item() / len(data), time.time() - start))
+
+            for callback in callbacks:
+                callback.on_batch_end(batch_idx, epoch, logs)
+
+            train_loss /= len(train_loader.dataset)
+
+            if callbacks:
+                logs['train_loss'] = train_loss
+                logs['global_step'] = epoch
+
+            if self.verbose:
+                print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
+                
+    def _validate(self, valid_loader, callbacks, logs):
+        """
+        Test model on validation set.
+
+        Parameters
+        ----------
+        valid_loader : torch.utils.data.dataloader.DataLoader
+            Contains validation data
+
+        callbacks : list
+            Contains molecules.utils.callback.Callback objects
+            which are called during training.
+
+        logs : dict
+            Filled with data for callbacks
+        """
+        self.model.eval()
+        valid_loss = 0
+        with torch.no_grad():
+            for data in valid_loader:
+                # data = data.to(self.device)
+                recon_batch, mu, logvar = self.model(data)
+                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
+
+        valid_loss /= len(valid_loader.dataset)
+
+        if callbacks:
+            logs['valid_loss'] = valid_loss
+
+        if self.verbose:
+            print('====> Validation loss: {:.4f}'.format(valid_loss))
+    
+    def _load_checkpoint(self, path):
+        """
+        Loads checkpoint file containing optimizer state and
+        encoder/decoder weights.
+
+        Parameters
+        ----------
+        path : str
+            Path to checkpoint file
+
+        Returns
+        -------
+        Epoch of training corresponding to the saved checkpoint.
+        """
+
+        cp = torch.load(path)
+        self.model.encoder.load_state_dict(cp['encoder_state_dict'])
+        self.model.generator.load_state_dict(cp['generator_state_dict'])
+        self.model.discriminator.load_state_dict(cp['discriminator_state_dict'])
+        self.optimizer.load_state_dict(cp['optimizer_state_dict'])
+        return cp['epoch']
+        
+    def encode(self, x):
+        """
+        Embed data into the latent space.
+
+        Parameters
+        ----------
+        x : torch.Tensor
+            Data to encode, could be a batch of data with dimension
+            (batch_size, num_points, 3)
+
+        Returns
+        -------
+        torch.Tensor of embeddings of shape (batch-size, latent_dim)
+        """
+        return self.model.encode(x)
+
+    def decode(self, embedding):
+        """
         Generate matrices from embeddings.
 
-    save_weights(enc_path, dec_path)
-        Save encoder/decoder weights.
+        Parameters
+        ----------
+        embedding : torch.Tensor
+            Embedding data, could be a batch of data with dimension
+            (batch-size, latent_dim)
 
-    load_weights(enc_path, dec_path)
-        Load saved encoder/decoder weights.
-    """
+        Returns
+        -------
+        torch.Tensor of generated matrices of shape (batch-size, num_points, 3)
+        """
+
+        return self.model.generate(embedding)
+        
+    def save_weights(self, enc_path, gen_path, disc_path):
+        """
+        Save encoder/generator/discriminator weights.
+
+        Parameters
+        ----------
+        enc_path : str
+            Path to save the encoder weights to.
+
+        gen_path : str
+            Path to save the generator weights to.
+        
+        disc_path: str
+            Path to save the discriminator weights to.
+        """
+
+        self.model.save_weights(enc_path, gen_path, disc_path)
+
+    def load_weights(self, enc_path, gen_path, disc_path):
+        """
+        Load saved encoder/generator/discriminator weights.
+
+        Parameters
+        ----------
+        enc_path : str
+            Path to load the encoder weights from.
+
+        gen_path : str
+            Path to load the generator weights from.
+            
+        disc_path: str
+            Path to load the discriminator weights from.
+        """
+        self.model.load_weights(enc_path, gen_path, disc_path)

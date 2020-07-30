@@ -1,6 +1,6 @@
 from molecules.ml.hyperparams import Hyperparams
 
-class 3dAAEHyperparams(Hyperparams):
+class AAE3dHyperparams(Hyperparams):
     def __init__(self,
                  num_features = 1,
                  encoder_filters=[64, 128, 256, 256, 512],
@@ -14,7 +14,7 @@ class 3dAAEHyperparams(Hyperparams):
                  use_generator_bias = True,
                  use_discriminator_bias = True,
                  output_activation='Sigmoid'):
-
+        
         self.num_features = num_features
         self.encoder_filters = encoder_filters
         self.deecoder_filters = deecoder_filters
