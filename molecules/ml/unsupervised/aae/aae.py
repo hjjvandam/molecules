@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from hyperparams import 3dAAEHyperparams
+from hyperparams import AAE3dHyperparams
+from molecules.ml.unsupervised.vae.utils import init_weights
 
 class Generator(nn.Module):
     def __init__(self, num_points, hparams, device):
@@ -42,6 +43,9 @@ class Generator(nn.Module):
         # construct model
         self.model = nn.Sequential(layers)
         
+        # init weights
+        self.init_weights()
+        
         #self.model = nn.Sequential(
         #    nn.Linear(in_features=self.z_size, out_features=64, bias=self.use_bias),
         #    nn.ReLU(inplace=True),
@@ -57,6 +61,14 @@ class Generator(nn.Module):
         #
         #    nn.Linear(in_features=1024, out_features=2048 * 3, bias=self.use_bias),
         #)
+    def init_weights(self):
+        self.model.apply(init_weights)
+        
+    def save_weights(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def load_weights(self, path):
+        self.load_state_dict(torch.load(path))
 
     def forward(self, input):
         output = self.model(input.squeeze())
@@ -99,6 +111,9 @@ class Discriminator(nn.Module):
 
         # construct model
         self.model = nn.Sequential(layers)
+        
+        # init weights
+        self.init_weights()
             
         #self.model = nn.Sequential(
         #
@@ -116,6 +131,15 @@ class Discriminator(nn.Module):
         #
         #    nn.Linear(64, 1, bias=True)
         #)
+        
+    def init_weights(self):
+        self.model.apply(init_weights)
+        
+    def save_weights(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def load_weights(self, path):
+        self.load_state_dict(torch.load(path))
 
     def forward(self, x):
         logit = self.model(x)
@@ -172,6 +196,9 @@ class Encoder(nn.Module):
         self.mu_layer = nn.Linear(hparams.encoder_filters[-2], self.z_size, bias=True)
         self.std_layer = nn.Linear(hparams.encoder_filters[-2], self.z_size, bias=True)
         
+        # init model
+        self.init_weights()
+        
         #self.conv = nn.Sequential(
         #    nn.Conv1d(in_channels=3, out_channels=64, kernel_size=1,
         #              bias=self.use_bias),
@@ -200,6 +227,18 @@ class Encoder(nn.Module):
 
         #self.mu_layer = nn.Linear(256, self.z_size, bias=True)
         #self.std_layer = nn.Linear(256, self.z_size, bias=True)
+    
+    def init_weights(self):
+        self.conv.apply(init_weights)
+        self.fc.apply(init_weights)
+        self.mu_layer.apply(init_weights)
+        self.std_layer.apply(init_weights)
+        
+    def save_weights(self, path):
+        torch.save(self.state_dict(), path)
+        
+    def load_weights(self, path):
+        self.load_state_dict(torch.load(path))
 
     def reparameterize(self, mu, logvar):
         std = torch.exp(0.5*logvar)
@@ -216,9 +255,9 @@ class Encoder(nn.Module):
         return z, mu, logvar
 
 
-class 3dAAEModel(nn.Module):
+class AAE3dModel(nn.Module):
     def __init__(self, num_points, hparams, device):
-        super(3dAAEModel, self).__init__()
+        super(AAE3dModel, self).__init__()
 
         # instantiate encoder, generator and discriminator
         self.encoder = Encoder(num_points, hparams, device)
@@ -246,4 +285,48 @@ class 3dAAEModel(nn.Module):
     def discriminate(self, z)
         p = self.discriminator(z)
         return p
+    
+    def save_weights(self, enc_path, gen_path, disc_path):
+        self.encoder.save_weights(enc_path)
+        self.generator.save_weights(gen_path)
+        self.discriminator.save_weights(disc_path)
+
+    def load_weights(self, enc_path, dec_path):
+        self.encoder.load_weights(enc_path)
+        self.generator.load_weights(gen_path)
+        self.discriminator.load_weights(disc_path)
         
+class AAE3d(object):
+    """
+    Provides high level interface for training, testing and saving VAE
+    models. Takes arbitrary encoder/decoder models specified by the choice
+    of hyperparameters. Assumes the shape of the data is square.
+
+    Attributes
+    ----------
+    model : torch.nn.Module (VAEModel)
+        Underlying Pytorch model with encoder/decoder attributes.
+
+    optimizer : torch.optim.Optimizer
+        Pytorch optimizer used to train model.
+
+    loss_func : function
+        Loss function used to train model.
+
+    Methods
+    -------
+    train(train_loader, valid_loader, epochs=1, checkpoint='', callbacks=[])
+        Train model
+
+    encode(x)
+        Embed data into the latent space.
+
+    decode(embedding)
+        Generate matrices from embeddings.
+
+    save_weights(enc_path, dec_path)
+        Save encoder/decoder weights.
+
+    load_weights(enc_path, dec_path)
+        Load saved encoder/decoder weights.
+    """
