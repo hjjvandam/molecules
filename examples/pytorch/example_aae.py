@@ -3,7 +3,7 @@ import click
 from os.path import join
 from torchsummary import summary
 from torch.utils.data import DataLoader
-#from molecules.ml.datasets import Point3dDataset
+from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
 from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
 from molecules.ml.unsupervised.aae import AAE3d, AAE3dHyperparams
@@ -74,35 +74,33 @@ def main(input_path, out_path, model_id, num_points, num_features, encoder_gpu,
     # Diplay model
     print(aae)
     
-    ## Only print summary when encoder_gpu is None or 0
-    #summary(vae.model, input_shape)
+    # Only print summary when encoder_gpu is None or 0
+    summary(aae.model, input_shape)
 
-    ## Load training and validation data
-    #train_loader = DataLoader(ContactMapDataset(input_path,
-    #                                            input_shape,
-    #                                            split='train',
-    #                                            sparse=sparse,
-    #                                            gpu=encoder_gpu),
-    #                          batch_size=batch_size, shuffle=True)
-    #valid_loader = DataLoader(ContactMapDataset(input_path,
-    #                                            input_shape,
-    #                                            split='valid',
-    #                                            sparse=sparse,
-    #                                            gpu=encoder_gpu),
-    #                          batch_size=batch_size, shuffle=True)
+    # Load training and validation data
+    train_loader = DataLoader(PointCloudDataset(input_path,
+                                                num_points,
+                                                num_features,
+                                                split='train'),
+                              batch_size=batch_size, shuffle=True, pin_memory=True)
+    valid_loader = DataLoader(PointCloudDataset(input_path,
+                                                num_points,
+                                                num_features,
+                                                split='valid'),
+                              batch_size=batch_size, shuffle=True, pin_memory=True)
 
-    ## For ease of training multiple models
-    #model_path = join(out_path, f'model-{model_id}')
+    # For ease of training multiple models
+    model_path = join(out_path, f'model-{model_id}')
 
-    ## Optional callbacks
-    #from torch.utils.tensorboard import SummaryWriter
-    #writer = SummaryWriter()
-    #loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
-    #checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    ##embedding_callback = EmbeddingCallback(input_path,
-    ##                                       input_shape,
-    ##                                       out_dir=join(model_path, 'embedddings'),
-    ##                                       writer=writer)
+    # Optional callbacks
+    from torch.utils.tensorboard import SummaryWriter
+    writer = SummaryWriter()
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
+    #embedding_callback = EmbeddingCallback(input_path,
+    #                                       input_shape,
+    #                                       out_dir=join(model_path, 'embedddings'),
+    #                                       writer=writer)
 
     ## Train model with callbacks
     #vae.train(train_loader, valid_loader, epochs,
