@@ -21,13 +21,14 @@ class AAE3dHyperparams(Hyperparams):
         # network features
         self.num_features = num_features
         self.encoder_filters = encoder_filters
-        self.deecoder_filters = deecoder_filters
+        self.generator_filters = generator_filters
         self.latent_dim = latent_dim
-        self.relu_slope = relu_slope
+        self.encoder_relu_slope = encoder_relu_slope
+        self.generator_relu_slope = generator_relu_slope
+        self.discriminator_relu_slope = discriminator_relu_slope
         self.use_encoder_bias = use_encoder_bias
-        self.use_generator_bias =use_generator_bias
-        self.use_discriminator_bias =use_discriminator_bias
-        self.output_activation = output_activation
+        self.use_generator_bias = use_generator_bias
+        self.use_discriminator_bias = use_discriminator_bias
         
         # random features
         self.noise_mu = noise_mu

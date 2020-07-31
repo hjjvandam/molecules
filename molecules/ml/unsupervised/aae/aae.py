@@ -1,9 +1,10 @@
 import torch
 import torch.nn as nn
 from collections import OrderedDict
-from molecules.ml.unsupervised.aae.utils.hyperparams import AAE3dHyperparams
+from molecules.ml.unsupervised.aae.hyperparams import AAE3dHyperparams
 from molecules.ml.unsupervised.aae.utils import init_weights
 from molecules.ml.unsupervised.aae.losses import chamfer_loss as cl
+from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 
 class Generator(nn.Module):
     def __init__(self, num_points, hparams, device):
@@ -284,7 +285,7 @@ class AAE3dModel(nn.Module):
         x = self.generator(z)
         return x
         
-    def discriminate(self, z)
+    def discriminate(self, z):
         p = self.discriminator(z)
         return p
     
@@ -338,10 +339,10 @@ class AAE3d(object):
     
     def __init__(self, num_points,
                      hparams = AAE3dHyperparams(),
-                     optimizer_hparams=OptimizerHyperparams(),
-                     loss=None,
-                     gpu=None,
-                     verbose=True):
+                     optimizer_hparams = OptimizerHyperparams(),
+                     loss = None,
+                     gpu = None,
+                     verbose = True):
         """
         Parameters
         ----------
@@ -380,11 +381,12 @@ class AAE3d(object):
         self.model = AAE3dModel(num_points, hparams, self.device)
         
         # fixed noise vector
+        self.batch_size = hparams.batch_size
         self.normal_mu = hparams.normal_mu
         self.normal_std = hparams.normal_std
-        self.fixed_noise = torch.FloatTensor(hparams.batch_size, hparams.latent_dim, 1).to(self.device[0])
+        self.fixed_noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.device[0])
         self.fixed_noise.normal_(mean = self.normal_mu, std = self.normal_std)
-        self.noise = torch.FloatTensor(hparams.batch_size, hparams.latent_dim, 1).to(self.device[0])
+        self.noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.device[0])
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
