@@ -29,7 +29,7 @@ class OptimizerHyperparams(Hyperparams):
     # TODO: could be useful to define bounds for each type of hparams
     #       to assist in the bayesian optization.
 
-def get_optimizer(model, hparams):
+def get_optimizer(parameters, hparams):
     """
     Parameters
     ----------
@@ -44,37 +44,37 @@ def get_optimizer(model, hparams):
     try:
 
         if hparams.name == 'Adadelta':
-            return optim.Adadelta(model.parameters(), **hparams.hparams)
+            return optim.Adadelta(parameters, **hparams.hparams)
 
         elif hparams.name == 'Adagrad':
-            return optim.Adagrad(model.parameters(), **hparams.hparams)
+            return optim.Adagrad(parameters, **hparams.hparams)
 
         elif hparams.name == 'Adam':
-            return optim.Adam(model.parameters(), **hparams.hparams)
+            return optim.Adam(parameters, **hparams.hparams)
 
         elif hparams.name == 'AdamW':
-            return optim.AdamW(model.parameters(), **hparams.hparams)
+            return optim.AdamW(parameters, **hparams.hparams)
 
         elif hparams.name == 'SparseAdam':
-            return optim.SparseAdam(model.parameters(), **hparams.hparams)
+            return optim.SparseAdam(parameters, **hparams.hparams)
 
         elif hparams.name == 'Adamax':
-            return optim.Adamax(model.parameters(), **hparams.hparams)
+            return optim.Adamax(parameters, **hparams.hparams)
 
         elif hparams.name == 'ASGD':
-            return optim.ASGD(model.parameters(), **hparams.hparams)
+            return optim.ASGD(parameters, **hparams.hparams)
 
         elif hparams.name == 'LBFGS':
-            return optim.LBFGS(model.parameters(), **hparams.hparams)
+            return optim.LBFGS(parameters, **hparams.hparams)
 
         elif hparams.name == 'RMSprop':
-            return optim.RMSprop(model.parameters(), **hparams.hparams)
+            return optim.RMSprop(parameters, **hparams.hparams)
 
         elif hparams.name == 'Rprop':
-            return optim.Rprop(model.parameters(), **hparams.hparams)
+            return optim.Rprop(parameters, **hparams.hparams)
 
         elif hparams.name == 'SGD':
-            return optim.SGD(model.parameters(), **hparams.hparams)
+            return optim.SGD(parameters, **hparams.hparams)
 
     except TypeError as e:
         raise Exception(f'Invalid parameter in hparams: {hparams.hparams}'

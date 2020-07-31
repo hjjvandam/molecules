@@ -54,15 +54,6 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
 
     assert model_type in ['symmetric', 'resnet']
 
-    # Add incoming devices to visible devices, or default to gpu:0
-    os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-    if None not in (encoder_gpu, decoder_gpu):
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join({str(encoder_gpu),
-                                                       str(decoder_gpu)})
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
-
-    print('CUDA devices: ', os.environ['CUDA_VISIBLE_DEVICES'])
     # Note: See SymmetricVAEHyperparams, ResnetVAEHyperparams class definitions
     #       for hyperparameter options. 
 

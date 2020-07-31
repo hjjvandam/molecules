@@ -169,7 +169,7 @@ class VAE:
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
-        self.optimizer = get_optimizer(self.model, optimizer_hparams)
+        self.optimizer = get_optimizer(self.model.parameters(), optimizer_hparams)
 
         self.loss_fnc = vae_loss if loss is None else loss
 

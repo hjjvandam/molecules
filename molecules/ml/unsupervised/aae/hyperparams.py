@@ -22,6 +22,7 @@ class AAE3dHyperparams(Hyperparams):
         self.num_features = num_features
         self.encoder_filters = encoder_filters
         self.generator_filters = generator_filters
+        self.discriminator_filters = discriminator_filters
         self.latent_dim = latent_dim
         self.encoder_relu_slope = encoder_relu_slope
         self.generator_relu_slope = generator_relu_slope

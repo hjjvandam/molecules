@@ -10,9 +10,9 @@ from molecules.ml.unsupervised.aae import AAE3d, AAE3dHyperparams
 
 
 @click.command()
-#@click.option('-i', '--input', 'input_path', required=True,
-#              type=click.Path(exists=True),
-#              help='Path to file containing preprocessed contact matrix data')
+@click.option('-i', '--input', 'input_path', required=True,
+              type=click.Path(exists=True),
+              help='Path to file containing preprocessed contact matrix data')
 
 @click.option('-o', '--out', 'out_path', required=True,
               type=click.Path(exists=True),
@@ -33,6 +33,9 @@ from molecules.ml.unsupervised.aae import AAE3d, AAE3dHyperparams
 @click.option('-G', '--generator_gpu', default=None, type=int,
               help='Generator GPU id')
 
+@click.option('-D', '--discriminator_gpu', default=None, type=int,
+              help='Discriminator GPU id')
+
 @click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
 
@@ -42,27 +45,15 @@ from molecules.ml.unsupervised.aae import AAE3d, AAE3dHyperparams
 @click.option('-d', '--latent_dim', default=256, type=int,
               help='Number of dimensions in latent space')
 
-@click.option('-lrec', '--lamdba_rec', default=1., type=float,
+@click.option('-lrec', '--lambda_rec', default=1., type=float,
               help='Reconstruction loss weight')
 
-@click.option('-lgp', '--lamdba_gp', default=10., type=float,
+@click.option('-lgp', '--lambda_gp', default=10., type=float,
               help='Gradient penalty weight')
 
 def main(input_path, out_path, model_id, num_points, num_features, encoder_gpu,
-         generator_gpu, epochs, batch_size, latent_dim, lamdba_rec, lamdba_gp):
+         generator_gpu, discriminator_gpu, epochs, batch_size, latent_dim, lambda_rec, lambda_gp):
     """Example for training Fs-peptide with AAE3d."""
-
-    # Add incoming devices to visible devices, or default to gpu:0
-    os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-    if None not in (encoder_gpu, generator_gpu):
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join({str(encoder_gpu),
-                                                       str(generator_gpu)})
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
-
-    print('CUDA devices: ', os.environ['CUDA_VISIBLE_DEVICES'])
-    # Note: See SymmetricVAEHyperparams, ResnetVAEHyperparams class definitions
-    #       for hyperparameter options. 
 
     # HP
     # model
@@ -77,8 +68,8 @@ def main(input_path, out_path, model_id, num_points, num_features, encoder_gpu,
     # optimizers
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
-    aae = AAE(num_points, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, generator_gpu))
+    aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
+              gpu=(encoder_gpu, generator_gpu, discriminator_gpu))
 
     # Diplay model
     print(aae)

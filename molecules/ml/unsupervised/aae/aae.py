@@ -1,13 +1,18 @@
 import torch
 import torch.nn as nn
-from collections import OrderedDict
+from itertools import chain 
+from collections import OrderedDict, namedtuple
 from molecules.ml.unsupervised.aae.hyperparams import AAE3dHyperparams
 from molecules.ml.unsupervised.aae.utils import init_weights
 from molecules.ml.unsupervised.aae.losses import chamfer_loss as cl
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 
+__all__ = ['AAE3d']
+
+Device = namedtuple('Device', ['encoder', 'generator', 'discriminator'])
+
 class Generator(nn.Module):
-    def __init__(self, num_points, hparams, device):
+    def __init__(self, num_points, num_features, hparams):
         super().__init__()
 
         # copy some parameters
@@ -23,7 +28,7 @@ class Generator(nn.Module):
                                            inplace=True)
         else:
             self.activation = nn.ReLU(inplace=True)
-
+            
         # first layer
         layers = OrderedDict([('linear1', nn.Linear(in_features = self.z_size,
                                                     out_features = hparams.generator_filters[0],
@@ -31,16 +36,16 @@ class Generator(nn.Module):
                               ('relu1', self.activation)])
         
         # intermediate layers
-        for idx in range(1, len(hparams.generator_filters[1:])):
-            layers.append(('linear{}'.format(idx+1), nn.Linear(in_features = hparams.generator_filters[idx - 1],
-                                                               out_features = hparams.generator_filters[idx],
-                                                               bias=self.use_bias)))
-            layers.append(('relu{}'.format(idx+1), self.activation))
+        for idx in range(1, len(hparams.generator_filters)):
+            layers.update({'linear{}'.format(idx+1) : nn.Linear(in_features = hparams.generator_filters[idx - 1],
+                                                                out_features = hparams.generator_filters[idx],
+                                                                bias=self.use_bias)})
+            layers.update({'relu{}'.format(idx+1) : self.activation})
 
         # last layer
-        layers.append(('linear{}'.format(idx+1), nn.Linear(in_features = hparams.generator_filters[-1],
-                                                           out_features = self.num_points * 3 * self.num_features,
-                                                           bias=self.use_bias)))
+        layers.update({'linear{}'.format(idx+2) : nn.Linear(in_features = hparams.generator_filters[-1],
+                                                            out_features = self.num_points * (3 + self.num_features),
+                                                            bias=self.use_bias)})
 
         # construct model
         self.model = nn.Sequential(layers)
@@ -75,12 +80,12 @@ class Generator(nn.Module):
 
     def forward(self, input):
         output = self.model(input.squeeze())
-        output = output.view(-1, 3*self.num_features, self.num_points)
+        output = output.view(-1, (3 + self.num_features), self.num_points)
         return output
 
 
 class Discriminator(nn.Module):
-    def __init__(self, hparams, device):
+    def __init__(self, hparams):
         super().__init__()
 
         self.z_size = hparams.latent_dim
@@ -101,16 +106,16 @@ class Discriminator(nn.Module):
                               ('relu1', self.activation)])
 
         # intermediate layers
-        for idx in range(1, len(hparams.discriminator_filters[1:])):
-            layers.append(('linear{}'.format(idx+1), nn.Linear(in_features = hparams.discriminator_filters[idx - 1],
-                                                               out_features = hparams.discriminator_filters[idx],
-                                                               bias = self.use_bias)))
-            layers.append(('relu{}'.format(idx+1), self.activation))
+        for idx in range(1, len(hparams.discriminator_filters)):
+            layers.update({'linear{}'.format(idx+1) : nn.Linear(in_features = hparams.discriminator_filters[idx - 1],
+                                                                out_features = hparams.discriminator_filters[idx],
+                                                                bias = self.use_bias)})
+            layers.update({'relu{}'.format(idx+1) : self.activation})
 
         # final layer
-        layers.append(('linear{}'.format(idx+1), nn.Linear(in_features = hparams.discriminator_filters[-1],
-                                                           out_features = 1,
-                                                           bias = self.use_bias)))
+        layers.update({'linear{}'.format(idx+2) : nn.Linear(in_features = hparams.discriminator_filters[-1],
+                                                            out_features = 1,
+                                                            bias = self.use_bias)})
 
         # construct model
         self.model = nn.Sequential(layers)
@@ -150,7 +155,7 @@ class Discriminator(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_points, hparams, device):
+    def __init__(self, num_points, num_features, hparams):
         super().__init__()
 
         # copy some parameters
@@ -168,23 +173,25 @@ class Encoder(nn.Module):
             self.activation = nn.ReLU(inplace=True)
 
         # first layer
-        layers = OrderedDict([('conv1', nn.Conv1d(in_channels = 3 * self.num_features,
+        layers = OrderedDict([('conv1', nn.Conv1d(in_channels = (3 + self.num_features),
                                                   out_channels = hparams.encoder_filters[0],
                                                   kernel_size = 1,
                                                   bias = self.use_bias)),
                               ('relu1', self.activation)])
 
         # intermediate layers
-        for idx in range(1, len(hparams.encoder_filters[1:-1])):
-            layers.append(('conv{}'.format(idx+1), nn.Conv1d(in_channels = hparams.encoder_filters[idx - 1],
-                                                             out_channels = hparams.encoder_filters[idx],
-                                                             bias = self.use_bias)))
-            layers.append(('relu{}'.format(idx+1), self.activation))
+        for idx in range(1, len(hparams.encoder_filters)-1):
+            layers.update({'conv{}'.format(idx+1) : nn.Conv1d(in_channels = hparams.encoder_filters[idx - 1],
+                                                              out_channels = hparams.encoder_filters[idx],
+                                                              kernel_size = 1,
+                                                              bias = self.use_bias)})
+            layers.update({'relu{}'.format(idx+1) : self.activation})
 
         # final layer
-        layers.append(('linear{}'.format(idx+1), nn.Conv1d(in_channels = hparams.encoder_filters[-2],
-                                                           out_channels = hparams.encoder_filters[-1],
-                                                           bias = self.use_bias)))
+        layers.update({'conv{}'.format(idx+2) : nn.Conv1d(in_channels = hparams.encoder_filters[-2],
+                                                          out_channels = hparams.encoder_filters[-1],
+                                                          kernel_size = 1,
+                                                          bias = self.use_bias)})
 
         # construct model
         self.conv = nn.Sequential(layers)
@@ -259,18 +266,18 @@ class Encoder(nn.Module):
 
 
 class AAE3dModel(nn.Module):
-    def __init__(self, num_points, hparams, device):
+    def __init__(self, num_points, num_features, hparams, devices):
         super(AAE3dModel, self).__init__()
 
         # instantiate encoder, generator and discriminator
-        self.encoder = Encoder(num_points, hparams, device)
-        self.generator = Generator(num_points, hparams, device)
-        self.discriminator = Discriminator(hparams, device)
+        self.encoder = Encoder(num_points, num_features, hparams)
+        self.generator = Generator(num_points, num_features, hparams)
+        self.discriminator = Discriminator(hparams)
 
         # map to device
-        self.encoder = self.encoder.to(device)
-        self.generator = self.generator.to(device)
-        self.discriminator = self.discriminator.to(device)
+        self.encoder = self.encoder.to(devices[0])
+        self.generator = self.generator.to(devices[1])
+        self.discriminator = self.discriminator.to(devices[2])
 
     def forward(self, x):
         z, mu, logvar = self.encoder(x)
@@ -337,10 +344,9 @@ class AAE3d(object):
         Load saved encoder/generator/discriminator weights.
     """
     
-    def __init__(self, num_points,
+    def __init__(self, num_points, num_features, batch_size,
                      hparams = AAE3dHyperparams(),
                      optimizer_hparams = OptimizerHyperparams(),
-                     loss = None,
                      gpu = None,
                      verbose = True):
         """
@@ -375,18 +381,20 @@ class AAE3d(object):
         self.verbose = verbose
 
         # Tuple of encoder, decoder device
-        self.device = Device(*self._configure_device(gpu))
+        self.devices = Device(*self._configure_device(gpu))
 
         # model
-        self.model = AAE3dModel(num_points, hparams, self.device)
+        self.model = AAE3dModel(num_points, num_features, hparams, self.devices)
         
         # fixed noise vector
-        self.batch_size = hparams.batch_size
-        self.normal_mu = hparams.normal_mu
-        self.normal_std = hparams.normal_std
-        self.fixed_noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.device[0])
-        self.fixed_noise.normal_(mean = self.normal_mu, std = self.normal_std)
-        self.noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.device[0])
+        self.num_points = num_points
+        self.num_features = num_features
+        self.batch_size = batch_size
+        self.noise_mu = hparams.noise_mu
+        self.noise_std = hparams.noise_std
+        self.fixed_noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.devices[2])
+        self.fixed_noise.normal_(mean = self.noise_mu, std = self.noise_std)
+        self.noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.devices[2])
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
@@ -419,19 +427,19 @@ class AAE3d(object):
 
         if (gpu is None) or (isinstance(gpu, tuple) and (None in gpu)):
             device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-            return device, device
+            return device, device, device
 
         if not torch.cuda.is_available():
             raise ValueError("Specified GPU training but CUDA is not available.")
 
         if isinstance(gpu, int):
             device = torch.device(f"cuda:{gpu}")
-            return device, device
+            return device, device, device
 
-        if isinstance(gpu, tuple) and len(gpu) == 2:
-            return torch.device(f"cuda:{gpu[0]}"), torch.device(f"cuda:{gpu[1]}")
+        if isinstance(gpu, tuple) and len(gpu) == 3:
+            return torch.device(f"cuda:{gpu[0]}"), torch.device(f"cuda:{gpu[1]}"), torch.device(f"cuda:{gpu[2]}")
 
-        raise ValueError("Specified GPU device is invalid. Should be int, 2-tuple or None.")
+        raise ValueError("Specified GPU device is invalid. Should be int, 3-tuple or None.")
 
     def __repr__(self):
         return str(self.model)
@@ -555,7 +563,7 @@ class AAE3d(object):
             codes, mu, logvar = self.model.encode(data)
             
             # get noise
-            self.noise.normal_(mean = self.normal_mu, std = self.normal_std)
+            self.noise.normal_(mean = self.noise_mu, std = self.noise_std)
             
             # get logits
             real_logits = self.model.discriminate(self.noise)
