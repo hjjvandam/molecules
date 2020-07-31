@@ -1,3 +1,4 @@
+import time
 import torch
 import torch.nn as nn
 from itertools import chain 
@@ -394,7 +395,7 @@ class AAE3d(object):
         self.noise_std = hparams.noise_std
         self.fixed_noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.devices[2])
         self.fixed_noise.normal_(mean = self.noise_mu, std = self.noise_std)
-        self.noise = torch.FloatTensor(self.batch_size, hparams.latent_dim, 1).to(self.devices[2])
+        self.noise = torch.FloatTensor(self.batch_size, hparams.latent_dim).to(self.devices[2])
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
@@ -404,6 +405,7 @@ class AAE3d(object):
 
         # loss parameters
         self.lambda_gp = hparams.lambda_gp
+        self.lambda_rec = hparams.lambda_rec
         self.rec_loss = cl.ChamferLoss()
     
     def _configure_device(self, gpu):
@@ -449,16 +451,16 @@ class AAE3d(object):
         loss = torch.mean(fake_logits) - torch.mean(real_logits)
         
         # gradient penalty
-        alpha = torch.rand(self.batch_size, 1).to(self.device)
+        alpha = torch.rand(self.batch_size, 1).to(self.devices[2])
         interpolates = noise + alpha * (codes - noise)
         disc_interpolates = self.model.discriminate(interpolates)
         
-        gradients = grad(outputs=disc_interpolates,
-                        inputs=interpolates,
-                        grad_outputs=torch.ones_like(disc_interpolates).to(self.device),
-                        create_graph=True,
-                        retain_graph=True,
-                        only_inputs=True)[0]
+        gradients = torch.autograd.grad(outputs=disc_interpolates,
+                                        inputs=interpolates,
+                                        grad_outputs=torch.ones_like(disc_interpolates).to(self.devices[2]),
+                                        create_graph=True,
+                                        retain_graph=True,
+                                        only_inputs=True)[0]
         slopes = torch.sqrt(torch.sum(gradients ** 2, dim=1))
         gradient_penalty = ((slopes - 1) ** 2).mean()
         loss += self.lambda_gp * gradient_penalty
@@ -499,7 +501,7 @@ class AAE3d(object):
         """
         
         if callbacks:
-            logs = {'model': self.model, 'optimizer': self.optimizer}
+            logs = {'model': self.model, 'optimizer_d': self.optimizer_d, 'optimizer_eg': self.optimizer_eg}
         else:
             logs = {}
 
@@ -549,16 +551,19 @@ class AAE3d(object):
         train_loss_d = 0.
         train_loss_eg = 0.
         for batch_idx, data in enumerate(train_loader):
-
+            
             if self.verbose:
                 start = time.time()
-
+            
             if callbacks:
                 pass # TODO: add more to logs
 
             for callback in callbacks:
                 callback.on_batch_begin(batch_idx, epoch, logs)
-            
+
+            # copy to gpu
+            data = data.to(self.devices[0])
+                
             # get reconstruction
             codes, mu, logvar = self.model.encode(data)
             
@@ -570,7 +575,7 @@ class AAE3d(object):
             fake_logits = self.model.discriminate(codes)
             
             # get loss
-            loss_d = self._loss_fnc_d(self.noise, real_logits, code, fake_logits)
+            loss_d = self._loss_fnc_d(self.noise, real_logits, codes, fake_logits)
             
             # backward pass
             self.optimizer_d.zero_grad()
@@ -622,7 +627,7 @@ class AAE3d(object):
                 logs['global_step'] = epoch
 
             if self.verbose:
-                print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
+                print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d, train_loss_eg))
                 
     def _validate(self, valid_loader, callbacks, logs):
         """
@@ -644,6 +649,8 @@ class AAE3d(object):
         valid_loss = 0
         with torch.no_grad():
             for data in valid_loader:
+                # copy to gpu
+                data = data.to(self.devices[0])
                 # just reconstruction loss is important here
                 recons_batch, mu, logvar = self.model(data)
                 valid_loss += self.loss_fnc_eg(data, rec_batch, None).item()

@@ -44,14 +44,17 @@ class PointCloudDataset(Dataset):
         self.split = split
         self.num_points = num_points
         self.num_features = num_features
-        self.num_points_total = self.dset.shape[1]
+        self.num_points_total = self.dset.shape[2]
 
         # sanity checks
         assert (self.num_points_total >= self.num_points)
-        assert (self.dset.shape[2] == (3 + self.num_features))
+        assert (self.dset.shape[1] == (3 + self.num_features))
 
         # rng
-        self.rng = np.random.RandomState(seed=12345)
+        self.rng = np.random.default_rng()
+
+        # create temp buffer for IO
+        self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
         
     def __len__(self):
         if self.split == 'train':
@@ -62,11 +65,17 @@ class PointCloudDataset(Dataset):
         if self.split == 'valid':
             idx += self.split_ind
 
-        # select points to read
-        indices = self.rng.choice(self.num_points_total, size = self.num_points, replace = False)
+        if self.num_points < self.num_points_total:
+            # select points to read
+            indices = self.rng.choice(self.num_points_total, size = self.num_points,
+                                      replace = False, shuffle = False)
 
-        # read
-        token = dset[idx, indices, ...]
+            # read
+            self.token[0, ...] = self.dset[idx, :, indices]
+        else:
+            self.dset.read_direct(self.token,
+                                  np.s_[0:1, 0:(3 + self.num_features), 0:self.num_points],
+                                  np.s_[idx:idx+1, 0:(3 + self.num_features), 0:self.num_points])
 
-        return torch.as_tensor(token)
+        return torch.squeeze(torch.as_tensor(self.token), dim=0)
 

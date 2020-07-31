@@ -51,8 +51,12 @@ from molecules.ml.unsupervised.aae import AAE3d, AAE3dHyperparams
 @click.option('-lgp', '--lambda_gp', default=10., type=float,
               help='Gradient penalty weight')
 
-def main(input_path, out_path, model_id, num_points, num_features, encoder_gpu,
-         generator_gpu, discriminator_gpu, epochs, batch_size, latent_dim, lambda_rec, lambda_gp):
+@click.option('-ndw', '--num_data_workers', default=1, type=int,
+              help='Number of workers for data loading')
+
+def main(input_path, out_path, model_id, num_points, num_features,
+         encoder_gpu, generator_gpu, discriminator_gpu,
+         epochs, batch_size, latent_dim, lambda_rec, lambda_gp, num_data_workers):
     """Example for training Fs-peptide with AAE3d."""
 
     # HP
@@ -75,19 +79,22 @@ def main(input_path, out_path, model_id, num_points, num_features, encoder_gpu,
     print(aae)
     
     # Only print summary when encoder_gpu is None or 0
-    summary(aae.model, input_shape)
+    summary(aae.model, (3 + num_features, num_points))
 
     # Load training and validation data
-    train_loader = DataLoader(PointCloudDataset(input_path,
-                                                num_points,
-                                                num_features,
-                                                split='train'),
-                              batch_size=batch_size, shuffle=True, pin_memory=True)
-    valid_loader = DataLoader(PointCloudDataset(input_path,
-                                                num_points,
-                                                num_features,
-                                                split='valid'),
-                              batch_size=batch_size, shuffle=True, pin_memory=True)
+    train_dataset = PointCloudDataset(input_path,
+                                      num_points,
+                                      num_features,
+                                      split='train')
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
+                              pin_memory=True, num_workers = num_data_workers)
+
+    valid_dataset = PointCloudDataset(input_path,
+                                      num_points,
+                                      num_features,
+                                      split='valid')
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
+                              pin_memory=True, num_workers = num_data_workers)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
@@ -102,20 +109,21 @@ def main(input_path, out_path, model_id, num_points, num_features, encoder_gpu,
     #                                       out_dir=join(model_path, 'embedddings'),
     #                                       writer=writer)
 
-    ## Train model with callbacks
-    #vae.train(train_loader, valid_loader, epochs,
-    #          callbacks=[loss_callback, checkpoint_callback])# embedding_callback])
+    # Train model with callbacks
+    aae.train(train_loader, valid_loader, epochs,
+              callbacks=[loss_callback, checkpoint_callback])# embedding_callback])
 
-    ## Save loss history to disk.
-    #loss_callback.save(join(model_path, 'loss.json'))
+    # Save loss history to disk.
+    loss_callback.save(join(model_path, 'loss.json'))
 
-    ## Save hparams to disk
-    #hparams.save(join(model_path, 'model-hparams.json'))
-    #optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
+    # Save hparams to disk
+    hparams.save(join(model_path, 'model-hparams.json'))
+    optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
 
-    ## Save final model weights to disk
-    #vae.save_weights(join(model_path, 'encoder-weights.pt'),
-    #                 join(model_path, 'decoder-weights.pt'))
+    # Save final model weights to disk
+    aae.save_weights(join(model_path, 'encoder-weights.pt'),
+                     join(model_path, 'generator-weights.pt'),
+                     join(model_path, 'discriminator-weights.pt'))
 
     # Output directory structure
     #  out_path
