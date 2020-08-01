@@ -42,11 +42,21 @@ class CheckpointCallback(Callback):
         """Saves optimizer state and encoder/decoder weights."""
 
         checkpoint = {
-            'encoder_state_dict': logs['model'].encoder.state_dict(),
-            'decoder_state_dict': logs['model'].decoder.state_dict(),
             'optimizer_state_dict': logs['optimizer'].state_dict(),
             'epoch': epoch
             }
+
+        if hasattr(encoder, logs['model']):
+            checkpoint['encoder_state_dict'] = logs['model'].encoder.state_dict()
+
+        if hasattr(decoder, logs['model']):
+            checkpoint['decoder_state_dict'] = logs['model'].decoder.state_dict()
+
+        if hasattr(generator, logs['model']):
+            checkpoint['generator_state_dict'] = logs['model'].generator.state_dict()
+
+        if hasattr(discriminator, logs['model']):
+                checkpoint['discriminator_state_dict'] = logs['model'].discriminator.state_dict()
 
         time_stamp = time.strftime(f'epoch-{epoch}-%Y%m%d-%H%M%S.pt')
         path = os.path.join(self.out_dir, time_stamp)
