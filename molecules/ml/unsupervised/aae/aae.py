@@ -467,12 +467,13 @@ class AAE3d(object):
         
         return loss
         
-    def _loss_fnc_eg(self, data, rec_batch, fake_logit):
-        # generator loss
-        loss = -torch.mean(fake_logit)
-        
+    def _loss_fnc_eg(self, data, rec_batch, fake_logit):        
         # reconstruction loss
-        loss += self.lambda_rec * torch.mean(self.rec_loss(rec_batch, data))
+        loss = self.lambda_rec * torch.mean(self.rec_loss(rec_batch, data))
+
+        # add generator loss if requested
+        if fake_logit is not None:
+            loss += -torch.mean(fake_logit)
         
         return loss
 
@@ -653,7 +654,7 @@ class AAE3d(object):
                 data = data.to(self.devices[0])
                 # just reconstruction loss is important here
                 recons_batch, mu, logvar = self.model(data)
-                valid_loss += self.loss_fnc_eg(data, rec_batch, None).item()
+                valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
 
         valid_loss /= len(valid_loader.dataset)
 
