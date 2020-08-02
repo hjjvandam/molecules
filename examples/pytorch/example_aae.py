@@ -6,7 +6,7 @@ from torch.utils.data import DataLoader
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
 from molecules.ml.callbacks import AdversarialLossCallback, CheckpointCallback, EmbeddingCallback
-from molecules.ml.unsupervised.aae import AAE3d, AAE3dHyperparams
+from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 
 @click.command()
