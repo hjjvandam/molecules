@@ -74,8 +74,8 @@ class PointCloudDataset(Dataset):
             self.token[0, ...] = self.dset[idx, :, indices]
         else:
             self.dset.read_direct(self.token,
-                                  np.s_[0:1, 0:(3 + self.num_features), 0:self.num_points],
-                                  np.s_[idx:idx+1, 0:(3 + self.num_features), 0:self.num_points])
-
+                                  np.s_[idx:idx+1, 0:(3 + self.num_features), 0:self.num_points],
+                                  np.s_[0:1, 0:(3 + self.num_features), 0:self.num_points])
+            
         return torch.squeeze(torch.as_tensor(self.token), dim=0)
 

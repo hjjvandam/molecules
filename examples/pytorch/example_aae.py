@@ -100,6 +100,8 @@ def main(input_path, out_path, model_id, num_points, num_features,
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
                               pin_memory=True, num_workers = num_data_workers)
 
+    print(f"Having {len(train_dataset)} training and {len(valid_dataset)} validation samples.")
+    
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
 
@@ -134,7 +136,7 @@ def main(input_path, out_path, model_id, num_points, num_features,
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
     pointcloud_callback = PointCloud3dCallback(out_dir=join(model_path, 'plots'),
-                                               sample_interval = 20,
+                                               sample_interval = len(valid_dataset) // 10,
                                                writer = writer,
                                                wandb_config = wandb_config)
     #embedding_callback = EmbeddingCallback(input_path,

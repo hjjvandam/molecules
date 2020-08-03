@@ -666,8 +666,8 @@ class AAE3d(object):
 
         if callbacks:
             logs['valid_loss'] = valid_loss
-            logs["input_samples"] = np.concatenate(logs["input_samples"], axis=0)
-            logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis=0)
+            logs["input_samples"] = np.concatenate(logs["input_samples"], axis = 0)
+            logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis = 0)
 
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))
