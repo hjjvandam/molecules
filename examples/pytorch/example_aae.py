@@ -144,7 +144,7 @@ def main(input_path, out_path, model_id, num_points, num_features,
 
     # Train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              callbacks=[loss_callback, checkpoint_callback])# embedding_callback])
+              callbacks=[loss_callback, checkpoint_callback, pointcloud_callback])# embedding_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))

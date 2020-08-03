@@ -37,18 +37,17 @@ class PointCloud3dCallback(Callback):
         self.wandb_config = wandb_config
 
     def on_epoch_end(self, epoch, logs):
-        if wandb_config is not None:
-            inp = loss["input_samples"]
+        if self.wandb_config is not None:
+            inp = np.transpose(logs["input_samples"], axes = (0,2,1))
             for idx in range(inp.shape[0]):
-                print(inp.shape)
-                if idx%self.sample_interval == 0:
+                if idx % self.sample_interval == 0:
                     wandb.log({"point_cloud_in": wandb.Object3D(inp[idx, ...]),
                                "epoch": epoch,
                                "sample": idx})
 
-            tar = loss["reconstructed_samples"]
+            tar = np.transpose(logs["reconstructed_samples"], axes = (0,2,1))
             for idx in range(tar.shape[0]):
-                if idx%self.sample_interval == 0:
+                if idx % self.sample_interval == 0:
                     wandb.log({"point_cloud_out": wandb.Object3D(tar[idx, ...]),
                                "epoch": epoch,
                                "sample": idx})

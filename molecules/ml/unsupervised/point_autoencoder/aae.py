@@ -658,8 +658,9 @@ class AAE3d(object):
                 recons_batch, mu, logvar = self.model(data)
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
                 # append samples
-                logs["input_samples"].append(data.detach().cpu().numpy())
-                logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
+                if callbacks:
+                    logs["input_samples"].append(data.detach().cpu().numpy())
+                    logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
 
         valid_loss /= len(valid_loader.dataset)
 
