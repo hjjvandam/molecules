@@ -646,6 +646,9 @@ class AAE3d(object):
         """
         self.model.eval()
         valid_loss = 0
+        if callbacks:
+            logs["input_samples"] = []
+            logs["reconstructed_samples"] = []
         with torch.no_grad():
             for data in valid_loader:
                 # copy to gpu
@@ -653,11 +656,16 @@ class AAE3d(object):
                 # just reconstruction loss is important here
                 recons_batch, mu, logvar = self.model(data)
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
+                # append samples
+                logs["input_samples"].append(data.detach().cpu().numpy())
+                logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
 
         valid_loss /= len(valid_loader.dataset)
 
         if callbacks:
             logs['valid_loss'] = valid_loss
+            logs["input_samples"] = np.concatenate(logs["input_samples"], axis=0)
+            logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis=0)
 
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))

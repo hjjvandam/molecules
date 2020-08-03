@@ -5,7 +5,7 @@ from torchsummary import summary
 from torch.utils.data import DataLoader
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
+from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback, PointCloud3dCallback
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 
@@ -122,19 +122,21 @@ def main(input_path, out_path, model_id, num_points, num_features,
 
         # optimizer
         wandb_config.optimizer_name = optimizer_hparams.name
+        for param in optimizer_hparams.hparams:
+            wandb_config["optimizer_" + param] = optimizer_hparams.hparams[param]
         
         # watch model
         wandb.watch(aae.model)
-        #wandb.watch(aae.model.encoder, idx = 0)
-        #wandb.watch(aae.model.generator, idx = 1)
-        #wandb.watch(aae.model.discriminator, idx = 2)
-        
     
     # Optional callbacks
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
+    pointcloud_callback = PointCloud3dCallback(out_dir=join(model_path, 'plots'),
+                                               sample_interval = 20,
+                                               writer = writer,
+                                               wandb_config = wandb_config)
     #embedding_callback = EmbeddingCallback(input_path,
     #                                       input_shape,
     #                                       out_dir=join(model_path, 'embedddings'),
