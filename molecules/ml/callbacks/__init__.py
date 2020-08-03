@@ -1,4 +1,3 @@
 from .loss_callback import LossCallback
-from .adversarial_loss_callback import AdversarialLossCallback
 from .checkpoint_callback import CheckpointCallback
 from .embedding_callback import EmbeddingCallback

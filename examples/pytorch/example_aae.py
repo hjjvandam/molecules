@@ -5,7 +5,7 @@ from torchsummary import summary
 from torch.utils.data import DataLoader
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import AdversarialLossCallback, CheckpointCallback, EmbeddingCallback
+from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 
@@ -102,7 +102,7 @@ def main(input_path, out_path, model_id, num_points, num_features,
     # Optional callbacks
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
-    loss_callback = AdversarialLossCallback(join(model_path, 'loss.json'), writer)
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
     #embedding_callback = EmbeddingCallback(input_path,
     #                                       input_shape,
