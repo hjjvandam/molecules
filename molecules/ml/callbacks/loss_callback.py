@@ -50,7 +50,7 @@ class LossCallback(Callback):
                     
 
         # validation losses
-        for lossname in [x for x in logs if x.startswith("validation_loss")]:
+        for lossname in [x for x in logs if x.startswith("valid_loss")]:
             # manual logging
             if lossname in self.valid_losses:
                 self.valid_losses[lossname].append(logs[lossname])
@@ -109,7 +109,7 @@ class LossCallback(Callback):
             jsondict = {}
             for lossname in [x for x in self.train_losses if x.startswith("train_loss")]:
                 jsondict[lossname] = self.train_losses[lossname]
-            for lossname in [x for x in self.train_losses if x.startswith("validation_loss")]:
+            for lossname in [x for x in self.valid_losses if x.startswith("valid_loss")]:
                 jsondict[lossname] = self.valid_losses[lossname]
             jsondict['epochs'] = self.epochs
             json.dump(jsondict, f)

@@ -124,9 +124,10 @@ def main(input_path, out_path, model_id, num_points, num_features,
         wandb_config.optimizer_name = optimizer_hparams.name
         
         # watch model
-        wandb.watch(aae.model.encoder, idx = 0)
-        wandb.watch(aae.model.generator, idx = 1)
-        wandb.watch(aae.model.discriminator, idx = 2)
+        wandb.watch(aae.model)
+        #wandb.watch(aae.model.encoder, idx = 0)
+        #wandb.watch(aae.model.generator, idx = 1)
+        #wandb.watch(aae.model.discriminator, idx = 2)
         
     
     # Optional callbacks

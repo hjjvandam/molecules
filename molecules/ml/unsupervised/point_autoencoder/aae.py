@@ -32,20 +32,20 @@ class Generator(nn.Module):
             self.activation = nn.ReLU
             
         # first layer
-        layers = OrderedDict([('linear1', nn.Linear(in_features = self.z_size,
+        layers = OrderedDict([('gen_linear1', nn.Linear(in_features = self.z_size,
                                                     out_features = hparams.generator_filters[0],
                                                     bias=self.use_bias)),
-                              ('relu1', self.activation(**self.activ_args))])
+                              ('gen_relu1', self.activation(**self.activ_args))])
         
         # intermediate layers
         for idx in range(1, len(hparams.generator_filters)):
-            layers.update({'linear{}'.format(idx+1) : nn.Linear(in_features = hparams.generator_filters[idx - 1],
+            layers.update({'gen_linear{}'.format(idx+1) : nn.Linear(in_features = hparams.generator_filters[idx - 1],
                                                                 out_features = hparams.generator_filters[idx],
                                                                 bias=self.use_bias)})
-            layers.update({'relu{}'.format(idx+1) : self.activation(**self.activ_args)})
+            layers.update({'gen_relu{}'.format(idx+1) : self.activation(**self.activ_args)})
 
         # last layer
-        layers.update({'linear{}'.format(idx+2) : nn.Linear(in_features = hparams.generator_filters[-1],
+        layers.update({'gen_linear{}'.format(idx+2) : nn.Linear(in_features = hparams.generator_filters[-1],
                                                             out_features = self.num_points * (3 + self.num_features),
                                                             bias=self.use_bias)})
 
@@ -103,22 +103,22 @@ class Discriminator(nn.Module):
             self.activation = nn.ReLU
 
         # first layer
-        layers = OrderedDict([('linear1', nn.Linear(in_features = self.z_size,
-                                                    out_features = hparams.discriminator_filters[0],
-                                                    bias = self.use_bias)),
-                              ('relu1', self.activation(**self.activ_args))])
+        layers = OrderedDict([('dis_linear1', nn.Linear(in_features = self.z_size,
+                                                        out_features = hparams.discriminator_filters[0],
+                                                        bias = self.use_bias)),
+                              ('dis_relu1', self.activation(**self.activ_args))])
 
         # intermediate layers
         for idx in range(1, len(hparams.discriminator_filters)):
-            layers.update({'linear{}'.format(idx+1) : nn.Linear(in_features = hparams.discriminator_filters[idx - 1],
-                                                                out_features = hparams.discriminator_filters[idx],
-                                                                bias = self.use_bias)})
-            layers.update({'relu{}'.format(idx+1) : self.activation(**self.activ_args)})
+            layers.update({'dis_linear{}'.format(idx+1) : nn.Linear(in_features = hparams.discriminator_filters[idx - 1],
+                                                                    out_features = hparams.discriminator_filters[idx],
+                                                                    bias = self.use_bias)})
+            layers.update({'dis_relu{}'.format(idx+1) : self.activation(**self.activ_args)})
 
         # final layer
-        layers.update({'linear{}'.format(idx+2) : nn.Linear(in_features = hparams.discriminator_filters[-1],
-                                                            out_features = 1,
-                                                            bias = self.use_bias)})
+        layers.update({'dis_linear{}'.format(idx+2) : nn.Linear(in_features = hparams.discriminator_filters[-1],
+                                                                out_features = 1,
+                                                                bias = self.use_bias)})
 
         # construct model
         self.model = nn.Sequential(layers)
@@ -177,25 +177,25 @@ class Encoder(nn.Module):
             self.activation = nn.ReLU
 
         # first layer
-        layers = OrderedDict([('conv1', nn.Conv1d(in_channels = (3 + self.num_features),
-                                                  out_channels = hparams.encoder_filters[0],
-                                                  kernel_size = 1,
-                                                  bias = self.use_bias)),
-                              ('relu1', self.activation(**self.activ_args))])
+        layers = OrderedDict([('enc_conv1', nn.Conv1d(in_channels = (3 + self.num_features),
+                                                      out_channels = hparams.encoder_filters[0],
+                                                      kernel_size = 1,
+                                                      bias = self.use_bias)),
+                              ('enc_relu1', self.activation(**self.activ_args))])
 
         # intermediate layers
         for idx in range(1, len(hparams.encoder_filters)-1):
-            layers.update({'conv{}'.format(idx+1) : nn.Conv1d(in_channels = hparams.encoder_filters[idx - 1],
-                                                              out_channels = hparams.encoder_filters[idx],
+            layers.update({'enc_conv{}'.format(idx+1) : nn.Conv1d(in_channels = hparams.encoder_filters[idx - 1],
+                                                                  out_channels = hparams.encoder_filters[idx],
+                                                                  kernel_size = 1,
+                                                                  bias = self.use_bias)})
+            layers.update({'enc_relu{}'.format(idx+1) : self.activation(**self.activ_args)})
+            
+        # final layer
+        layers.update({'enc_conv{}'.format(idx+2) : nn.Conv1d(in_channels = hparams.encoder_filters[-2],
+                                                              out_channels = hparams.encoder_filters[-1],
                                                               kernel_size = 1,
                                                               bias = self.use_bias)})
-            layers.update({'relu{}'.format(idx+1) : self.activation(**self.activ_args)})
-
-        # final layer
-        layers.update({'conv{}'.format(idx+2) : nn.Conv1d(in_channels = hparams.encoder_filters[-2],
-                                                          out_channels = hparams.encoder_filters[-1],
-                                                          kernel_size = 1,
-                                                          bias = self.use_bias)})
 
         # construct model
         self.conv = nn.Sequential(layers)
@@ -274,14 +274,9 @@ class AAE3dModel(nn.Module):
         super(AAE3dModel, self).__init__()
 
         # instantiate encoder, generator and discriminator
-        self.encoder = Encoder(num_points, num_features, hparams)
-        self.generator = Generator(num_points, num_features, hparams)
-        self.discriminator = Discriminator(hparams)
-
-        # map to device
-        self.encoder = self.encoder.to(devices[0])
-        self.generator = self.generator.to(devices[1])
-        self.discriminator = self.discriminator.to(devices[2])
+        self.encoder = Encoder(num_points, num_features, hparams).to(devices[0])
+        self.generator = Generator(num_points, num_features, hparams).to(devices[1])
+        self.discriminator = Discriminator(hparams).to(devices[2])
 
     def forward(self, x):
         z, mu, logvar = self.encoder(x)
