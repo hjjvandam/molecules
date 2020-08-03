@@ -18,7 +18,7 @@ from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
               type=click.Path(exists=True),
               help='Output directory for model data')
 
-@click.option('-m', '--model_id', required=True,
+@click.option('-m', '--model_id', required=True, type=str,
               help='Model ID in for file naming')
 
 @click.option('-np', '--num_points', required=True, type=int,
@@ -54,9 +54,13 @@ from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 @click.option('-ndw', '--num_data_workers', default=1, type=int,
               help='Number of workers for data loading')
 
+@click.option('-wp', '--wandb_project_name', default=None, type=str,
+              help='Project name for wandb logging')
+
 def main(input_path, out_path, model_id, num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
-         epochs, batch_size, latent_dim, lambda_rec, lambda_gp, num_data_workers):
+         epochs, batch_size, latent_dim, lambda_rec, lambda_gp, num_data_workers,
+         wandb_project_name):
     """Example for training Fs-peptide with AAE3d."""
 
     # HP
@@ -99,10 +103,36 @@ def main(input_path, out_path, model_id, num_points, num_features,
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
 
+    # do we want wandb
+    wandb_config = None
+    if wandb_project_name is not None:
+        import wandb
+        wandb.init(project = wandb_project_name,
+                   name = model_id,
+                   id = model_id,
+                   resume = False)
+        wandb_config = wandb.config
+
+        # log HP
+        wandb_config.num_points = num_points
+        wandb_config.num_features = num_features
+        wandb_config.latent_dim = latent_dim
+        wandb_config.lambda_rec = lambda_rec
+        wandb_config.lambda_gp = lambda_gp
+
+        # optimizer
+        wandb_config.optimizer_name = optimizer_hparams.name
+        
+        # watch model
+        wandb.watch(aae.model.encoder, idx = 0)
+        wandb.watch(aae.model.generator, idx = 1)
+        wandb.watch(aae.model.discriminator, idx = 2)
+        
+    
     # Optional callbacks
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
-    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
     #embedding_callback = EmbeddingCallback(input_path,
     #                                       input_shape,

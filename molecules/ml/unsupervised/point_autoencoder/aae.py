@@ -24,24 +24,25 @@ class Generator(nn.Module):
         self.relu_slope = hparams.generator_relu_slope
 
         # select activation
+        self.activ_args = {"inplace": True}
         if self.relu_slope > 0.:
-            self.activation = nn.LeakyReLU(negative_slope = self.relu_slope,
-                                           inplace=True)
+            self.activation = nn.LeakyReLU
+            self.activ_args["negative_slope"] = self.relu_slope
         else:
-            self.activation = nn.ReLU(inplace=True)
+            self.activation = nn.ReLU
             
         # first layer
         layers = OrderedDict([('linear1', nn.Linear(in_features = self.z_size,
                                                     out_features = hparams.generator_filters[0],
                                                     bias=self.use_bias)),
-                              ('relu1', self.activation)])
+                              ('relu1', self.activation(**self.activ_args))])
         
         # intermediate layers
         for idx in range(1, len(hparams.generator_filters)):
             layers.update({'linear{}'.format(idx+1) : nn.Linear(in_features = hparams.generator_filters[idx - 1],
                                                                 out_features = hparams.generator_filters[idx],
                                                                 bias=self.use_bias)})
-            layers.update({'relu{}'.format(idx+1) : self.activation})
+            layers.update({'relu{}'.format(idx+1) : self.activation(**self.activ_args)})
 
         # last layer
         layers.update({'linear{}'.format(idx+2) : nn.Linear(in_features = hparams.generator_filters[-1],
@@ -94,24 +95,25 @@ class Discriminator(nn.Module):
         self.relu_slope = hparams.discriminator_relu_slope
 
         # select activation
+        self.activ_args = {"inplace": True}
         if self.relu_slope > 0.:
-            self.activation = nn.LeakyReLU(negative_slope = self.relu_slope,
-                                           inplace=True)
+            self.activation = nn.LeakyReLU
+            self.activ_args["negative_slope"] = self.relu_slope
         else:
-            self.activation = nn.ReLU(inplace=True)
+            self.activation = nn.ReLU
 
         # first layer
         layers = OrderedDict([('linear1', nn.Linear(in_features = self.z_size,
                                                     out_features = hparams.discriminator_filters[0],
                                                     bias = self.use_bias)),
-                              ('relu1', self.activation)])
+                              ('relu1', self.activation(**self.activ_args))])
 
         # intermediate layers
         for idx in range(1, len(hparams.discriminator_filters)):
             layers.update({'linear{}'.format(idx+1) : nn.Linear(in_features = hparams.discriminator_filters[idx - 1],
                                                                 out_features = hparams.discriminator_filters[idx],
                                                                 bias = self.use_bias)})
-            layers.update({'relu{}'.format(idx+1) : self.activation})
+            layers.update({'relu{}'.format(idx+1) : self.activation(**self.activ_args)})
 
         # final layer
         layers.update({'linear{}'.format(idx+2) : nn.Linear(in_features = hparams.discriminator_filters[-1],
@@ -167,18 +169,19 @@ class Encoder(nn.Module):
         self.relu_slope = hparams.encoder_relu_slope
         
         # select activation
+        self.activ_args = {"inplace": True}
         if self.relu_slope > 0.:
-            self.activation = nn.LeakyReLU(negative_slope = self.relu_slope,
-                                           inplace=True)
+            self.activation = nn.LeakyReLU
+            self.activ_args["negative_slope"] = self.relu_slope
         else:
-            self.activation = nn.ReLU(inplace=True)
+            self.activation = nn.ReLU
 
         # first layer
         layers = OrderedDict([('conv1', nn.Conv1d(in_channels = (3 + self.num_features),
                                                   out_channels = hparams.encoder_filters[0],
                                                   kernel_size = 1,
                                                   bias = self.use_bias)),
-                              ('relu1', self.activation)])
+                              ('relu1', self.activation(**self.activ_args))])
 
         # intermediate layers
         for idx in range(1, len(hparams.encoder_filters)-1):
@@ -186,7 +189,7 @@ class Encoder(nn.Module):
                                                               out_channels = hparams.encoder_filters[idx],
                                                               kernel_size = 1,
                                                               bias = self.use_bias)})
-            layers.update({'relu{}'.format(idx+1) : self.activation})
+            layers.update({'relu{}'.format(idx+1) : self.activation(**self.activ_args)})
 
         # final layer
         layers.update({'conv{}'.format(idx+2) : nn.Conv1d(in_channels = hparams.encoder_filters[-2],
@@ -201,7 +204,7 @@ class Encoder(nn.Module):
             nn.Linear(hparams.encoder_filters[-1],
                       hparams.encoder_filters[-2],
                       bias=True),
-            self.activation
+            self.activation(**self.activ_args)
         )
 
         self.mu_layer = nn.Linear(hparams.encoder_filters[-2], self.z_size, bias=True)

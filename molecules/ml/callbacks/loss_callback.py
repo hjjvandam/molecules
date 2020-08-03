@@ -1,8 +1,12 @@
 import json
 from .callback import Callback
+import wandb
 
 class LossCallback(Callback):
-    def __init__(self, path, writer = None):
+    
+    def __init__(self, path,
+                 writer = None,
+                 wandb_config = None):
         """
         Parameters
         ----------
@@ -13,38 +17,58 @@ class LossCallback(Callback):
         """
         self.writer = writer
         self.path = path
-
+        self.wandb_config = wandb_config
+        
     def on_train_begin(self, logs):
         self.epochs = []
         self.train_losses = {}
         self.valid_losses = {}
 
+        
     def on_epoch_end(self, epoch, logs):
 
-        if self.writer is not None:
-            for lossname in [x for x in logs if x.startswith("train_loss")]:
-                self.writer.add_scalar('epoch ' + lossname,
-                                       logs[lossname],
-                                       logs['global_step'])
-
-            for lossname in [x for x in logs if x.startswith("validation_loss")]:
-                self.writer.add_scalar('epoch ' + lossname,
-                                       logs[lossname],
-                                       logs['global_step'])
-
+        # epochs
         self.epochs.append(epoch)
+    
+        # train_losses
         for lossname in [x for x in logs if x.startswith("train_loss")]:
+            # manual logging
             if lossname in self.train_losses:
                 self.train_losses[lossname].append(logs[lossname])
             else:
                 self.train_losses[lossname] = [logs[lossname]]
-                
-        for lossname in [x for x in logs if x.startswith("valid_loss")]:
+
+            # summary writer
+            if self.writer is not None:
+                self.writer.add_scalar('epoch ' + lossname,
+                                       logs[lossname],
+                                       logs['global_step'])
+
+            # wandb
+            if self.wandb_config is not None:
+                wandb.log({lossname: logs[lossname]})
+                    
+
+        # validation losses
+        for lossname in [x for x in logs if x.startswith("validation_loss")]:
+            # manual logging
             if lossname in self.valid_losses:
                 self.valid_losses[lossname].append(logs[lossname])
             else:
                 self.valid_losses[lossname] = [logs[lossname]]
 
+            # summary writer
+            if self.writer is not None:
+                self.writer.add_scalar('epoch ' + lossname,
+                                       logs[lossname],
+                                       logs['global_step'])
+
+            # wandb
+            if self.wandb_config is not None:
+                wandb.log({lossname: logs[lossname]})
+
+                
+        # save to json for manual logging
         self.save(self.path)
 
     def save(self, path):
