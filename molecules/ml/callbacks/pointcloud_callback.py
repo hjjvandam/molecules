@@ -5,6 +5,44 @@ import numpy as np
 from .callback import Callback
 import wandb
 
+def get_plot_object(name, array, epoch, sample):
+    result = {
+        name: wandb.Object3D(
+            {
+                "type": "lidar/beta",
+                "points": array,
+                "boxes": np.array(
+                    [
+                        {
+                            "corners": [
+                                [0,0,0],
+                                [0,1,0],
+                                [0,0,1],
+                                [1,0,0],
+                                [1,1,0],
+                                [0,1,1],
+                                [1,0,1],
+                                [1,1,1]
+                            ],
+                            "label": "Box",
+                            "color": [123,321,111]
+                        }
+                    ]
+                ),
+                "vectors": np.array(
+                    [
+                        {
+                            "start": [0,0,0],
+                            "end": [0.1,0.2,0.5]
+                        }
+                    ]
+                )
+            }
+        ),
+        "epoch": epoch,
+        "sample": sample
+    }
+
 class PointCloud3dCallback(Callback):
 
     """
@@ -42,20 +80,16 @@ class PointCloud3dCallback(Callback):
             # prepare plot data
             inp = np.transpose(logs["input_samples"], axes = (0,2,1))
             tar = np.transpose(logs["reconstructed_samples"], axes = (0,2,1))
-
-            print(inp, tar)
-            sys.exit()
             
             # plot inputs
             for idx in range(inp.shape[0]):
                 if idx % self.sample_interval == 0:
-                    wandb.log({"point_cloud_in": wandb.Object3D(inp[idx, ...]),
-                               "epoch": epoch,
-                               "sample": idx})
+                    wandb.log(get_plot_object("point_cloud_in", inp[idx, ...], epoch, idx), step = logs["global_step"])
 
             # plot target
             for idx in range(tar.shape[0]):
                 if idx % self.sample_interval == 0:
-                    wandb.log({"point_cloud_out": wandb.Object3D(tar[idx, ...]),
-                               "epoch": epoch,
-                               "sample": idx})
+                    wandb.log(get_plot_object("point_cloud_out", tar[idx, ...], epoch, idx), step = logs["global_step"])
+                    #wandb.log({"point_cloud_out": wandb.Object3D(tar[idx, ...]),
+                    #           "epoch": epoch,
+                    #           "sample": idx})

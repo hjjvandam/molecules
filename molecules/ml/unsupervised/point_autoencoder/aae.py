@@ -650,16 +650,20 @@ class AAE3d(object):
         if callbacks:
             logs["input_samples"] = []
             logs["reconstructed_samples"] = []
+            logs["embeddings"] = []
         with torch.no_grad():
             for data in valid_loader:
                 # copy to gpu
                 data = data.to(self.devices[0])
+                # get reconstruction
+                codes, mu, logvar = self.model.encode(data)
                 # just reconstruction loss is important here
-                recons_batch, mu, logvar = self.model(data)
+                recons_batch = self.model.generate(codes)
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
                 # append samples
                 if callbacks:
                     logs["input_samples"].append(data.detach().cpu().numpy())
+                    logs["embeddings"].append(codes.detach().cpu().numpy())
                     logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
 
         valid_loss /= len(valid_loader.dataset)
@@ -667,6 +671,7 @@ class AAE3d(object):
         if callbacks:
             logs['valid_loss'] = valid_loss
             logs["input_samples"] = np.concatenate(logs["input_samples"], axis = 0)
+            logs["embeddings"] = np.concatenate(logs["embeddings"], axis = 0)
             logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis = 0)
 
         if self.verbose:

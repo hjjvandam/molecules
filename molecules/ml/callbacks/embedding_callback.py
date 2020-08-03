@@ -9,6 +9,7 @@ from sklearn.manifold import TSNE
 from .callback import Callback
 from molecules.utils import open_h5
 import numba
+import wandb
 
 
 class EmbeddingCallback(Callback):
@@ -27,103 +28,40 @@ class EmbeddingCallback(Callback):
     """
     Saves VAE embeddings of random samples.
     """
-    def __init__(self, path, out_dir, squeeze,
-                 sample_interval=20, batch_size=128,
-                 writer=None):
+    def __init__(self, out_dir,
+                 sample_interval=20,
+                 writer=None, wandb_config=None):
         """
         Parameters
         ----------
-        path : str
-            Path to h5 file containing contact matrices.
-
         out_dir : str
             Directory to store output plots.
-
-        squeeze : bool
-            If True, data is reshaped to (H, W) else if False data
-            is reshaped to (1, H, W).
 
         sample_interval : int
             Plots every sample_interval'th point in the data set
 
-        batch_size : int
-            Batch size to load raw contact matrices into memory.
-            Batches are loaded into memory, encoded to a latent
-            dimension and then collected in a np.ndarray. The
-            np.ndarray is then passed to the TSNE algorithm.
-
-            NOTE: Not a learning hyperparameter, simply needs to
-                  be small enough to load batch into memory.
-
         writer : torch.utils.tensorboard.SummaryWriter
+
+        wandb_config : wandb configuration file
         """
 
         os.makedirs(out_dir, exist_ok=True)
 
-        # Open h5 file. Python's garbage collector closes the
-        # file when class is destructed.
-        h5_file = open_h5(path)
-
-        self.dset = h5_file['contact_maps']
         self.out_dir = out_dir
         self.sample_interval = sample_interval
-        self.batch_size = batch_size
         self.writer = writer
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.wandb_config = wandb_config
 
-        if squeeze:
-            self.shape = (self.dset.shape[1], self.dset.shape[2])
-        else:
-            self.shape = (1, self.dset.shape[1], self.dset.shape[2])
-
-        self._init_plot(h5_file)
-
-    def batches(self):
-        """
-        Generator to return batches of contact map dset.
-        Batches consist of every self.sample_interval'th point.
-        NOTE: last batch may have diferent size.
-        """
-        start, step = 0, self.sample_interval * self.batch_size
-        for idx in range(0, len(self.dset), step):
-            yield torch.from_numpy(
-                     np.array(self.dset[start: start + step: self.sample_interval]) \
-                       .reshape(-1, *self.shape)).to(torch.float32).to(self.device)
-            start += step
-
-    def sample(self, h5_file):
-
-        # TODO: compute native contacts
-
-        rmsd_dset = h5_file['rmsd']
-        rmsd = np.array(rmsd_dset[0: len(rmsd_dset): self.sample_interval][:, 2])
-        return rmsd #, native_contacts
-
-    def _init_plot(self, h5_file):
-
-        rmsd = self.sample(h5_file)
-
-        # TODO: Make rmsd_fig and nc_fig
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
-
-        vmin, vmax = self.minmax(rmsd)
-        cmi = plt.get_cmap('jet')
-        cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-        scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
-        scalar_map.set_array(rmsd)
-        self.fig.colorbar(scalar_map)
-        self.color = scalar_map.to_rgba(rmsd)
 
     def on_epoch_end(self, epoch, logs):
-        self.tsne_plot(logs)
+        # prepare plot data
+        embeddings = logs["embeddings"][::self.sample_interval,...]
 
-    def tsne_plot(self, logs):
+        # t-sne plots
+        self.tsne_plot(embeddings)
 
-        # Collect latent vectors for TSNE.
-        # Process is batched in case dset does not fit into memory.
-        embeddings = np.concatenate([logs['model'].encode(batch).cpu().numpy()
-                                    for batch in self.batches()])
+        
+    def tsne_plot(self, embeddings):
 
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
@@ -153,4 +91,7 @@ class EmbeddingCallback(Callback):
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
         if self.writer is not None:
             self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
+
+        if self.wandb_config is not None:
+            wandb.log({'epoch t-SNE embeddings': self.fig}, step = logs['global_step'])
         self.ax.clear()

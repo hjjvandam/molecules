@@ -46,7 +46,7 @@ class LossCallback(Callback):
 
             # wandb
             if self.wandb_config is not None:
-                wandb.log({lossname: logs[lossname]})
+                wandb.log({lossname: logs[lossname]}, step = logs["global_step"])
                     
 
         # validation losses
@@ -65,7 +65,7 @@ class LossCallback(Callback):
 
             # wandb
             if self.wandb_config is not None:
-                wandb.log({lossname: logs[lossname]})
+                wandb.log({lossname: logs[lossname]}, step = logs["global_step"])
 
                 
         # save to json for manual logging

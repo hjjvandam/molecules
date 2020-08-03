@@ -135,18 +135,19 @@ def main(input_path, out_path, model_id, num_points, num_features,
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    pointcloud_callback = PointCloud3dCallback(out_dir=join(model_path, 'plots'),
-                                               sample_interval = len(valid_dataset) // 10,
-                                               writer = writer,
-                                               wandb_config = wandb_config)
-    #embedding_callback = EmbeddingCallback(input_path,
-    #                                       input_shape,
-    #                                       out_dir=join(model_path, 'embedddings'),
-    #                                       writer=writer)
+    #pointcloud_callback = PointCloud3dCallback(out_dir=join(model_path, 'plots'),
+    #                                           sample_interval = len(valid_dataset) // 10,
+    #                                           writer = writer,
+    #                                           wandb_config = wandb_config)
+    
+    embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
+                                           sample_interval = len(valid_dataset) // 10,
+                                           writer = writer,
+                                           wandb_config = wandb_config)
 
     # Train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              callbacks=[loss_callback, checkpoint_callback, pointcloud_callback])# embedding_callback])
+              callbacks = [loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))
