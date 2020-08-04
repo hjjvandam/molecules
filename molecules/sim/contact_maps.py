@@ -1,35 +1,7 @@
 import MDAnalysis as mda
-from MDAnalysis.analysis import distances
+from MDAnalysis.analysis import distances, rms
 
-
-def contact_maps_from_traj(pdb_file, traj_file, contact_cutoff=8.0, savefile=None):
-    """
-    Get contact map from trajectory.
-    """
-    import os
-    import tables
-    mda_traj = mda.Universe(pdb_file, traj_file)
-    traj_length = len(mda_traj.trajectory) 
-    ca = mda_traj.select_atoms('name CA')
-    
-    if savefile:
-        savefile = os.path.abspath(savefile)
-        outfile = tables.open_file(savefile, 'w')
-        atom = tables.Float64Atom()
-        cm_table = outfile.create_earray(outfile.root, 'contact_maps', atom, shape=(traj_length, 0)) 
-
-    contact_matrices = []
-    for frame in mda_traj.trajectory:
-        cm_matrix = (distances.self_distance_array(ca.positions) < contact_cutoff) * 1.0
-        contact_matrices.append(cm_matrix)
-
-    if savefile:
-        cm_table.append(contact_matrices)
-        outfile.close() 
-
-    return contact_matrices
-
-def _save_sparse_contact_maps(savefile, row, col):
+def _save_sparse_contact_maps(savefile, row, col, rmsd=None, fnc=None):
     """Helper function. Saves COO row/col matrices to file."""
     import h5py
     import numpy as np
@@ -47,32 +19,58 @@ def _save_sparse_contact_maps(savefile, row, col):
     group.create_dataset('row', dtype=dt, data=row, **kwargs)
     group.create_dataset('col', dtype=dt, data=col, **kwargs)
 
+    # If specified, write rmsd and/or fraction of native contacts
+    if rmsd is not None:
+        h5_file.create_dataset('rmsd', data=rmsd, **kwargs)
+    if fnc is not None:
+        h5_file.create_dataset('fnc', data=fnc, **kwargs)
+
     h5_file.flush()
     h5_file.close()
 
+def fraction_of_native_contacts(cm, native_cm):
+    return (cm == native_cm).mean()
+
 def sparse_contact_maps_from_traj(pdb_file, traj_file,
-                                  contact_cutoff=8., savefile=None):
+                                  cutoff=8., savefile=None):
     """Get contact map from trajectory. Requires all row,col indicies
     from the traj to fit into memory at the same time."""
-    from scipy.sparse import coo_matrix
+    #from scipy.sparse import coo_matrix
 
     sim = mda.Universe(pdb_file, traj_file)
+    # For contact matrix
     ca = sim.select_atoms('name CA')
+    # For rmsd and fnc
+    native_positions = mda.Universe(native_pdb).select_atoms('protein').positions()
+    native_cm = distances.contact_matrix(native_positions, cutoff, returntype='sparse')
 
+    # Buffers for sparse contact row/col data
     row, col = [], []
-    for frame in sim.trajectory:
-        # Compute contact matrix
-        cm = (distances.self_distance_array(ca.positions) < contact_cutoff) * 1.
+    # Buffers for RMSD to native state and fraction of native contact
+    params = {'shape': len(sim.trajectory), 'dtype': np.float32}
+    rmsd, fnc = np.empty(**params), np.empty(**params)
+
+    for idx, frame in enumerate(sim.trajectory):
+        # Compute contact matrix in scipy lil_matrix form
+        cm = distances.contact_matrix(ca.positions, cutoff, returntype='sparse')
+
+        # TODO: call triu_to_full ?? Might not need to with distances.contact_matrix
+
+        # Compute and store RMSD and fraction of native contacts
+        # TODO: make sure units are angstrom
+        positions = sim.select_atoms('protein').positions()
+        rmsd[i] = rms.rmsd(positions, native_positions)
+        fnc[i] = fraction_of_native_contacts(cm, native_cm)
 
         # Represent contact matrix in COO sparse format
-        coo = coo_matrix(cm, shape=cm.shape)
+        coo = cm.tocoo() #coo_matrix(cm, shape=cm.shape)
         row.append(coo.row.astype('int16'))
         col.append(coo.col.astype('int16'))
 
     if savefile:
-        _save_sparse_contact_maps(savefile, row, col)
+        _save_sparse_contact_maps(savefile, row, col, rmsd, fnc)
 
-    return row, col
+    return row, col, rmsd, fnc
 
 def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
     """Convert normal contact matrices to sparse format."""
@@ -89,4 +87,3 @@ def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
         _save_sparse_contact_maps(savefile, row, col)
 
     return row, col
-

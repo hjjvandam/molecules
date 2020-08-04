@@ -69,6 +69,7 @@ class EmbeddingCallback(Callback):
         self.sample_interval = sample_interval
         self.batch_size = batch_size
         self.writer = writer
+        # TODO: allow any input device
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         if squeeze:
