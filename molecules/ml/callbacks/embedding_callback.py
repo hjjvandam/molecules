@@ -93,16 +93,16 @@ class EmbeddingCallback(Callback):
 
         z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
 
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
-        self.ax.scatter3D(z1, z2, z3, marker='.') #, c=self.color)
-        self.ax.set_xlim3d(self.minmax(z1))
-        self.ax.set_ylim3d(self.minmax(z2))
-        self.ax.set_zlim3d(self.minmax(z3))
-        self.ax.set_xlabel(r'$z_1$')
-        self.ax.set_ylabel(r'$z_2$')
-        self.ax.set_zlabel(r'$z_3$')
-        self.ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+        ax.scatter3D(z1, z2, z3, marker='.') #, c=self.color)
+        ax.set_xlim3d(self.minmax(z1))
+        ax.set_ylim3d(self.minmax(z2))
+        ax.set_zlim3d(self.minmax(z3))
+        ax.set_xlabel(r'$z_1$')
+        ax.set_ylabel(r'$z_2$')
+        ax.set_zlabel(r'$z_3$')
+        ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
 
         # save figure
         time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
@@ -110,12 +110,12 @@ class EmbeddingCallback(Callback):
 
         # summary writer
         if self.writer is not None:
-            self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
+            self.writer.add_figure('epoch t-SNE embeddings', fig, logs['global_step'])
 
         # wandb logging
         if self.wandb_config is not None:
             img = Image.open(os.path.join(self.out_dir, time_stamp))
             wandb.log({"epoch t-SNE embeddings": [wandb.Image(img, caption="Latent Space Visualizations")]}, step = logs['global_step'])
-            
-        self.ax.clear()
-        self.fig.close()
+
+        # close plot
+        plt.close(fig)
