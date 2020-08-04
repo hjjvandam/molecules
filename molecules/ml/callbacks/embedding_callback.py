@@ -7,7 +7,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import numpy as np
 from sklearn.manifold import TSNE
 from .callback import Callback
-from molecules.utils import open_h5
+from PIL import Image
 import numba
 import wandb
 
@@ -52,16 +52,34 @@ class EmbeddingCallback(Callback):
         self.writer = writer
         self.wandb_config = wandb_config
 
+        # init plot
+        self._init_plot()
+
+         
+    def _init_plot(self):
+
+        # TODO: Make rmsd_fig and nc_fig
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(111, projection='3d')
+        
+        #vmin, vmax = self.minmax(rmsd)
+        cmi = plt.get_cmap('jet')
+        #cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        #scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
+        #scalar_map.set_array(rmsd)
+        #self.fig.colorbar(scalar_map)
+        #self.color = scalar_map.to_rgba(rmsd)
+        
 
     def on_epoch_end(self, epoch, logs):
         # prepare plot data
         embeddings = logs["embeddings"][::self.sample_interval,...]
 
         # t-sne plots
-        self.tsne_plot(embeddings)
+        self.tsne_plot(embeddings, logs)
 
         
-    def tsne_plot(self, embeddings):
+    def tsne_plot(self, embeddings, logs):
 
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
@@ -79,7 +97,7 @@ class EmbeddingCallback(Callback):
 
         z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
 
-        self.ax.scatter3D(z1, z2, z3, marker='.', c=self.color)
+        self.ax.scatter3D(z1, z2, z3, marker='.') #, c=self.color)
         self.ax.set_xlim3d(self.minmax(z1))
         self.ax.set_ylim3d(self.minmax(z2))
         self.ax.set_zlim3d(self.minmax(z3))
@@ -87,11 +105,17 @@ class EmbeddingCallback(Callback):
         self.ax.set_ylabel(r'$z_2$')
         self.ax.set_zlabel(r'$z_3$')
         self.ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
+
+        # save figure
         time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
+
+        # summary writer
         if self.writer is not None:
             self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
 
+        # wandb logging
         if self.wandb_config is not None:
-            wandb.log({'epoch t-SNE embeddings': self.fig}, step = logs['global_step'])
+            img = Image.open(os.path.join(self.out_dir, time_stamp))
+            wandb.log({"epoch t-SNE embeddings": [wandb.Image(img, caption="Latent Space Visualizations")]}, step = logs['global_step'])
         self.ax.clear()
