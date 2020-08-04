@@ -550,7 +550,7 @@ class AAE3d(object):
         self.model.train()
         train_loss_d = 0.
         train_loss_eg = 0.
-        for batch_idx, data in enumerate(train_loader):
+        for batch_idx, token in enumerate(train_loader):
             
             if self.verbose:
                 start = time.time()
@@ -562,6 +562,7 @@ class AAE3d(object):
                 callback.on_batch_begin(batch_idx, epoch, logs)
 
             # copy to gpu
+            data, rmsd = token
             data = data.to(self.devices[0])
                 
             # get reconstruction
@@ -651,9 +652,11 @@ class AAE3d(object):
             logs["input_samples"] = []
             logs["reconstructed_samples"] = []
             logs["embeddings"] = []
+            logs["rmsd"] = []
         with torch.no_grad():
-            for data in valid_loader:
+            for token in valid_loader:
                 # copy to gpu
+                data, rmsd = token
                 data = data.to(self.devices[0])
                 # get reconstruction
                 codes, mu, logvar = self.model.encode(data)
@@ -665,6 +668,7 @@ class AAE3d(object):
                     logs["input_samples"].append(data.detach().cpu().numpy())
                     logs["embeddings"].append(codes.detach().cpu().numpy())
                     logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
+                    logs["rmsd"].append(rmsd.detach().numpy())
 
         valid_loss /= len(valid_loader.dataset)
 
@@ -673,6 +677,7 @@ class AAE3d(object):
             logs["input_samples"] = np.concatenate(logs["input_samples"], axis = 0)
             logs["embeddings"] = np.concatenate(logs["embeddings"], axis = 0)
             logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis = 0)
+            logs["rmsd"] = np.concatenate(logs["rmsd"], axis = 0)
 
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))

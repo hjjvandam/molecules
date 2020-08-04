@@ -14,6 +14,12 @@ from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
               type=click.Path(exists=True),
               help='Path to file containing preprocessed contact matrix data')
 
+@click.option('-dn', '--dataset_name', required=True, type=str,
+              help='Name of the dataset in the HDF5 file.')
+
+@click.option('-rn', '--rmsd_name', required=True, type=str,
+              help='Name of the RMSD data in the HDF5 file.')
+
 @click.option('-o', '--out', 'out_path', required=True,
               type=click.Path(exists=True),
               help='Output directory for model data')
@@ -57,7 +63,8 @@ from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
-def main(input_path, out_path, model_id, num_points, num_features,
+def main(input_path, dataset_name, rmsd_name, out_path, model_id,
+         num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, latent_dim, lambda_rec, lambda_gp, num_data_workers,
          wandb_project_name):
@@ -87,6 +94,8 @@ def main(input_path, out_path, model_id, num_points, num_features,
 
     # Load training and validation data
     train_dataset = PointCloudDataset(input_path,
+                                      dataset_name,
+                                      rmsd_name,
                                       num_points,
                                       num_features,
                                       split='train')
@@ -94,6 +103,8 @@ def main(input_path, out_path, model_id, num_points, num_features,
                               pin_memory=True, num_workers = num_data_workers)
 
     valid_dataset = PointCloudDataset(input_path,
+                                      dataset_name,
+                                      rmsd_name,
                                       num_points,
                                       num_features,
                                       split='valid')
