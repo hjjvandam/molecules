@@ -21,9 +21,9 @@ def _save_sparse_contact_maps(savefile, row, col, rmsd=None, fnc=None):
 
     # If specified, write rmsd and/or fraction of native contacts
     if rmsd is not None:
-        h5_file.create_dataset('rmsd', data=rmsd, **kwargs)
+        h5_file.create_dataset('rmsd', dtype='float16', data=rmsd, **kwargs)
     if fnc is not None:
-        h5_file.create_dataset('fnc', data=fnc, **kwargs)
+        h5_file.create_dataset('fnc', dtype='float16', data=fnc, **kwargs)
 
     h5_file.flush()
     h5_file.close()
