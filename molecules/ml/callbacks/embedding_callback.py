@@ -57,10 +57,6 @@ class EmbeddingCallback(Callback):
 
          
     def _init_plot(self):
-
-        # TODO: Make rmsd_fig and nc_fig
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
         
         #vmin, vmax = self.minmax(rmsd)
         cmi = plt.get_cmap('jet')
@@ -97,6 +93,8 @@ class EmbeddingCallback(Callback):
 
         z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
 
+        self.fig = plt.figure()
+        self.ax = self.fig.add_subplot(111, projection='3d')
         self.ax.scatter3D(z1, z2, z3, marker='.') #, c=self.color)
         self.ax.set_xlim3d(self.minmax(z1))
         self.ax.set_ylim3d(self.minmax(z2))
@@ -118,4 +116,6 @@ class EmbeddingCallback(Callback):
         if self.wandb_config is not None:
             img = Image.open(os.path.join(self.out_dir, time_stamp))
             wandb.log({"epoch t-SNE embeddings": [wandb.Image(img, caption="Latent Space Visualizations")]}, step = logs['global_step'])
+            
         self.ax.clear()
+        self.fig.close()
