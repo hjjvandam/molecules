@@ -78,10 +78,13 @@ class EmbeddingCallback(Callback):
             group = h5_file['contact_maps']
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
+            self.len = len(self.row_dset)
         else:
             # contact_maps dset has shape (N, W, H, 1)
             self.dset = h5_file['contact_maps']
+            self.len = len(self.dset)
 
+        self.shape = shape
         self.sparse = sparse
         self.out_dir = out_dir
         self.sample_interval = sample_interval
@@ -102,11 +105,13 @@ class EmbeddingCallback(Callback):
         NOTE: last batch may have diferent size.
         """
         start, step = 0, self.sample_interval * self.batch_size
-        for idx in range(0, len(self.dset), step):
+        for idx in range(0, self.len, step):
             if self.sparse:
                 # Retrieve sparse row,col from disk and make dense in memory
                 data = []
                 for i in range(start, start + step, self.sample_interval):
+                    if i >= self.len:
+                        break
                     indices = torch.from_numpy(np.vstack((self.row_dset[i],
                                                           self.col_dset[i]))) \
                                           .to(self.device).to(torch.long)
@@ -116,7 +121,7 @@ class EmbeddingCallback(Callback):
                     # Handles (1, W, H) and (W, H)
                     data.append(torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense())
 
-                yield torch.Tensor(data)
+                yield torch.stack(data).view(-1, *self.shape)
 
             else:
                 yield torch.from_numpy(
@@ -192,3 +197,4 @@ class EmbeddingCallback(Callback):
         if self.writer is not None:
             self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
         self.ax.clear()
+
