@@ -1,8 +1,8 @@
 import torch
 import numpy as np
 from torch.utils.data import Dataset
-#from molecules.utils import open_h5
-import h5py as h5
+from molecules.utils import open_h5
+
 
 class PointCloudDataset(Dataset):
     """
@@ -19,7 +19,10 @@ class PointCloudDataset(Dataset):
             Path to h5 file containing contact matrices.
 
         dataset_name : str
-            Name of the dataset in the HDF5 file.
+            Name of the point cloud data in the HDF5 file.
+
+        rmsd_name : str
+            Name of the RMSD in the HDF5 file.  
 
         num_points : int
             Number of points per sample. Should be smaller or equal than the total number of points.
@@ -38,15 +41,13 @@ class PointCloudDataset(Dataset):
 
         # Open h5 file. Python's garbage collector closes the
         # file when class is destructed.
-        #self.h5_file = open_h5(path)
         self.file_path = path
-        self.h5_file = h5.File(self.file_path, "r")
+        self.h5_file = open_h5(self.file_path)
 
         # get point clouds
         self.dataset_name = dataset_name
         self.rmsd_name = rmsd_name
         self.dset = self.h5_file[self.dataset_name]
-        self.rmsd = self.h5_file[self.rmsd_name]
         self.len = self.dset.shape[0]
         
         # train validation split index
@@ -80,7 +81,6 @@ class PointCloudDataset(Dataset):
 
         # close and reopen later
         self.dset = None
-        self.rmsd = None
         self.h5_file.close()
         self.init = False
             
@@ -92,7 +92,7 @@ class PointCloudDataset(Dataset):
     def __getitem__(self, idx):
         # init if necessary
         if not self.init:
-            self.h5_file = h5.File(self.file_path, "r")
+            self.h5_file = open_h5(self.file_path)
             self.dset = self.h5_file[self.dataset_name]
             self.rmsd = self.h5_file[self.rmsd_name]
             self.init = True
@@ -116,6 +116,7 @@ class PointCloudDataset(Dataset):
         
         # normalize
         result = (self.token[0, ...] - self.bias) * self.scale
+        rmsd = self.rmsd[idx, 2]
                     
-        return torch.tensor(result, requires_grad = False), torch.tensor(self.rmsd[idx, 2], requires_grad = False)
+        return torch.tensor(result, requires_grad = False), torch.tensor(rmsd, requires_grad = False)
 

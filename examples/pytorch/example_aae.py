@@ -152,7 +152,9 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     #                                           wandb_config = wandb_config)
     
     embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
-                                           sample_interval = len(valid_dataset) // 10,
+                                           path = input_path,
+                                           rmsd_name = rmsd_name,
+                                           sample_interval = len(valid_dataset) // 100,
                                            writer = writer,
                                            wandb_config = wandb_config)
 

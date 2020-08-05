@@ -10,6 +10,7 @@ from .callback import Callback
 from PIL import Image
 import numba
 import wandb
+from molecules.utils import open_h5
 
 
 class EmbeddingCallback(Callback):
@@ -29,11 +30,18 @@ class EmbeddingCallback(Callback):
     Saves VAE embeddings of random samples.
     """
     def __init__(self, out_dir,
+                 path, rmsd_name,
                  sample_interval=20,
                  writer=None, wandb_config=None):
         """
         Parameters
         ----------
+        path : str
+            H5 File with rmsd data.
+        
+        rmsd_name : str
+            Dataset name for rmsd data.
+
         out_dir : str
             Directory to store output plots.
 
@@ -52,30 +60,33 @@ class EmbeddingCallback(Callback):
         self.writer = writer
         self.wandb_config = wandb_config
 
-        # init plot
-        self._init_plot()
+        # needed for init plot
+        self._init_plot(path, rmsd_name)
 
-         
-    def _init_plot(self):
         
-        #vmin, vmax = self.minmax(rmsd)
+    def _init_plot(self, path, rmsd_name):
+        # load all rmsd data
+        f = open_h5(path)
+        rmsd = f[rmsd_name][..., 2]
+        vmin, vmax = self.minmax(rmsd)
+
+        # create colormaps
         cmi = plt.get_cmap('jet')
-        #cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-        #scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
-        #scalar_map.set_array(rmsd)
-        #self.fig.colorbar(scalar_map)
-        #self.color = scalar_map.to_rgba(rmsd)
-        
+        cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        self.scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
+        self.scalar_map.set_array(rmsd)
 
+        
     def on_epoch_end(self, epoch, logs):
         # prepare plot data
         embeddings = logs["embeddings"][::self.sample_interval,...]
+        rmsd = logs["rmsd"][::self.sample_interval,...]
 
         # t-sne plots
-        self.tsne_plot(embeddings, logs)
+        self.tsne_plot(embeddings, rmsd, logs)
 
         
-    def tsne_plot(self, embeddings, logs):
+    def tsne_plot(self, embeddings, rmsd, logs):
 
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
@@ -95,7 +106,8 @@ class EmbeddingCallback(Callback):
 
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
-        ax.scatter3D(z1, z2, z3, marker='.') #, c=self.color)
+        color = self.scalar_map.to_rgba(rmsd)
+        ax.scatter3D(z1, z2, z3, marker = '.', c = color)
         ax.set_xlim3d(self.minmax(z1))
         ax.set_ylim3d(self.minmax(z2))
         ax.set_zlim3d(self.minmax(z3))
@@ -103,6 +115,7 @@ class EmbeddingCallback(Callback):
         ax.set_ylabel(r'$z_2$')
         ax.set_zlabel(r'$z_3$')
         ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
+        fig.colorbar(self.scalar_map)
 
         # save figure
         time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
