@@ -120,14 +120,15 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    #embedding_callback = EmbeddingCallback(input_path,
-    #                                       input_shape,
-    #                                       out_dir=join(model_path, 'embedddings'),
-    #                                       writer=writer)
+    embedding_callback = EmbeddingCallback(input_path,
+                                          input_shape,
+                                          sparse=sparse,
+                                          out_dir=join(model_path, 'embedddings'),
+                                          writer=writer)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
-              callbacks=[loss_callback, checkpoint_callback])# embedding_callback])
+              callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))
