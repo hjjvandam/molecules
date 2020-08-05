@@ -31,8 +31,9 @@ class EmbeddingCallback(Callback):
     """
     def __init__(self, out_dir,
                  path, rmsd_name,
-                 sample_interval=20,
-                 writer=None, wandb_config=None):
+                 projection_type = "3d",
+                 sample_interval = 20,
+                 writer = None, wandb_config = None):
         """
         Parameters
         ----------
@@ -41,6 +42,9 @@ class EmbeddingCallback(Callback):
         
         rmsd_name : str
             Dataset name for rmsd data.
+
+        projection_type: str
+            Type of projection: 2D or 3D.
 
         out_dir : str
             Directory to store output plots.
@@ -57,6 +61,7 @@ class EmbeddingCallback(Callback):
 
         self.out_dir = out_dir
         self.sample_interval = sample_interval
+        self.projection_type = projection_type.lower()
         self.writer = writer
         self.wandb_config = wandb_config
 
@@ -95,25 +100,35 @@ class EmbeddingCallback(Callback):
         # TODO: plot different charts using different perplexity values
 
         # Outputs 3D embeddings using all available processors
-        tsne = TSNE(n_components=3, n_jobs=-1)
+        tsne = TSNE(n_components = int(self.projection_type[0]), n_jobs=-1)
 
         # TODO: running on cpu as a numpy array may be an issue for large systems
         #       consider using pytorch tSNE implemenation. Drawback is that
         #       so far there are only 2D versions implemented.
         embeddings = tsne.fit_transform(embeddings)
 
-        z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
-
+        # plot
         fig = plt.figure()
-        ax = fig.add_subplot(111, projection='3d')
+        ax = fig.add_subplot(1, 1, 1, projection = self.projection_type)
         color = self.scalar_map.to_rgba(rmsd)
-        ax.scatter3D(z1, z2, z3, marker = '.', c = color)
-        ax.set_xlim3d(self.minmax(z1))
-        ax.set_ylim3d(self.minmax(z2))
-        ax.set_zlim3d(self.minmax(z3))
-        ax.set_xlabel(r'$z_1$')
-        ax.set_ylabel(r'$z_2$')
-        ax.set_zlabel(r'$z_3$')
+
+        if self.projection_type == "3d":
+            z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
+            ax.scatter3D(z1, z2, z3, marker = '.', c = color)
+            ax.set_xlim3d(self.minmax(z1))
+            ax.set_ylim3d(self.minmax(z2))
+            ax.set_zlim3d(self.minmax(z3))
+            ax.set_xlabel(r'$z_1$')
+            ax.set_ylabel(r'$z_2$')
+            ax.set_zlabel(r'$z_3$')
+        else:
+            z1, z2 = embeddings[:, 0], embeddings[:, 1]
+            ax.scatter(z1, z2, marker = '.', c = color)
+            ax.set_xlim(self.minmax(z1))
+            ax.set_ylim(self.minmax(z2))
+            ax.set_xlabel(r'$z_1$')
+            ax.set_ylabel(r'$z_2$')
+        
         ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
         fig.colorbar(self.scalar_map)
 

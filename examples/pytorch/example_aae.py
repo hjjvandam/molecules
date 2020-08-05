@@ -9,6 +9,15 @@ from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCa
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 
+def parse_dict(ctx, param, value):
+    if value is not None:
+        token = value.split(",")
+        result = {}
+        for item in token:
+            k, v = item.split("=")
+            result[k] = v
+        return result
+
 @click.command()
 @click.option('-i', '--input', 'input_path', required=True,
               type=click.Path(exists=True),
@@ -48,14 +57,14 @@ from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 @click.option('-b', '--batch_size', default=128, type=int,
               help='Batch size for training')
 
+@click.option('-opt', '--optimizer', callback=parse_dict,
+              help='Optimizer parameters')
+
 @click.option('-d', '--latent_dim', default=256, type=int,
               help='Number of dimensions in latent space')
 
-@click.option('-lrec', '--lambda_rec', default=1., type=float,
-              help='Reconstruction loss weight')
-
-@click.option('-lgp', '--lambda_gp', default=10., type=float,
-              help='Gradient penalty weight')
+@click.option('-lw', '--loss_weights', callback=parse_dict,
+              help='Loss parameters')
 
 @click.option('-ndw', '--num_data_workers', default=1, type=int,
               help='Number of workers for data loading')
@@ -66,7 +75,8 @@ from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 def main(input_path, dataset_name, rmsd_name, out_path, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
-         epochs, batch_size, latent_dim, lambda_rec, lambda_gp, num_data_workers,
+         epochs, batch_size, optimizer, latent_dim,
+         loss_weights, num_data_workers,
          wandb_project_name):
     """Example for training Fs-peptide with AAE3d."""
 
@@ -75,13 +85,15 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     aae_hparams = {
         "num_features": num_features,
         "latent_dim": latent_dim,
-        "lambda_rec": lambda_rec,
-        "lambda_gp": lambda_gp
+        "lambda_rec": float(loss_weights["lambda_rec"]),
+        "lambda_gp": float(loss_weights["lambda_gp"]),
+        "lambda_adv": float(loss_weights["lambda_adv"])
         }
     hparams = AAE3dHyperparams(**aae_hparams)
-
+    
     # optimizers
-    optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
+    optimizer_hparams = OptimizerHyperparams(name = optimizer["name"],
+                                             hparams={'lr':float(optimizer["lr"])})
 
     aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu))
@@ -130,8 +142,8 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
         wandb_config.num_points = num_points
         wandb_config.num_features = num_features
         wandb_config.latent_dim = latent_dim
-        wandb_config.lambda_rec = lambda_rec
-        wandb_config.lambda_gp = lambda_gp
+        wandb_config.lambda_rec = aae_hparams["lambda_rec"]
+        wandb_config.lambda_gp = aae_hparams["lambda_gp"]
 
         # optimizer
         wandb_config.optimizer_name = optimizer_hparams.name
@@ -154,7 +166,8 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
                                            path = input_path,
                                            rmsd_name = rmsd_name,
-                                           sample_interval = len(valid_dataset) // 100,
+                                           projection_type = "3d",
+                                           sample_interval = len(valid_dataset) // 300,
                                            writer = writer,
                                            wandb_config = wandb_config)
 

@@ -16,7 +16,7 @@ class PointCloudDataset(Dataset):
         Parameters
         ----------
         path : str
-            Path to h5 file containing contact matrices.
+            Path to h5 file containing data set.
 
         dataset_name : str
             Name of the point cloud data in the HDF5 file.

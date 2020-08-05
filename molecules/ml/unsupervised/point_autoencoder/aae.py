@@ -405,6 +405,7 @@ class AAE3d(object):
         # loss parameters
         self.lambda_gp = hparams.lambda_gp
         self.lambda_rec = hparams.lambda_rec
+        self.lambda_adv = hparams.lambda_adv
         self.rec_loss = cl.ChamferLoss()
     
     def _configure_device(self, gpu):
@@ -467,8 +468,8 @@ class AAE3d(object):
         return loss
         
     def _loss_fnc_eg(self, data, rec_batch, fake_logit):        
-        # reconstruction loss
-        loss = self.lambda_rec * torch.mean(self.rec_loss(rec_batch, data))
+        # reconstruction loss: here we need input shape (batch_size, num_points, points_dim)
+        loss = self.lambda_rec * torch.mean(self.rec_loss(rec_batch.permute(0, 2, 1), data.permute(0, 2, 1)))
 
         # add generator loss if requested
         if fake_logit is not None:
@@ -605,30 +606,30 @@ class AAE3d(object):
             self.optimizer_eg.step()
 
             if callbacks:
-                logs['train_loss_d'] = loss_d.item() / len(data)
-                logs['train_loss_eg'] = loss_eg.item() / len(data)
+                logs['train_loss_d'] = loss_d.item()
+                logs['train_loss_eg'] = loss_eg.item()
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
             
             if self.verbose:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss_d: {:.6f}\tLoss_eg: {:.6f}\tTime: {:.3f}'.format(
                       epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss_d.item() / len(data), loss_eg.item() / len(data), 
+                      loss_d.item(), loss_eg.item(),
                       time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
 
-            train_loss_d /= len(train_loader.dataset)
-            train_loss_eg /= len(train_loader.dataset)
+            # running loss over epoch
+            train_loss_d_ave = train_loss_d / float(batch_idx + 1)
+            train_loss_eg_ave = train_loss_eg / float(batch_idx + 1)
 
             if callbacks:
-                logs['train_loss_d'] = train_loss_d
-                logs['train_loss_eg'] = train_loss_eg
-                logs['global_step'] = epoch
+                logs['train_loss_d_average'] = train_loss_d_ave
+                logs['train_loss_eg_average'] = train_loss_eg_ave
 
             if self.verbose:
-                print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d, train_loss_eg))
+                print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d_ave, train_loss_eg_ave))
                 
     def _validate(self, valid_loader, callbacks, logs):
         """
@@ -647,14 +648,14 @@ class AAE3d(object):
             Filled with data for callbacks
         """
         self.model.eval()
-        valid_loss = 0
+        valid_loss = 0.
         if callbacks:
             logs["input_samples"] = []
             logs["reconstructed_samples"] = []
             logs["embeddings"] = []
             logs["rmsd"] = []
         with torch.no_grad():
-            for token in valid_loader:
+            for batch_idx, token in enumerate(valid_loader):
                 # copy to gpu
                 data, rmsd = token
                 data = data.to(self.devices[0])
@@ -670,7 +671,7 @@ class AAE3d(object):
                     logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
                     logs["rmsd"].append(rmsd.detach().numpy())
 
-        valid_loss /= len(valid_loader.dataset)
+        valid_loss /= float(batch_idx + 1)
 
         if callbacks:
             logs['valid_loss'] = valid_loss
