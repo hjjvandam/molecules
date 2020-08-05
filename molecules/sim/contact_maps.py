@@ -2,7 +2,7 @@ import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.analysis import distances, rms#, align
 
-def _save_sparse_contact_maps(savefile, row, col, rmsd=None, fnc=None):
+def _save_sparse_contact_maps(save_file, row, col, rmsd=None, fnc=None):
     """Helper function. Saves COO row/col matrices to file."""
     import h5py
     import numpy as np
@@ -10,7 +10,7 @@ def _save_sparse_contact_maps(savefile, row, col, rmsd=None, fnc=None):
 
     kwargs = {'fletcher32': True}
 
-    h5_file = open_h5(savefile, 'w')
+    h5_file = open_h5(save_file, 'w')
     group = h5_file.create_group('contact_maps')
     # Specify variable length arrays
     dt = h5py.vlen_dtype(np.dtype('int16'))
@@ -33,7 +33,7 @@ def fraction_of_native_contacts(cm, native_cm):
     return 1 - (cm != native_cm).mean()
 
 def sparse_contact_maps_from_traj(pdb_file, native_pdb, traj_file,
-                                  cutoff=8., savefile=None,
+                                  cutoff=8., save_file=None,
                                   verbose=False):
     """Get contact map from trajectory. Requires all row,col indicies
     from the traj to fit into memory at the same time."""
@@ -76,12 +76,12 @@ def sparse_contact_maps_from_traj(pdb_file, native_pdb, traj_file,
             print(f'Writing frame {i}/{len(sim.trajectory)}\tfnc:'
                   f'{fnc[i]}\trmsd: {rmsd[i]}\tshape: {coo.shape}')
 
-    if savefile:
-        _save_sparse_contact_maps(savefile, row, col, rmsd, fnc)
+    if save_file:
+        _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
 
     return row, col, rmsd, fnc
 
-def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
+def sparse_contact_maps_from_matrices(contact_maps, save_file=None):
     """Convert normal contact matrices to sparse format."""
     from scipy.sparse import coo_matrix
 
@@ -92,7 +92,7 @@ def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
         row.append(coo.row.astype('int16'))
         col.append(coo.col.astype('int16'))
 
-    if savefile:
-        _save_sparse_contact_maps(savefile, row, col)
+    if save_file:
+        _save_sparse_contact_maps(save_file, row, col)
 
     return row, col

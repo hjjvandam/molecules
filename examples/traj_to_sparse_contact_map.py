@@ -25,7 +25,7 @@ from molecules.sim.contact_maps import sparse_contact_maps_from_traj
 def main(pdb_path, native_pdb_path, traj_path, out_path, verbose):
 
     sparse_contact_maps_from_traj(pdb_path, native_pdb_path,
-                                  traj_path, savefile=out_path,
+                                  traj_path, save_file=out_path,
                                   verbose=verbose)
 
 if __name__ == '__main__':
