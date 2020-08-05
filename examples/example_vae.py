@@ -162,8 +162,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, encoder_gpu, sp
     # │   ├── decoder-weights.pt
     # │   ├── encoder-weights.pt
     # │   ├── loss.json
-    # │   ├── model-hparams.pkl
-    # │   └── optimizer-hparams.pkl
+    # │   ├── model-hparams.json
+    # │   └── optimizer-hparams.json
 
 if __name__ == '__main__':
     main()
