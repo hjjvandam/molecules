@@ -27,6 +27,11 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-w', '--dim2', required=True, type=int,
               help='W of (H,W) shaped contact matrix')
 
+@click.option('-c', '--checkpoint', default='',
+             type=click.Path(exists=True),
+             help='Model checkpoint file to resume training. ' \
+                  'Checkpoint files saved as .pt by CheckpointCallback.')
+
 @click.option('-s', '--sparse', is_flag=True,
               help='Specifiy whether input matrices are sparse format')
 
@@ -48,8 +53,12 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
-def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
-         decoder_gpu, epochs, batch_size, model_type, latent_dim):
+@click.option('-S', '--sample_interval', default=20, type=int,
+              help="For embedding plots. Plots every sample_interval'th point")
+
+def main(input_path, out_path, checkpoint, model_id, dim1, dim2, encoder_gpu, sparse,
+         decoder_gpu, epochs, batch_size, model_type, latent_dim,
+         sample_interval):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
@@ -121,13 +130,16 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
     embedding_callback = EmbeddingCallback(input_path,
-                                          input_shape,
-                                          sparse=sparse,
-                                          out_dir=join(model_path, 'embedddings'),
-                                          writer=writer)
+                                           join(model_path, 'embedddings'),
+                                           input_shape,
+                                           sparse=sparse,
+                                           writer=writer,
+                                           sample_interval=sample_interval,
+                                           gpu=encoder_gpu)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
+              checkpoint=checkpoint,
               callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history to disk.
