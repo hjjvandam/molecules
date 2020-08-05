@@ -88,4 +88,3 @@ class ContactMapDataset(Dataset):
             data = torch.from_numpy(np.array(self.dset[idx]))
 
         return data.view(self.shape).to(self.device).to(torch.float32)
-
