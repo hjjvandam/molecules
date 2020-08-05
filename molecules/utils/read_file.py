@@ -1,20 +1,4 @@
 import h5py
-import tables 
-
-
-def read_h5_contact_maps(filename): 
-    data = tables.open_file(filename, 'r')
-    contact_maps = data.root.contact_maps.read()
-    data.close()
-    return contact_maps
-
-
-def read_h5_RMSD(filename):
-    data = tables.open_file(filename, 'r')
-    RMSD = data.root.RMSD.read()
-    data.close()
-    return RMSD
-
 
 def open_h5(h5_file, mode='r', libver='latest', swmr=True, **kwargs):
     """
@@ -44,4 +28,3 @@ def open_h5(h5_file, mode='r', libver='latest', swmr=True, **kwargs):
     # TODO: bug in sparse_contact_map_from_matrices when libver and swmr
     # specified
     return h5py.File(h5_file, mode, **kwargs) #, libver=libver, swmr=swmr)
-
