@@ -53,6 +53,7 @@ def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
     if verbose:
         print('Traj length: ', len(sim.trajectory))
 
+    # TODO: update ca_atoms to be a more general var name
     # Select atoms for RMSD, fnc and contact map
     ca_atoms = sim.select_atoms(sel)
 
