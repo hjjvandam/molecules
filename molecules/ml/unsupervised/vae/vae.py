@@ -354,7 +354,7 @@ class VAE:
                 
                 # data = data.to(self.device)
                 recon_batch, codes, mu, logvar = self.model(data)
-                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
+                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item() / len(data)
                 
                 if callbacks:
                     logs["input_samples"].append(data.detach().cpu().numpy())
