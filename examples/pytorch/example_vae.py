@@ -48,8 +48,12 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
+@click.option('-wp', '--wandb_project_name', default=None, type=str,
+              help='Project name for wandb logging')
+
 def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
-         decoder_gpu, epochs, batch_size, model_type, latent_dim):
+         decoder_gpu, epochs, batch_size, model_type, latent_dim,
+         wandb_project_name):
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
@@ -91,12 +95,16 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
 
     # Load training and validation data
     train_loader = DataLoader(ContactMapDataset(input_path,
+                                                "contact_maps",
+                                                "rmsd",
                                                 input_shape,
                                                 split='train',
                                                 sparse=sparse,
                                                 gpu=encoder_gpu),
                               batch_size=batch_size, shuffle=True)
     valid_loader = DataLoader(ContactMapDataset(input_path,
+                                                "contact_maps",
+                                                "rmsd",
                                                 input_shape,
                                                 split='valid',
                                                 sparse=sparse,
@@ -106,15 +114,41 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
 
+    # do we want wandb
+    wandb_config = None
+    if wandb_project_name is not None:
+        import wandb
+        wandb.init(project = wandb_project_name,
+                   name = model_id,
+                   id = model_id,
+                   resume = False)
+        wandb_config = wandb.config
+        
+        # log HP
+        wandb_config.dim1 = dim1
+        wandb_config.dim2 = dim2
+        wandb_config.latent_dim = latent_dim
+        
+        # optimizer
+        wandb_config.optimizer_name = optimizer_hparams.name
+        for param in optimizer_hparams.hparams:
+            wandb_config["optimizer_" + param] = optimizer_hparams.hparams[param]
+            
+        # watch model
+        wandb.watch(vae.model)
+    
     # Optional callbacks
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
-    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    #embedding_callback = EmbeddingCallback(input_path,
-    #                                       input_shape,
-    #                                       out_dir=join(model_path, 'embedddings'),
-    #                                       writer=writer)
+    embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
+                                           path = input_path,
+                                           rmsd_name = rmsd_name,
+                                           projection_type = "2d",
+                                           sample_interval = len(valid_dataset) // 1000,
+                                           writer = writer,
+                                           wandb_config = wandb_config)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,

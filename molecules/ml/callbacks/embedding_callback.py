@@ -181,7 +181,10 @@ class EmbeddingCallback(Callback):
                 ax.set_ylabel(r'$z_2$')
                 if idr == 0:
                     ax.set_title(titlestring)
-                fig.colorbar(self.scalar_map)
+                # colorbar
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.1)
+                fig.colorbar(self.scalar_map, ax = axs, cax = cax)
 
         # tight layout
         plt.tight_layout()

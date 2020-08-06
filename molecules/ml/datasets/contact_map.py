@@ -8,13 +8,20 @@ class ContactMapDataset(Dataset):
     PyTorch Dataset class to load contact matrix data. Uses HDF5
     files and only reads into memory what is necessary for one batch.
     """
-    def __init__(self, path, input_shape, split_ptc=0.8,
+    def __init__(self, path, dataset_name, rmsd_name,
+                 input_shape, split_ptc=0.8,
                  split='train', sparse=False, gpu=None):
         """
         Parameters
         ----------
         path : str
             Path to h5 file containing contact matrices.
+
+        dataset_name : str
+            Path to contact maps in HDF5 file.
+
+        rmsd_name : str
+            Path to rmsd data in HDF5 file.
 
         input_shape : tuple
             Shape of contact matrices (H, W), may be (1, H, W).
@@ -46,15 +53,16 @@ class ContactMapDataset(Dataset):
         h5_file = open_h5(path)
 
         if sparse:
-            group = h5_file['contact_maps']
+            group = h5_file[dataset_name]
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
             self.len = len(self.row_dset)
         else:
             # contact_maps dset has shape (N, W, H, 1)
-            self.dset = h5_file['contact_maps']
+            self.dset = h5_file[dataset_name]
             self.len = len(self.dset)
- 
+        self.rmsd =h5_file[rmsd_name]
+
         # train validation split index
         self.split_ind = int(split_ptc * self.len)
         self.split = split
@@ -86,6 +94,7 @@ class ContactMapDataset(Dataset):
             data = torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense()
         else:
             data = torch.from_numpy(np.array(self.dset[idx]))
+        rmsd = self.rmsd[idx][...]
 
-        return data.view(self.shape).to(self.device).to(torch.float32)
+        return data.view(self.shape).to(self.device).to(torch.float32), torch.tensor(rmsd)
 

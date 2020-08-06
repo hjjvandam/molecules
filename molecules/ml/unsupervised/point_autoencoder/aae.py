@@ -7,6 +7,7 @@ from collections import OrderedDict, namedtuple
 from molecules.ml.unsupervised.point_autoencoder.hyperparams import AAE3dHyperparams
 from molecules.ml.unsupervised.point_autoencoder.utils import init_weights
 from molecules.ml.unsupervised.point_autoencoder.losses import chamfer_loss as cl
+#from molecules.ml.unsupervised.point_autoencoder.losses import earth_movers_distance as emd
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 
 __all__ = ['AAE3d']
@@ -620,16 +621,16 @@ class AAE3d(object):
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
 
-            # running loss over epoch
-            train_loss_d_ave = train_loss_d / float(batch_idx + 1)
-            train_loss_eg_ave = train_loss_eg / float(batch_idx + 1)
+        # running loss over epoch
+        train_loss_d_ave = train_loss_d / float(batch_idx + 1)
+        train_loss_eg_ave = train_loss_eg / float(batch_idx + 1)
 
-            if callbacks:
-                logs['train_loss_d_average'] = train_loss_d_ave
-                logs['train_loss_eg_average'] = train_loss_eg_ave
+        if callbacks:
+            logs['train_loss_d_average'] = train_loss_d_ave
+            logs['train_loss_eg_average'] = train_loss_eg_ave
 
-            if self.verbose:
-                print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d_ave, train_loss_eg_ave))
+        if self.verbose:
+            print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d_ave, train_loss_eg_ave))
                 
     def _validate(self, valid_loader, callbacks, logs):
         """

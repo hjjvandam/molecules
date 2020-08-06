@@ -42,14 +42,14 @@ class VAEModel(nn.Module):
     def forward(self, x):
         # x should be placed on encoder gpu in the dataset class
         mu, logvar = self.encoder(x)
-        x = self.reparameterize(mu, logvar).to(self.device.decoder)
-        x = self.decoder(x).to(self.device.encoder)
+        z = self.reparameterize(mu, logvar).to(self.device.decoder)
+        x = self.decoder(z).to(self.device.encoder)
         # TODO: see if we can remove this to speed things up
         #       or find an inplace way. Only necessary for bad
         #       hyperparam config such as optimizer learning rate
         #       being large.
         #x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
-        return x, mu, logvar
+        return x, z, mu, logvar
 
     def encode(self, x):
         # mu layer
@@ -281,8 +281,10 @@ class VAE:
 
         self.model.train()
         train_loss = 0.
-        for batch_idx, data in enumerate(train_loader):
+        for batch_idx, token in enumerate(train_loader):
 
+            data, rmsd = token
+            
             if self.verbose:
                 start = time.time()
 
@@ -295,30 +297,30 @@ class VAE:
             # TODO: Consider passing device argument into dataset class instead
             # data = data.to(self.device.encoder)
             self.optimizer.zero_grad()
-            recon_batch, mu, logvar = self.model(data)
+            recon_batch, codes, mu, logvar = self.model(data)
             loss = self.loss_fnc(recon_batch, data, mu, logvar)
             loss.backward()
             train_loss += loss.item()
             self.optimizer.step()
 
             if callbacks:
-                logs['train_loss'] = loss.item() / len(data)
+                logs['train_loss'] = loss.item()
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
                       epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data), time.time() - start))
+                      loss.item(), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
 
-        train_loss /= len(train_loader.dataset)
+        train_loss_ave = train_loss / float(batch_idx + 1)
 
         if callbacks:
-                logs['train_loss'] = train_loss
-                logs['global_step'] = epoch
+            logs['train_loss_average'] = train_loss_ave
+            logs['global_step'] = epoch
 
         if self.verbose:
             print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
@@ -341,16 +343,33 @@ class VAE:
         """
         self.model.eval()
         valid_loss = 0
+        if callbacks:
+            logs["input_samples"] = []
+            logs["reconstructed_samples"] = []
+            logs["embeddings"] = []
+            logs["rmsd"] = []
         with torch.no_grad():
-            for data in valid_loader:
+            for token in valid_loader:
+                data, rmsd = token
+                
                 # data = data.to(self.device)
-                recon_batch, mu, logvar = self.model(data)
+                recon_batch, codes, mu, logvar = self.model(data)
                 valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
 
-        valid_loss /= len(valid_loader.dataset)
+                if callbacks:
+                    logs["input_samples"].append(data.detach().cpu().numpy())
+                    logs["embeddings"].append(codes.detach().cpu().numpy())
+                    logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
+                    logs["rmsd"].append(rmsd.detach().numpy())
+
+        valid_loss /= float(batch_idx + 1)
 
         if callbacks:
             logs['valid_loss'] = valid_loss
+            logs["input_samples"] = np.concatenate(logs["input_samples"], axis = 0)
+            logs["embeddings"] = np.concatenate(logs["embeddings"], axis = 0)
+            logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis = 0)
+            logs["rmsd"] = np.concatenate(logs["rmsd"], axis = 0)
 
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))

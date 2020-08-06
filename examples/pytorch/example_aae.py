@@ -169,8 +169,8 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
                                            path = input_path,
                                            rmsd_name = rmsd_name,
-                                           projection_type = "3d_project",
-                                           sample_interval = len(valid_dataset) // 300,
+                                           projection_type = "2d",
+                                           sample_interval = len(valid_dataset) // 1000,
                                            writer = writer,
                                            wandb_config = wandb_config)
 
