@@ -27,7 +27,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-w', '--dim2', required=True, type=int,
               help='W of (H,W) shaped contact matrix')
 
-@click.option('-c', '--checkpoint', default='',
+@click.option('-c', '--checkpoint',
              type=click.Path(exists=True),
              help='Model checkpoint file to resume training. ' \
                   'Checkpoint files saved as .pt by CheckpointCallback.')
@@ -139,7 +139,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, encoder_gpu, sp
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
-              checkpoint=checkpoint,
+              checkpoint=checkpoint if checkpoint is not None else '',
               callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history to disk.
