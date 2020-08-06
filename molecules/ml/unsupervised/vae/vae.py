@@ -1,4 +1,5 @@
 import time
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -300,18 +301,18 @@ class VAE:
             recon_batch, codes, mu, logvar = self.model(data)
             loss = self.loss_fnc(recon_batch, data, mu, logvar)
             loss.backward()
-            train_loss += loss.item()
+            train_loss += loss.item() / len(data)
             self.optimizer.step()
 
             if callbacks:
-                logs['train_loss'] = loss.item()
+                logs['train_loss'] = loss.item() / len(data)
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
                       epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item(), time.time() - start))
+                      loss.item() / len(data), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
@@ -320,7 +321,6 @@ class VAE:
 
         if callbacks:
             logs['train_loss_average'] = train_loss_ave
-            logs['global_step'] = epoch
 
         if self.verbose:
             print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
@@ -349,7 +349,7 @@ class VAE:
             logs["embeddings"] = []
             logs["rmsd"] = []
         with torch.no_grad():
-            for token in valid_loader:
+            for batch_idx, token in enumerate(valid_loader):
                 data, rmsd = token
                 
                 # data = data.to(self.device)
@@ -358,11 +358,11 @@ class VAE:
 
                 if callbacks:
                     logs["input_samples"].append(data.detach().cpu().numpy())
-                    logs["embeddings"].append(codes.detach().cpu().numpy())
-                    logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
+                    logs["embeddings"].append(mu.detach().cpu().numpy())
+                    logs["reconstructed_samples"].append(recon_batch.detach().cpu().numpy())
                     logs["rmsd"].append(rmsd.detach().numpy())
 
-        valid_loss /= float(batch_idx + 1)
+            valid_loss /= float(batch_idx + 1)
 
         if callbacks:
             logs['valid_loss'] = valid_loss

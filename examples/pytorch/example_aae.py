@@ -160,16 +160,11 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
-    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    #pointcloud_callback = PointCloud3dCallback(out_dir=join(model_path, 'plots'),
-    #                                           sample_interval = len(valid_dataset) // 10,
-    #                                           writer = writer,
-    #                                           wandb_config = wandb_config)
-    
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))    
     embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
                                            path = input_path,
                                            rmsd_name = rmsd_name,
-                                           projection_type = "2d",
+                                           projection_type = "3d_project",
                                            sample_interval = len(valid_dataset) // 1000,
                                            writer = writer,
                                            wandb_config = wandb_config)

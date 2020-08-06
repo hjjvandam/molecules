@@ -668,7 +668,7 @@ class AAE3d(object):
                 # append samples
                 if callbacks:
                     logs["input_samples"].append(data.detach().cpu().numpy())
-                    logs["embeddings"].append(codes.detach().cpu().numpy())
+                    logs["embeddings"].append(mu.detach().cpu().numpy())
                     logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
                     logs["rmsd"].append(rmsd.detach().numpy())
 

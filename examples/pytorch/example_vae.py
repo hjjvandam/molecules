@@ -94,21 +94,28 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
     summary(vae.model, input_shape)
 
     # Load training and validation data
-    train_loader = DataLoader(ContactMapDataset(input_path,
-                                                "contact_maps",
-                                                "rmsd",
-                                                input_shape,
-                                                split='train',
-                                                sparse=sparse,
-                                                gpu=encoder_gpu),
+    # training
+    train_dataset = ContactMapDataset(input_path,
+                                      "contact_maps",
+                                      "rmsd",
+                                      input_shape,
+                                      split='train',
+                                      sparse=sparse,
+                                      gpu=encoder_gpu)
+    
+    train_loader = DataLoader(train_dataset,
                               batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(ContactMapDataset(input_path,
-                                                "contact_maps",
-                                                "rmsd",
-                                                input_shape,
-                                                split='valid',
-                                                sparse=sparse,
-                                                gpu=encoder_gpu),
+
+    # validation
+    valid_dataset = ContactMapDataset(input_path,
+                                      "contact_maps",
+                                      "rmsd",
+                                      input_shape,
+                                      split='valid',
+                                      sparse=sparse,
+                                      gpu=encoder_gpu)
+    
+    valid_loader = DataLoader(valid_dataset,
                               batch_size=batch_size, shuffle=True)
 
     # For ease of training multiple models
@@ -144,15 +151,15 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
     embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
                                            path = input_path,
-                                           rmsd_name = rmsd_name,
-                                           projection_type = "2d",
+                                           rmsd_name = "rmsd",
+                                           projection_type = "3d",
                                            sample_interval = len(valid_dataset) // 1000,
                                            writer = writer,
                                            wandb_config = wandb_config)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
-              callbacks=[loss_callback, checkpoint_callback])# embedding_callback])
+              callbacks=[loss_callback, checkpoint_callback, embedding_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))
