@@ -323,7 +323,7 @@ class VAE:
             logs['train_loss_average'] = train_loss_ave
 
         if self.verbose:
-            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
+            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss_ave))
 
     def _validate(self, valid_loader, callbacks, logs):
         """
@@ -355,7 +355,7 @@ class VAE:
                 # data = data.to(self.device)
                 recon_batch, codes, mu, logvar = self.model(data)
                 valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
-
+                
                 if callbacks:
                     logs["input_samples"].append(data.detach().cpu().numpy())
                     logs["embeddings"].append(mu.detach().cpu().numpy())

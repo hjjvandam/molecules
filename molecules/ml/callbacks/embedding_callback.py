@@ -102,7 +102,9 @@ class EmbeddingCallback(Callback):
         ncols = 3 if (self.projection_type == "3d_project") else 1
 
         # create figure
-        fig, axs = plt.subplots(figsize=(ncols * 4, nrows * 4), nrows = nrows, ncols = ncols, sharey = True)
+        fig, axs = plt.subplots(figsize=(ncols * 4, nrows * 4),
+                                nrows = nrows, ncols = ncols,
+                                sharey = True)
 
         # set up constants
         color = self.scalar_map.to_rgba(rmsd)
