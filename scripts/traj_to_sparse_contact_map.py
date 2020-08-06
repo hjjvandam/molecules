@@ -9,9 +9,9 @@ from molecules.sim.contact_maps import sparse_contact_maps_from_traj
               type=click.Path(exists=True),
               help='Path to file containing PDB file')
 
-@click.option('-n', 'native_pdb_path', required=True,
+@click.option('-r', 'ref_pdb_path', required=True,
               type=click.Path(exists=True),
-              help='Path to file containing native state PDB file')
+              help='Path to file containing reference state PDB file')
 
 @click.option('-t', 'traj_path', required=True,
               type=click.Path(exists=True),
@@ -22,9 +22,9 @@ from molecules.sim.contact_maps import sparse_contact_maps_from_traj
 
 @click.option('-v', '--verbose', is_flag=True)
 
-def main(pdb_path, native_pdb_path, traj_path, out_path, verbose):
+def main(pdb_path, ref_pdb_path, traj_path, out_path, verbose):
 
-    sparse_contact_maps_from_traj(pdb_path, native_pdb_path,
+    sparse_contact_maps_from_traj(pdb_path, ref_pdb_path,
                                   traj_path, save_file=out_path,
                                   verbose=verbose)
 
