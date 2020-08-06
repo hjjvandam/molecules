@@ -13,7 +13,7 @@ class AAE3dHyperparams(Hyperparams):
                  use_encoder_bias = True,
                  use_generator_bias = True,
                  use_discriminator_bias = True,
-                 noise_mu = 0,
+                 noise_mu = 0.,
                  noise_std = 1.,
                  lambda_rec = 1.,
                  lambda_gp = 10.,

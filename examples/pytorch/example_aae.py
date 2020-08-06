@@ -85,6 +85,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     aae_hparams = {
         "num_features": num_features,
         "latent_dim": latent_dim,
+        "noise_std": 0.2,
         "lambda_rec": float(loss_weights["lambda_rec"]),
         "lambda_gp": float(loss_weights["lambda_gp"]),
         "lambda_adv": float(loss_weights["lambda_adv"])
@@ -142,8 +143,10 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
         wandb_config.num_points = num_points
         wandb_config.num_features = num_features
         wandb_config.latent_dim = latent_dim
-        wandb_config.lambda_rec = aae_hparams["lambda_rec"]
-        wandb_config.lambda_gp = aae_hparams["lambda_gp"]
+        wandb_config.lambda_rec = hparams.lambda_rec
+        wandb_config.lambda_gp = hparams.lambda_gp
+        # noise
+        wandb_config.noise_std = hparams.noise_std
 
         # optimizer
         wandb_config.optimizer_name = optimizer_hparams.name
@@ -166,7 +169,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     embedding_callback = EmbeddingCallback(out_dir = join(model_path, 'embedddings'),
                                            path = input_path,
                                            rmsd_name = rmsd_name,
-                                           projection_type = "3d",
+                                           projection_type = "3d_project",
                                            sample_interval = len(valid_dataset) // 300,
                                            writer = writer,
                                            wandb_config = wandb_config)

@@ -4,6 +4,7 @@ import torch
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from sklearn.manifold import TSNE
 from .callback import Callback
@@ -81,6 +82,9 @@ class EmbeddingCallback(Callback):
         self.scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
         self.scalar_map.set_array(rmsd)
 
+        # perplexities
+        self.perplexities = [2, 5, 30, 50, 100]
+
         
     def on_epoch_end(self, epoch, logs):
         # prepare plot data
@@ -93,57 +97,107 @@ class EmbeddingCallback(Callback):
         
     def tsne_plot(self, embeddings, rmsd, logs):
 
+        # create plot grid
+        nrows = len(self.perplexities)
+        ncols = 3 if (self.projection_type == "3d_project") else 1
+
+        # create figure
+        fig, axs = plt.subplots(figsize=(ncols * 4, nrows * 4), nrows = nrows, ncols = ncols, sharey = True)
+
+        # set up constants
+        color = self.scalar_map.to_rgba(rmsd)
+        titlestring = f'RMSD to native state after step {logs["global_step"]}'
+        
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
         #       https://pytorch.org/docs/master/generated/torch.pca_lowrank.html
 
-        # TODO: plot different charts using different perplexity values
-
-        # Outputs 3D embeddings using all available processors
-        tsne = TSNE(n_components = int(self.projection_type[0]), n_jobs=-1)
-
-        # TODO: running on cpu as a numpy array may be an issue for large systems
-        #       consider using pytorch tSNE implemenation. Drawback is that
-        #       so far there are only 2D versions implemented.
-        embeddings = tsne.fit_transform(embeddings)
-
-        # plot
-        fig = plt.figure()
-        ax = fig.add_subplot(1, 1, 1, projection = self.projection_type)
-        color = self.scalar_map.to_rgba(rmsd)
-
-        if self.projection_type == "3d":
-            z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
-            ax.scatter3D(z1, z2, z3, marker = '.', c = color)
-            ax.set_xlim3d(self.minmax(z1))
-            ax.set_ylim3d(self.minmax(z2))
-            ax.set_zlim3d(self.minmax(z3))
-            ax.set_xlabel(r'$z_1$')
-            ax.set_ylabel(r'$z_2$')
-            ax.set_zlabel(r'$z_3$')
-        else:
-            z1, z2 = embeddings[:, 0], embeddings[:, 1]
-            ax.scatter(z1, z2, marker = '.', c = color)
-            ax.set_xlim(self.minmax(z1))
-            ax.set_ylim(self.minmax(z2))
-            ax.set_xlabel(r'$z_1$')
-            ax.set_ylabel(r'$z_2$')
+        for idr, perplexity in enumerate(self.perplexities):
         
-        ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
-        fig.colorbar(self.scalar_map)
+            # Outputs 3D embeddings using all available processors
+            tsne = TSNE(n_components = int(self.projection_type[0]), n_jobs=-1, perplexity = perplexity)
+
+            # TODO: running on cpu as a numpy array may be an issue for large systems
+            #       consider using pytorch tSNE implemenation. Drawback is that
+            #       so far there are only 2D versions implemented.
+            embeddings = tsne.fit_transform(embeddings)
+
+            # plot
+            if self.projection_type == "3d":
+                ax = axs[idr]
+                z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
+                ax.scatter3D(z1, z2, z3, marker = '.', c = color)
+                ax.set_xlim3d(self.minmax(z1))
+                ax.set_ylim3d(self.minmax(z2))
+                ax.set_zlim3d(self.minmax(z3))
+                ax.set_xlabel(r'$z_1$')
+                ax.set_ylabel(r'$z_2$')
+                ax.set_zlabel(r'$z_3$')
+                if idr == 0:
+                    ax.set_title(titlestring)
+                fig.colorbar(self.scalar_map)
+            
+            elif self.projection_type == "3d_project":
+                z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
+                z1mm = self.minmax(z1)
+                z2mm = self.minmax(z2)
+                z3mm = self.minmax(z3)
+                zmm = (min([z1mm[0], z2mm[0], z3mm[0]]), max([z1mm[1], z2mm[1], z3mm[1]]))
+                # x-y
+                ax1 = axs[idr, 0]
+                ax1.scatter(z1, z2, marker = '.', c = color)
+                ax1.set_xlim(zmm)
+                ax1.set_ylim(zmm)
+                ax1.set_xlabel(r'$z_1$')
+                ax1.set_ylabel(r'$z_2$')
+                # x-z
+                ax2 = axs[idr, 1]
+                ax2.scatter(z1, z3, marker = '.', c = color)
+                ax2.set_xlim(zmm)
+                ax2.set_ylim(zmm)
+                ax2.set_xlabel(r'$z_1$')
+                ax2.set_ylabel(r'$z_3$')
+                if idr == 0:
+                    ax2.set_title(titlestring)
+                # y-z
+                ax3 = axs[idr, 2]
+                ax3.scatter(z2, z3, marker = '.', c = color)
+                ax3.set_xlim(zmm)
+                ax3.set_ylim(zmm)
+                ax3.set_xlabel(r'$z_2$')
+                ax3.set_ylabel(r'$z_3$')
+                # colorbar
+                divider = make_axes_locatable(axs[idr, 2])
+                cax = divider.append_axes("right", size="5%", pad=0.1)
+                fig.colorbar(self.scalar_map, ax = axs[idr, 2], cax = cax)
+            
+            else:
+                ax = axs[idr]
+                z1, z2 = embeddings[:, 0], embeddings[:, 1]
+                ax.scatter(z1, z2, marker = '.', c = color)
+                ax.set_xlim(self.minmax(z1))
+                ax.set_ylim(self.minmax(z2))
+                ax.set_xlabel(r'$z_1$')
+                ax.set_ylabel(r'$z_2$')
+                if idr == 0:
+                    ax.set_title(titlestring)
+                fig.colorbar(self.scalar_map)
+
+        # tight layout
+        plt.tight_layout()
 
         # save figure
-        time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
+        time_stamp = time.strftime(f'step-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
 
         # summary writer
         if self.writer is not None:
-            self.writer.add_figure('epoch t-SNE embeddings', fig, logs['global_step'])
+            self.writer.add_figure('step t-SNE embeddings', fig, logs['global_step'])
 
         # wandb logging
         if self.wandb_config is not None:
             img = Image.open(os.path.join(self.out_dir, time_stamp))
-            wandb.log({"epoch t-SNE embeddings": [wandb.Image(img, caption="Latent Space Visualizations")]}, step = logs['global_step'])
+            wandb.log({"step t-SNE embeddings": [wandb.Image(img, caption="Latent Space Visualizations")]}, step = logs['global_step'])
 
         # close plot
         plt.close(fig)
