@@ -33,26 +33,31 @@ def fraction_of_native_contacts(cm, native_cm):
     return 1 - (cm != native_cm).mean()
 
 def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
-                                  cutoff=8., save_file=None,
-                                  verbose=False):
-    """Get contact map from trajectory. Requires all row,col indicies
-    from the traj to fit into memory at the same time."""
+                                  cutoff=8., sel='protein and name CA',
+                                  save_file=None, verbose=False):
+    """
+    Get contact map from trajectory. Requires all row,col indicies
+    from the traj to fit into memory at the same time.
+
+    Parameters
+    ----------
+    sel : str
+        Select carbon-alpha atoms in the protein for RMSD and contact maps
+    """
+    # TODO: update docstring
 
     # Load simulation trajectory and reference structure into memory
     sim = mda.Universe(pdb_file, traj_file)
-    ref = mda.Universe(native_pdb)
+    ref = mda.Universe(ref_pdb_file)
 
     if verbose:
         print('Traj length: ', len(sim.trajectory))
 
-    # Select carbon-alpha atoms in the protein for RMSD and contact maps
-    ca_selection = 'protein and name CA'
+    # Select atoms for RMSD, fnc and contact map
+    ca_atoms = sim.select_atoms(sel)
 
-    # Select carbon-alpha atoms for contact matrix
-    ca_atoms = sim.select_atoms(ca_selection)
-
-    # Select carbon-alpha atoms in reference structure for RMSD
-    ref_positions = ref.select_atoms(ca_selection).positions.copy()
+    # Select atoms in reference structure for RMSD
+    ref_positions = ref.select_atoms(sel).positions.copy()
     # Generate reference contact map
     ref_cm = distances.contact_matrix(ref_positions, cutoff, returntype='sparse')
 
@@ -71,7 +76,7 @@ def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
         cm = distances.contact_matrix(ca_atoms.positions, cutoff, returntype='sparse')
 
         # Compute and store RMSD and fraction of native contacts
-        positions = sim.select_atoms(ca_selection).positions
+        positions = sim.select_atoms(sel).positions
         rmsd[i] = rms.rmsd(positions, ref_positions, center=True,
                            superposition=True)
         fnc[i] = fraction_of_native_contacts(cm, ref_cm)
