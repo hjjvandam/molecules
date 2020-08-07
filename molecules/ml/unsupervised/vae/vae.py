@@ -285,6 +285,7 @@ class VAE:
         for batch_idx, token in enumerate(train_loader):
 
             data, rmsd = token
+            data = data.to(self.device[0])
             
             if self.verbose:
                 start = time.time()
@@ -351,6 +352,7 @@ class VAE:
         with torch.no_grad():
             for batch_idx, token in enumerate(valid_loader):
                 data, rmsd = token
+                data = data.to(self.device[0])
                 
                 # data = data.to(self.device)
                 recon_batch, codes, mu, logvar = self.model(data)

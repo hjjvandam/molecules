@@ -10,7 +10,7 @@ class ContactMapDataset(Dataset):
     """
     def __init__(self, path, dataset_name, rmsd_name,
                  input_shape, split_ptc=0.8,
-                 split='train', sparse=False, gpu=None):
+                 split='train', sparse=False):
         """
         Parameters
         ----------
@@ -37,11 +37,6 @@ class ContactMapDataset(Dataset):
             If True, process data as sparse row/col COO format. Data
             should not contain any values because they are all 1's and
             generated on the fly. If False, input data is normal tensor.
-
-        gpu : int, None
-            If None, then data will be put onto the default GPU if CUDA
-            is available and otherwise is put onto a CPU. If gpu is int
-            type, then data is put onto the specified GPU.
         """
         if split not in ('train', 'valid'):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
@@ -69,11 +64,6 @@ class ContactMapDataset(Dataset):
         self.sparse = sparse
         self.shape = input_shape
 
-        if gpu is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device(f'cuda:{gpu}')
-
     def __len__(self):
         if self.split == 'train':
             return self.split_ind
@@ -96,5 +86,5 @@ class ContactMapDataset(Dataset):
             data = torch.from_numpy(np.array(self.dset[idx]))
         rmsd = self.rmsd[idx, 2]
 
-        return data.view(self.shape).to(self.device).to(torch.float32), torch.tensor(rmsd, requires_grad = False)
+        return data.view(self.shape), torch.tensor(rmsd, requires_grad = False)
 

@@ -100,11 +100,12 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
                                       "rmsd",
                                       input_shape,
                                       split='train',
-                                      sparse=sparse,
-                                      gpu=encoder_gpu)
+                                      sparse=sparse)
     
     train_loader = DataLoader(train_dataset,
-                              batch_size=batch_size, shuffle=True)
+                              batch_size = batch_size,
+                              shuffle = True,
+                              pin_memory = True)
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
@@ -112,11 +113,12 @@ def main(input_path, out_path, model_id, dim1, dim2, encoder_gpu, sparse,
                                       "rmsd",
                                       input_shape,
                                       split='valid',
-                                      sparse=sparse,
-                                      gpu=encoder_gpu)
+                                      sparse=sparse)
     
     valid_loader = DataLoader(valid_dataset,
-                              batch_size=batch_size, shuffle=True)
+                              batch_size = batch_size,
+                              shuffle = True,
+                              pin_memory = True)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
