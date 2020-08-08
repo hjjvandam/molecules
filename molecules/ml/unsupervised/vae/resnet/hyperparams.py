@@ -1,5 +1,6 @@
-from molecules.ml.hyperparams import Hyperparams
+import itertools
 from math import ceil, log, sqrt
+from molecules.ml.hyperparams import Hyperparams
 
 class ResnetVAEHyperparams(Hyperparams):
     def __init__(self, max_len, nchars, enc_kernel_size=5,
@@ -44,6 +45,18 @@ class ResnetVAEHyperparams(Hyperparams):
         # TODO: rename these
         self.max_len = max_len
         self.nchars = nchars
+
+        # TODO: verify this logic
+        for i in itertools.count():
+            recon_dim = latent_dim * (i ** 2)
+            if recon_dim == self.max_len:
+                self.dec_reslayers = i
+                break
+            if recon_dim > self.max_len:
+                raise ValueError(f'Unable to reconstruct latent_dim {self.latent_dim} ' \
+                                 f'to input size {self.max_len}. Must satisfy ' \
+                                 'latent_dim * (2^k) == input_size for some ' \
+                                 'integer k.')
 
         # The number of starting filters we use for the first
         # Conv1D.  Subsequent number of filters are computed
@@ -90,3 +103,4 @@ class ResnetVAEHyperparams(Hyperparams):
 
     def validate(self):
         pass
+
