@@ -135,6 +135,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, encoder_gpu, sp
                                            sparse=sparse,
                                            writer=writer,
                                            sample_interval=sample_interval,
+                                           batch_size=batch_size,
                                            gpu=encoder_gpu)
 
     # Train model with callbacks
