@@ -83,7 +83,7 @@ class ContactMapDataset(Dataset):
             # Handles (1, W, H) and (W, H)
             data = torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense()
         else:
-            data = torch.from_numpy(np.array(self.dset[idx]))
+            data = torch.Tensor(self.dset[idx, ...])
         rmsd = self.rmsd[idx, 2]
 
         return data.view(self.shape), torch.tensor(rmsd, requires_grad = False)

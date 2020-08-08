@@ -122,12 +122,12 @@ class EmbeddingCallback(Callback):
             # TODO: running on cpu as a numpy array may be an issue for large systems
             #       consider using pytorch tSNE implemenation. Drawback is that
             #       so far there are only 2D versions implemented.
-            embeddings = tsne.fit_transform(embeddings)
+            emb_trans = tsne.fit_transform(embeddings)
 
             # plot
             if self.projection_type == "3d":
                 ax = axs[idr]
-                z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
+                z1, z2, z3 = emb_trans[:, 0], emb_trans[:, 1], emb_trans[:, 2]
                 ax.scatter3D(z1, z2, z3, marker = '.', c = color)
                 ax.set_xlim3d(self.minmax(z1))
                 ax.set_ylim3d(self.minmax(z2))
@@ -140,11 +140,11 @@ class EmbeddingCallback(Callback):
                 fig.colorbar(self.scalar_map)
             
             elif self.projection_type == "3d_project":
-                z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
+                z1, z2, z3 = emb_trans[:, 0], emb_trans[:, 1], emb_trans[:, 2]
                 z1mm = self.minmax(z1)
                 z2mm = self.minmax(z2)
                 z3mm = self.minmax(z3)
-                zmm = (min([z1mm[0], z2mm[0], z3mm[0]]), max([z1mm[1], z2mm[1], z3mm[1]]))
+                zmm = (min([z1mm[0], z2mm[0], z3mm[0]]) * 0.95, max([z1mm[1], z2mm[1], z3mm[1]]) * 1.05)
                 # x-y
                 ax1 = axs[idr, 0]
                 ax1.scatter(z1, z2, marker = '.', c = color)
@@ -175,7 +175,7 @@ class EmbeddingCallback(Callback):
             
             else:
                 ax = axs[idr]
-                z1, z2 = embeddings[:, 0], embeddings[:, 1]
+                z1, z2 = emb_trans[:, 0], emb_trans[:, 1]
                 ax.scatter(z1, z2, marker = '.', c = color)
                 ax.set_xlim(self.minmax(z1))
                 ax.set_ylim(self.minmax(z2))
