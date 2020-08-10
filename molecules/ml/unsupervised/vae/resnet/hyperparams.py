@@ -48,7 +48,7 @@ class ResnetVAEHyperparams(Hyperparams):
 
         # TODO: verify this logic
         for i in itertools.count():
-            recon_dim = latent_dim * (i ** 2)
+            recon_dim = latent_dim * (2 ** i)
             if recon_dim == self.max_len:
                 self.dec_reslayers = i
                 break
