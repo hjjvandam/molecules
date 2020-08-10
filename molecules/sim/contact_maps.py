@@ -96,43 +96,40 @@ def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
 
     return row, col, rmsd, fnc
 
-def helper(kwargs):
-    id_ = kwargs.pop('id')
-    return sparse_contact_maps_from_traj(**kwargs), id_
+def _worker(kwargs):
+        id_ = kwargs.pop('id')
+        return sparse_contact_maps_from_traj(**kwargs), id_
 
 def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
                           cutoff=8., verbose=False):
 
-    # TODO: needs testing!
-
-    #import os
-    #import glob
     import itertools
     import concurrent.futures
 
-   #  tmp_folder = './data_tmp_h5'
-   # tmp_folder = f'{tmp_folder}_{abs(hash(tmp_folder))}'
-   # if os.path.exists(tmp_folder):
-   #     raise Exception(f'Temporary folder {tmp_folder} already exists. Delete or rename')
-
-   # os.makedirs(tmp_folder)
+     #    def _worker(kwargs):
+     #       id_ = kwargs.pop('id')
+     #      return sparse_contact_maps_from_traj(**kwargs), id_
 
     kwargs = [{'pdb_file': pdb_file,
                'ref_pdb_file': ref_pdb_file,
+               'traj_file': traj_file,
                'cutoff': cutoff,
+               'verbose': verbose and (i % 80 == 0), # 80 cores on lambda
                'id': i}
-               #'save_file': os.path.join(tmp_folder, f"{i}_{tmp_file.split('.'}[0]}.h5"}
-              for i, tmp_file in enumerate(traj_files)]
+              for i, traj_file in enumerate(traj_files)]
 
     rows, cols, rmsds, fncs, ids = [], [], [], [], []
     with concurrent.futures.ProcessPoolExecutor() as executor:
-        for row, col, rmsd, fnc, id_ in executor.map(helper, kwargs):
+        for (row, col, rmsd, fnc), id_ in executor.map(_worker, kwargs):
             rows.append(row)
             cols.append(col)
             rmsds.append(rmsd)
             fncs.append(fnc)
             ids.append(id_)
+            if verbose:
+                print('finished id: ', id_)
 
+    # Negligible runtime (1e-05 seconds)
     rows_, cols_, rmsds_, fncs_, = [], [], [], []
     for _, row, col, rmsd, fnc  in sorted(zip(ids, rows, cols, rmsds, fncs)):
         rows_.append(row)
@@ -140,14 +137,13 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
         rmsds_.append(rmsd)
         fncs_.append(fnc)
 
-    #h5_files = sorted(glob.glob(os.path.join(tmp_folder, '*.h5')))
-
+    # Negligible runtime (1e-2 seconds)
     rows_ = list(itertools.chain.from_iterable(rows_))
     cols_ = list(itertools.chain.from_iterable(cols_))
     rmsds_ = np.concatenate(rmsds_)
     fncs_ = np.concatenate(fncs_)
 
-    _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
+    _save_sparse_contact_maps(save_file, rows_, cols_, rmsds_, fncs_)
 
 def sparse_contact_maps_from_matrices(contact_maps, save_file=None):
     """Convert normal contact matrices to sparse format."""
