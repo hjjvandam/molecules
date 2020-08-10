@@ -4,16 +4,9 @@ Examples
 
 **Table of Contents**
 
-1. Convolutional Variational Autoencoder
+1. example_vae.py
 
-   * Model learning
+   Comprehensive example of using the molecules package to train an embedding model.
 
-      * MNIST
-
-      * FS-Peptide
-
-      * 1FME
-
-   * Embedding
-
-      * FS-Peptide
+   Trains VAE model, user can specify the model architecture as resnet
+   or symmetric. See example_vae.py --help for details.

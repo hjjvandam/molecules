@@ -8,7 +8,7 @@ class ContactMapDataset(Dataset):
     PyTorch Dataset class to load contact matrix data. Uses HDF5
     files and only reads into memory what is necessary for one batch.
     """
-    def __init__(self, path, input_shape, split_ptc=0.8,
+    def __init__(self, path, shape, split_ptc=0.8,
                  split='train', sparse=False, gpu=None):
         """
         Parameters
@@ -16,7 +16,7 @@ class ContactMapDataset(Dataset):
         path : str
             Path to h5 file containing contact matrices.
 
-        input_shape : tuple
+        shape : tuple
             Shape of contact matrices (H, W), may be (1, H, W).
 
         split_ptc : float
@@ -59,7 +59,7 @@ class ContactMapDataset(Dataset):
         self.split_ind = int(split_ptc * self.len)
         self.split = split
         self.sparse = sparse
-        self.shape = input_shape
+        self.shape = shape
 
         if gpu is None:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
@@ -88,4 +88,3 @@ class ContactMapDataset(Dataset):
             data = torch.from_numpy(np.array(self.dset[idx]))
 
         return data.view(self.shape).to(self.device).to(torch.float32)
-

@@ -1,35 +1,8 @@
+import numpy as np
 import MDAnalysis as mda
-from MDAnalysis.analysis import distances
+from MDAnalysis.analysis import distances, rms, align
 
-
-def contact_maps_from_traj(pdb_file, traj_file, contact_cutoff=8.0, savefile=None):
-    """
-    Get contact map from trajectory.
-    """
-    import os
-    import tables
-    mda_traj = mda.Universe(pdb_file, traj_file)
-    traj_length = len(mda_traj.trajectory) 
-    ca = mda_traj.select_atoms('name CA')
-    
-    if savefile:
-        savefile = os.path.abspath(savefile)
-        outfile = tables.open_file(savefile, 'w')
-        atom = tables.Float64Atom()
-        cm_table = outfile.create_earray(outfile.root, 'contact_maps', atom, shape=(traj_length, 0)) 
-
-    contact_matrices = []
-    for frame in mda_traj.trajectory:
-        cm_matrix = (distances.self_distance_array(ca.positions) < contact_cutoff) * 1.0
-        contact_matrices.append(cm_matrix)
-
-    if savefile:
-        cm_table.append(contact_matrices)
-        outfile.close() 
-
-    return contact_matrices
-
-def _save_sparse_contact_maps(savefile, row, col):
+def _save_sparse_contact_maps(save_file, row, col, rmsd=None, fnc=None):
     """Helper function. Saves COO row/col matrices to file."""
     import h5py
     import numpy as np
@@ -37,7 +10,7 @@ def _save_sparse_contact_maps(savefile, row, col):
 
     kwargs = {'fletcher32': True}
 
-    h5_file = open_h5(savefile, 'w')
+    h5_file = open_h5(save_file, 'w')
     group = h5_file.create_group('contact_maps')
     # Specify variable length arrays
     dt = h5py.vlen_dtype(np.dtype('int16'))
@@ -47,34 +20,128 @@ def _save_sparse_contact_maps(savefile, row, col):
     group.create_dataset('row', dtype=dt, data=row, **kwargs)
     group.create_dataset('col', dtype=dt, data=col, **kwargs)
 
+    # If specified, write rmsd and/or fraction of native contacts
+    if rmsd is not None:
+        h5_file.create_dataset('rmsd', dtype='float16', data=rmsd, **kwargs)
+    if fnc is not None:
+        h5_file.create_dataset('fnc', dtype='float16', data=fnc, **kwargs)
+
     h5_file.flush()
     h5_file.close()
 
-def sparse_contact_maps_from_traj(pdb_file, traj_file,
-                                  contact_cutoff=8., savefile=None):
-    """Get contact map from trajectory. Requires all row,col indicies
-    from the traj to fit into memory at the same time."""
-    from scipy.sparse import coo_matrix
+def fraction_of_native_contacts(cm, native_cm):
+    return 1 - (cm != native_cm).mean()
 
+def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
+                                  cutoff=8., sel='protein and name CA',
+                                  save_file=None, verbose=False):
+    """
+    Get contact map from trajectory. Requires all row,col indicies
+    from the traj to fit into memory at the same time.
+
+    Parameters
+    ----------
+    sel : str
+        Select carbon-alpha atoms in the protein for RMSD and contact maps
+    """
+    # TODO: update docstring
+
+    # Load simulation trajectory and reference structure into memory
     sim = mda.Universe(pdb_file, traj_file)
-    ca = sim.select_atoms('name CA')
+    ref = mda.Universe(ref_pdb_file)
 
+    if verbose:
+        print('Traj length: ', len(sim.trajectory))
+
+    # TODO: update ca_atoms to be a more general var name
+    # Select atoms for RMSD, fnc and contact map
+    ca_atoms = sim.select_atoms(sel)
+
+    # Select atoms in reference structure for RMSD
+    ref_positions = ref.select_atoms(sel).positions.copy()
+    # Generate reference contact map
+    ref_cm = distances.contact_matrix(ref_positions, cutoff, returntype='sparse')
+
+    # Align trajectory to compute accurate RMSD
+    align.AlignTraj(sim, ref, in_memory=True).run()
+
+    # Buffers for sparse contact row/col data
     row, col = [], []
-    for frame in sim.trajectory:
-        # Compute contact matrix
-        cm = (distances.self_distance_array(ca.positions) < contact_cutoff) * 1.
+    # Buffers for RMSD to native state and fraction of native contacts
+    params = {'shape': len(sim.trajectory), 'dtype': np.float32}
+    rmsd, fnc = np.empty(**params), np.empty(**params)
 
-        # Represent contact matrix in COO sparse format
-        coo = coo_matrix(cm, shape=cm.shape)
+    for i, frame in enumerate(sim.trajectory):
+
+        # Compute contact map in scipy lil_matrix form
+        cm = distances.contact_matrix(ca_atoms.positions, cutoff, returntype='sparse')
+
+        # Compute and store RMSD and fraction of native contacts
+        positions = sim.select_atoms(sel).positions
+        rmsd[i] = rms.rmsd(positions, ref_positions, center=True,
+                           superposition=True)
+        fnc[i] = fraction_of_native_contacts(cm, ref_cm)
+
+        # Represent contact map in COO sparse format
+        coo = cm.tocoo()
         row.append(coo.row.astype('int16'))
         col.append(coo.col.astype('int16'))
 
-    if savefile:
-        _save_sparse_contact_maps(savefile, row, col)
+        if verbose:
+            print(f'Writing frame {i}/{len(sim.trajectory)}\tfnc:'
+                  f'{fnc[i]}\trmsd: {rmsd[i]}\tshape: {coo.shape}')
 
-    return row, col
+    if save_file:
+        _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
 
-def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
+    return row, col, rmsd, fnc
+
+def _worker(kwargs):
+        id_ = kwargs.pop('id')
+        return sparse_contact_maps_from_traj(**kwargs), id_
+
+def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
+                          cutoff=8., verbose=False):
+
+    import itertools
+    import concurrent.futures
+
+    kwargs = [{'pdb_file': pdb_file,
+               'ref_pdb_file': ref_pdb_file,
+               'traj_file': traj_file,
+               'cutoff': cutoff,
+               'verbose': verbose and (i % 80 == 0), # 80 cores on lambda
+               'id': i}
+              for i, traj_file in enumerate(traj_files)]
+
+    rows, cols, rmsds, fncs, ids = [], [], [], [], []
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        for (row, col, rmsd, fnc), id_ in executor.map(_worker, kwargs):
+            rows.append(row)
+            cols.append(col)
+            rmsds.append(rmsd)
+            fncs.append(fnc)
+            ids.append(id_)
+            if verbose:
+                print('finished id: ', id_)
+
+    # Negligible runtime (1e-05 seconds)
+    rows_, cols_, rmsds_, fncs_, = [], [], [], []
+    for _, row, col, rmsd, fnc  in sorted(zip(ids, rows, cols, rmsds, fncs)):
+        rows_.append(row)
+        cols_.append(col)
+        rmsds_.append(rmsd)
+        fncs_.append(fnc)
+
+    # Negligible runtime (1e-2 seconds)
+    rows_ = list(itertools.chain.from_iterable(rows_))
+    cols_ = list(itertools.chain.from_iterable(cols_))
+    rmsds_ = np.concatenate(rmsds_)
+    fncs_ = np.concatenate(fncs_)
+
+    _save_sparse_contact_maps(save_file, rows_, cols_, rmsds_, fncs_)
+
+def sparse_contact_maps_from_matrices(contact_maps, save_file=None):
     """Convert normal contact matrices to sparse format."""
     from scipy.sparse import coo_matrix
 
@@ -85,8 +152,7 @@ def sparse_contact_maps_from_matrices(contact_maps, savefile=None):
         row.append(coo.row.astype('int16'))
         col.append(coo.col.astype('int16'))
 
-    if savefile:
-        _save_sparse_contact_maps(savefile, row, col)
+    if save_file:
+        _save_sparse_contact_maps(save_file, row, col)
 
     return row, col
-
