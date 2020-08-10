@@ -106,10 +106,6 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
     import itertools
     import concurrent.futures
 
-     #    def _worker(kwargs):
-     #       id_ = kwargs.pop('id')
-     #      return sparse_contact_maps_from_traj(**kwargs), id_
-
     kwargs = [{'pdb_file': pdb_file,
                'ref_pdb_file': ref_pdb_file,
                'traj_file': traj_file,
