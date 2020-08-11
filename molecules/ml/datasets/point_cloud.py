@@ -116,7 +116,7 @@ class PointCloudDataset(Dataset):
         
         # normalize
         result = (self.token[0, ...] - self.bias) * self.scale
-        rmsd = self.rmsd[idx, 2]
+        rmsd = self.rmsd[idx]
                     
         return torch.tensor(result, requires_grad = False), torch.tensor(rmsd, requires_grad = False)
 
