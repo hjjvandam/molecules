@@ -11,7 +11,7 @@ from molecules.utils import open_h5
 import numba
 
 
-class EmbeddingCallback(Callback):
+class Embedding2dCallback(Callback):
 
     # Helper function. Returns tuple of min and max of 1d np.ndarray.
     # Min and max in single pass.
@@ -36,35 +36,27 @@ class EmbeddingCallback(Callback):
         ----------
         path : str
             Path to h5 file containing contact matrices.
-
         out_dir : str
             Directory to store output plots.
-
         shape : tuple
             Shape of contact matrices (H, W), may be (1, H, W).
-
         sparse : bool
             If True, process data as sparse row/col COO format. Data
             should not contain any values because they are all 1's and
             generated on the fly. If False, input data is normal tensor.
-
         sample_interval : int
             Plots every sample_interval'th point in the data set
-
         batch_size : int
             Batch size to load raw contact matrices into memory.
             Batches are loaded into memory, encoded to a latent
             dimension and then collected in a np.ndarray. The
             np.ndarray is then passed to the TSNE algorithm.
-
             NOTE: Not a learning hyperparameter, simply needs to
                   be small enough to load batch into memory.
-
         gpu : int, None
             If None, then data will be put onto the default GPU if CUDA
             is available and otherwise is put onto a CPU. If gpu is int
             type, then data is put onto the specified GPU.
-
         writer : torch.utils.tensorboard.SummaryWriter
         """
 
@@ -136,7 +128,6 @@ class EmbeddingCallback(Callback):
         tuple : np.arrays of RMSD to native state and fraction of
                 native contacts sampled every self.sample_interval'th
                 frames of the MD trajectory.
-
         (rmsd array, fnc array) arrays of equal length.
         """
         return (np.array(dset[0: len(dset): self.sample_interval])
@@ -197,4 +188,3 @@ class EmbeddingCallback(Callback):
         if self.writer is not None:
             self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
         self.ax.clear()
-

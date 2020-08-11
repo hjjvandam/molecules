@@ -8,13 +8,20 @@ class ContactMapDataset(Dataset):
     PyTorch Dataset class to load contact matrix data. Uses HDF5
     files and only reads into memory what is necessary for one batch.
     """
-    def __init__(self, path, shape, split_ptc=0.8,
-                 split='train', sparse=False, gpu=None):
+    def __init__(self, path, dataset_name, rmsd_name,
+                 shape, split_ptc=0.8,
+                 split='train', sparse=False):
         """
         Parameters
         ----------
         path : str
             Path to h5 file containing contact matrices.
+
+        dataset_name : str
+            Path to contact maps in HDF5 file.
+
+        rmsd_name : str
+            Path to rmsd data in HDF5 file.
 
         shape : tuple
             Shape of contact matrices (H, W), may be (1, H, W).
@@ -30,11 +37,6 @@ class ContactMapDataset(Dataset):
             If True, process data as sparse row/col COO format. Data
             should not contain any values because they are all 1's and
             generated on the fly. If False, input data is normal tensor.
-
-        gpu : int, None
-            If None, then data will be put onto the default GPU if CUDA
-            is available and otherwise is put onto a CPU. If gpu is int
-            type, then data is put onto the specified GPU.
         """
         if split not in ('train', 'valid'):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
@@ -46,25 +48,22 @@ class ContactMapDataset(Dataset):
         h5_file = open_h5(path)
 
         if sparse:
-            group = h5_file['contact_maps']
+            group = h5_file[dataset_name]
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
             self.len = len(self.row_dset)
         else:
             # contact_maps dset has shape (N, W, H, 1)
-            self.dset = h5_file['contact_maps']
+            self.dset = h5_file[dataset_name]
             self.len = len(self.dset)
- 
+
+        self.rmsd = h5_file[rmsd_name]
+
         # train validation split index
         self.split_ind = int(split_ptc * self.len)
         self.split = split
         self.sparse = sparse
         self.shape = shape
-
-        if gpu is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device(f'cuda:{gpu}')
 
     def __len__(self):
         if self.split == 'train':
@@ -77,14 +76,15 @@ class ContactMapDataset(Dataset):
 
         if self.sparse:
             indices = torch.from_numpy(np.vstack((self.row_dset[idx],
-                                                  self.col_dset[idx]))) \
-                                      .to(self.device).to(torch.long)
-            values = torch.ones(indices.shape[1], dtype=torch.float32,
-                                device=self.device)
+                                                  self.col_dset[idx]))).to(torch.long)
+            values = torch.ones(indices.shape[1], dtype=torch.float32)
             # Set shape to the last 2 elements of self.shape.
             # Handles (1, W, H) and (W, H)
-            data = torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense()
+            data = torch.sparse.FloatTensor(indices, values,
+                        self.shape[-2:]).to_dense()
         else:
-            data = torch.from_numpy(np.array(self.dset[idx]))
+            data = torch.Tensor(self.dset[idx, ...])
 
-        return data.view(self.shape).to(self.device).to(torch.float32)
+        rmsd = self.rmsd[idx]
+
+        return data.view(self.shape), torch.tensor(rmsd, requires_grad=False)
