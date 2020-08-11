@@ -1,7 +1,7 @@
 from torch import nn
-from molecules.ml.unsupervised.vae.utils import (same_padding,
-                                                 conv_output_shape,
-                                                 get_activation)
+from molecules.ml.unsupervised.utils import (same_padding,
+                                             conv_output_shape,
+                                             get_activation)
 
 class ResidualConv1d(nn.Module):
     def __init__(self, input_shape, filters, kernel_size,

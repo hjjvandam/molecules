@@ -41,12 +41,33 @@ class CheckpointCallback(Callback):
     def _save(self, epoch, logs):
         """Saves optimizer state and encoder/decoder weights."""
 
+        # create new dictionary
         checkpoint = {
-            'encoder_state_dict': logs['model'].encoder.state_dict(),
-            'decoder_state_dict': logs['model'].decoder.state_dict(),
-            'optimizer_state_dict': logs['optimizer'].state_dict(),
             'epoch': epoch
             }
+
+        # optimizer
+        if "optimizer" in logs:
+            checkpoint['optimizer_state_dict'] = logs['optimizer'].state_dict()
+
+        if "optimizer_d" in logs:
+            checkpoint['optimizer_d_state_dict'] = logs['optimizer_d'].state_dict()
+
+        if "optimizer_eg" in logs:
+            checkpoint['optimizer_eg_state_dict'] = logs['optimizer_eg'].state_dict()
+
+        # model parameter
+        if hasattr(logs['model'], 'encoder'):
+            checkpoint['encoder_state_dict'] = logs['model'].encoder.state_dict()
+
+        if hasattr(logs['model'], 'decoder'):
+            checkpoint['decoder_state_dict'] = logs['model'].decoder.state_dict()
+
+        if hasattr(logs['model'], 'generator'):
+            checkpoint['generator_state_dict'] = logs['model'].generator.state_dict()
+
+        if hasattr(logs['model'], 'discriminator'):
+                checkpoint['discriminator_state_dict'] = logs['model'].discriminator.state_dict()
 
         time_stamp = time.strftime(f'epoch-{epoch}-%Y%m%d-%H%M%S.pt')
         path = os.path.join(self.out_dir, time_stamp)
