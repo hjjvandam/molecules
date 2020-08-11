@@ -33,7 +33,7 @@ def _save_point_cloud(save_file, positions, rmsd=None, fnc=None):
     """ Helper function - save point cloud representations to file"""
     import h5py
     import numpy as np
-    import molecules.utils import open_h5
+    from molecules.utils import open_h5
     kwargs = {'fletcher32': True}
 
     h5_file = open_h5(save_file, 'w')
