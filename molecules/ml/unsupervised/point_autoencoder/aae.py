@@ -5,7 +5,7 @@ import torch.nn as nn
 from itertools import chain 
 from collections import OrderedDict, namedtuple
 from molecules.ml.unsupervised.point_autoencoder.hyperparams import AAE3dHyperparams
-from molecules.ml.unsupervised.point_autoencoder.utils import init_weights
+from molecules.ml.unsupervised.utils import init_weights
 from molecules.ml.unsupervised.point_autoencoder.losses import chamfer_loss as cl
 #from molecules.ml.unsupervised.point_autoencoder.losses import earth_movers_distance as emd
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
