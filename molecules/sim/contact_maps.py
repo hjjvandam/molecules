@@ -29,8 +29,72 @@ def _save_sparse_contact_maps(save_file, row, col, rmsd=None, fnc=None):
     h5_file.flush()
     h5_file.close()
 
+def _save_point_cloud(save_file, positions, rmsd=None, fnc=None):
+    """ Helper function - save point cloud representations to file"""
+    import h5py
+    import numpy as np
+    import molecules.utils import open_h5
+    kwargs = {'fletcher32': True}
+
+    h5_file = open_h5(save_file, 'w')
+    group = h5_file.create_group('point_cloud')
+    dt = h5py.vlen_dtype(np.dtype('float16'))
+    group.create_dataset('positions', dtype='float16', data=positions, **kwargs)
+    if rmsd is not None:
+        h5_file.create_dataset('rmsd', dtype='float16', data=rmsd, **kwargs)
+    if fnc is not None:
+        h5_file.create_dataset('fnc', dtype='float16', data=fnc, **kwargs)
+    h5_file.flush()
+    h5_file.close()
+
 def fraction_of_native_contacts(cm, native_cm):
     return 1 - (cm != native_cm).mean()
+
+def point_cloud_from_traj(pdb_file, ref_pdb_file, traj_file,
+                            sel='protein and name CA',
+                            save_file=None, verbose=False):
+    """
+    Get a point cloud representation from trajectory.
+
+    Parameters
+    ----------
+    sel: str
+        Select any set of atoms in the protein for RMSD and point clouds
+    """
+
+    # Load simulation and reference structures
+    sim = mda.Universe(pdb_file, traj_file)
+    ref = mda.Universe(ref_pdb_file)
+
+    if verbose:
+        print('Traj length: ', len(sim.trajectory))
+
+    ca_atoms = sim.select_atoms(sel)
+    ref_positions = ref.select_atoms(sel).positions.copy()
+    ref_cm = distances.contact_matrix(ref_positions, cutoff, returntype='sparse')
+
+    # Align trajectory to compute accurate RMSD
+    align.AlignTraj(sim, ref, in_memory=True).run()
+
+    params = {'shape': len(sim.trajectory), 'dtype': np.float32}
+    rmsd, fnc = np.empty(**params), np.empty(**params)
+
+    for i, frame in enumerate(sim.trajectory):
+        # Compute and store RMSD and fraction of native contacts
+        cm = distances.contact_matrix(ca_atoms.positions, cutoff, returntype='sparse')
+        positions = sim.select_atoms(sel).positions
+        rmsd[i] = rms.rmsd(positions, ref_positions, center=True,
+                           superposition=True)
+        fnc[i] = fraction_of_native_contacts(cm, ref_cm)
+
+        if verbose:
+            print(f'Writing frame {i}/{len(sim.trajectory)}\tfnc:'
+                  f'{fnc[i]}\trmsd: {rmsd[i]}\tshape: {positions.shape}')
+
+        if save_file:
+            _save_point_cloud(save_file, row, col, rmsd, fnc)
+        return positions, rmsd, fnc
+
 
 def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
                                   cutoff=8., sel='protein and name CA',
