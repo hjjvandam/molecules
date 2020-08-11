@@ -11,7 +11,8 @@ class PointCloudDataset(Dataset):
     """
     def __init__(self, path, dataset_name, rmsd_name,
                  num_points, num_features, split_ptc=0.8,
-                 split='train', normalize = True):
+                 split = 'train',
+                 normalize = 'box', cms_transform = False):
         """
         Parameters
         ----------
@@ -67,17 +68,23 @@ class PointCloudDataset(Dataset):
         # create temp buffer for IO
         self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
 
+        # cms transform if requested
+        self.cms_transform = cms_transform
+        cms = 0.
+        if self.cms_transform:
+            # average over points
+            cms = np.mean(self.dset[:, 0:3, :], axis = 2, keepdims = True)
+
         # normalize input
+        self.bias = np.zeros((3 + self.num_features, self.num_points), dtype = np.float32)
+        self.scale = np.ones((3 + self.num_features, self.num_points), dtype = np.float32)
         self.normalize = normalize
-        if self.normalize:
-            self.bias = self.dset[...].min(axis = (0,2))
-            self.scale = 1. / (self.dset[...].max(axis = (0,2)) - self.bias)
+        if self.normalize == 'box':
+            self.bias[0:3, :] = (self.dset[:, 0:3, :] - cms).min()
+            self.scale[0:3, :] = 1. / ((self.dset[:, 0:3, :] - cms).max() - self.bias)
             # broadcast shapes
-            self.bias = np.tile(np.expand_dims(self.bias, axis = -1), (1, self.num_points))
-            self.scale = np.tile(np.expand_dims(self.scale, axis = -1), (1, self.num_points))
-        else:
-            self.bias = np.zeros((3 + self.num_features, self.num_points), dtype = np.float32)
-            self.scale = np.ones((3 + self.num_features, self.num_points), dtype = np.float32)
+            #self.bias = np.tile(self.bias, (3 + self.num_features, self.num_points)).astype(np.float32)
+            #self.scale = np.tile(self.scale, (3 + self.num_features, self.num_points)).astype(np.float32)
 
         # close and reopen later
         self.dset = None
@@ -112,8 +119,11 @@ class PointCloudDataset(Dataset):
             self.dset.read_direct(self.token,
                                   np.s_[idx:idx+1, 0:(3 + self.num_features), 0:self.num_points],
                                   np.s_[0:1, 0:(3 + self.num_features), 0:self.num_points])
-            #self.token[0, ...] = self.dset[idx:idx+1, ...]
-        
+
+        ## cms subtract
+        if self.cms_transform:
+            self.token[0, 0:3, :] -= np.mean(self.token[0, 0:3, :], axis = -1, keepdims = True)
+            
         # normalize
         result = (self.token[0, ...] - self.bias) * self.scale
         rmsd = self.rmsd[idx]
