@@ -112,7 +112,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                       num_points,
                                       num_features,
                                       split='train',
-                                      normalization='box',
+                                      normalize='box',
                                       cms_transform=True)
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
                               pin_memory=True, num_workers = num_data_workers)
@@ -123,7 +123,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                       num_points,
                                       num_features,
                                       split='valid',
-                                      normalization='box',
+                                      normalize='box',
                                       cms_transform=True)
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
                               pin_memory=True, num_workers = num_data_workers)
