@@ -364,6 +364,9 @@ class VAE:
                 
         valid_loss /= float(batch_idx + 1)
 
+        if callbacks:
+            logs['valid_loss'] = valid_loss
+        
         for callback in callbacks:
             callback.on_validation_end(epoch, logs)
         

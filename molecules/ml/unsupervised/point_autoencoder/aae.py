@@ -521,7 +521,7 @@ class AAE3d(object):
                 callback.on_epoch_begin(epoch, logs)
 
             self._train(train_loader, epoch, callbacks, logs)
-            self._validate(valid_loader, callbacks, logs)
+            self._validate(valid_loader, epoch, callbacks, logs)
 
             for callback in callbacks:
                 callback.on_epoch_end(epoch, logs)
@@ -632,7 +632,7 @@ class AAE3d(object):
         if self.verbose:
             print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d_ave, train_loss_eg_ave))
                 
-    def _validate(self, valid_loader, callbacks, logs):
+    def _validate(self, valid_loader, epoch, callbacks, logs):
         """
         Test model on validation set.
 
@@ -650,11 +650,9 @@ class AAE3d(object):
         """
         self.model.eval()
         valid_loss = 0.
-        if callbacks:
-            logs["input_samples"] = []
-            logs["reconstructed_samples"] = []
-            logs["embeddings"] = []
-            logs["rmsd"] = []
+        for callback in callbacks:
+            callback.on_validation_begin(epoch, logs)
+        
         with torch.no_grad():
             for batch_idx, token in enumerate(valid_loader):
                 # copy to gpu
@@ -665,21 +663,20 @@ class AAE3d(object):
                 # just reconstruction loss is important here
                 recons_batch = self.model.generate(codes)
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
-                # append samples
-                if callbacks:
-                    logs["input_samples"].append(data.detach().cpu().numpy())
-                    logs["embeddings"].append(mu.detach().cpu().numpy())
-                    logs["reconstructed_samples"].append(recons_batch.detach().cpu().numpy())
-                    logs["rmsd"].append(rmsd.detach().numpy())
 
+                for callback in callbacks:
+                    callback.on_validation_batch_end(logs,
+                                                     input = data.detach(),
+                                                     rmsd = rmsd.detach(),
+                                                     mu = mu.detach())
+        
         valid_loss /= float(batch_idx + 1)
 
         if callbacks:
             logs['valid_loss'] = valid_loss
-            logs["input_samples"] = np.concatenate(logs["input_samples"], axis = 0)
-            logs["embeddings"] = np.concatenate(logs["embeddings"], axis = 0)
-            logs["reconstructed_samples"] = np.concatenate(logs["reconstructed_samples"], axis = 0)
-            logs["rmsd"] = np.concatenate(logs["rmsd"], axis = 0)
+
+        for callback in callbacks:
+            callback.on_validation_end(epoch, logs)
 
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))
