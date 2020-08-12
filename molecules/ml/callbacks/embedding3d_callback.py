@@ -88,7 +88,7 @@ class Embedding3dCallback(Callback):
         else:
             self.device = torch.device(f'cuda:{gpu}')
 
-        self._init_plot(h5_file)
+        self.rmsd, self.fnc = self.sample(h5_file)
 
     def batches(self):
         """
@@ -133,22 +133,6 @@ class Embedding3dCallback(Callback):
         return (np.array(dset[0: len(dset): self.sample_interval])
                 for dset in (h5_file['rmsd'], h5_file['fnc']))
 
-    def _init_plot(self, h5_file):
-
-        rmsd, fnc = self.sample(h5_file)
-
-        # TODO: Make rmsd_fig and nc_fig
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
-
-        vmin, vmax = self.minmax(rmsd)
-        cmi = plt.get_cmap('jet')
-        cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-        scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
-        scalar_map.set_array(rmsd)
-        self.fig.colorbar(scalar_map)
-        self.color = scalar_map.to_rgba(rmsd)
-
     def on_epoch_end(self, epoch, logs):
         self.tsne_plot(epoch, logs)
 
@@ -176,16 +160,30 @@ class Embedding3dCallback(Callback):
 
         z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
 
-        self.ax.scatter3D(z1, z2, z3, marker='.', c=self.color)
-        self.ax.set_xlim3d(self.minmax(z1))
-        self.ax.set_ylim3d(self.minmax(z2))
-        self.ax.set_zlim3d(self.minmax(z3))
-        self.ax.set_xlabel(r'$z_1$')
-        self.ax.set_ylabel(r'$z_2$')
-        self.ax.set_zlabel(r'$z_3$')
-        self.ax.set_title(f'RMSD to reference state after epoch {epoch}')
-        time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
+        # TODO: Make rmsd_fig and nc_fig
+        fig = plt.figure()
+        ax = fig.add_subplot(111, projection='3d')
+
+        vmin, vmax = self.minmax(self.rmsd)
+        cmi = plt.get_cmap('jet')
+        cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
+        scalar_map.set_array(self.rmsd)
+        fig.colorbar(scalar_map)
+        color = scalar_map.to_rgba(self.rmsd)
+
+        ax.scatter3D(z1, z2, z3, marker='.', c=color)
+        ax.set_xlim3d(self.minmax(z1))
+        ax.set_ylim3d(self.minmax(z2))
+        ax.set_zlim3d(self.minmax(z3))
+        ax.set_xlabel(r'$z_1$')
+        ax.set_ylabel(r'$z_2$')
+        ax.set_zlabel(r'$z_3$')
+        ax.set_title(f'RMSD to reference state after epoch {epoch}')
+        time_stamp = time.strftime(f'epoch-{epoch}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
         if self.writer is not None:
-            self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
-        self.ax.clear()
+            self.writer.add_figure('epoch t-SNE embeddings', fig, logs['global_step'])
+        ax.clear()
+        plt.close(fig)
+
