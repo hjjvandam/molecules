@@ -18,6 +18,8 @@ develop-eggs
 lib
 lib64
 conda-env
+wandb/
+runs/
 
 # Installer logs
 pip-log.txt

@@ -1,8 +1,8 @@
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.vae.utils import (conv_output_shape, same_padding,
-                                                 get_activation, init_weights, prod)
+from molecules.ml.unsupervised.utils import (conv_output_shape, same_padding,
+                                             get_activation, init_weights, prod)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 def reversedzip(*iterables):

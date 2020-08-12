@@ -9,7 +9,7 @@ from molecules.utils import open_h5
 from torch.utils.data import Dataset, DataLoader
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.utils.callback import LossCallback, CheckpointCallback, EmbeddingCallback 
+from molecules.utils.callback import LossCallback, CheckpointCallback, Embedding2dCallback
 
 class TestCallback:
 
@@ -117,7 +117,7 @@ class TestCallback:
         loss_callback = LossCallback()
         checkpoint_callback = CheckpointCallback(directory=self.checkpoint_dir,
                                                  interval=2)
-        embedding_callback = EmbeddingCallback(TestCallback.DummyContactMap(self.input_shape)[:])
+        embedding_callback = Embedding2dCallback(TestCallback.DummyContactMap(self.input_shape)[:])
 
         vae.train(self.train_loader, self.test_loader, self.epochs,
                   callbacks=[loss_callback, checkpoint_callback, embedding_callback])

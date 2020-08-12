@@ -205,7 +205,7 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
 
     _save_sparse_contact_maps(save_file, rows_, cols_, rmsds_, fncs_)
 
-def sparse_contact_maps_from_matrices(contact_maps, save_file=None):
+def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None, save_file=None):
     """Convert normal contact matrices to sparse format."""
     from scipy.sparse import coo_matrix
 
@@ -217,6 +217,6 @@ def sparse_contact_maps_from_matrices(contact_maps, save_file=None):
         col.append(coo.col.astype('int16'))
 
     if save_file:
-        _save_sparse_contact_maps(save_file, row, col)
+        _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
 
     return row, col

@@ -5,7 +5,8 @@ from torchsummary import summary
 from torch.utils.data import DataLoader
 from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import LossCallback, CheckpointCallback, EmbeddingCallback
+from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
+                                    Embedding2dCallback, Embedding3dCallback)
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
 
 
@@ -56,22 +57,17 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-S', '--sample_interval', default=20, type=int,
               help="For embedding plots. Plots every sample_interval'th point")
 
-def main(input_path, out_path, checkpoint, model_id, dim1, dim2, encoder_gpu, sparse,
+@click.option('-wp', '--wandb_project_name', default=None, type=str,
+              help='Project name for wandb logging')
+
+def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder_gpu,
          decoder_gpu, epochs, batch_size, model_type, latent_dim,
-         sample_interval):
+         sample_interval, wandb_project_name):
+
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
     assert model_type in ['symmetric', 'resnet']
 
-    # Add incoming devices to visible devices, or default to gpu:0
-    os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
-    if None not in (encoder_gpu, decoder_gpu):
-        os.environ['CUDA_VISIBLE_DEVICES'] = ','.join({str(encoder_gpu),
-                                                       str(decoder_gpu)})
-    else:
-        os.environ['CUDA_VISIBLE_DEVICES'] = str(0)
-
-    print('CUDA devices: ', os.environ['CUDA_VISIBLE_DEVICES'])
     # Note: See SymmetricVAEHyperparams, ResnetVAEHyperparams class definitions
     #       for hyperparameter options. 
 
@@ -108,40 +104,85 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, encoder_gpu, sp
     summary(vae.model, input_shape)
 
     # Load training and validation data
-    train_loader = DataLoader(ContactMapDataset(input_path,
-                                                input_shape,
-                                                split='train',
-                                                sparse=sparse,
-                                                gpu=encoder_gpu),
-                              batch_size=batch_size, shuffle=True)
-    valid_loader = DataLoader(ContactMapDataset(input_path,
-                                                input_shape,
-                                                split='valid',
-                                                sparse=sparse,
-                                                gpu=encoder_gpu),
-                              batch_size=batch_size, shuffle=True)
+    # training
+    train_dataset = ContactMapDataset(input_path,
+                                      'contact_maps',
+                                      'rmsd',
+                                      input_shape,
+                                      split='train',
+                                      sparse=sparse)
+    
+    train_loader = DataLoader(train_dataset,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              pin_memory=True)
+
+    # validation
+    valid_dataset = ContactMapDataset(input_path,
+                                      'contact_maps',
+                                      'rmsd',
+                                      input_shape,
+                                      split='valid',
+                                      sparse=sparse)
+    
+    valid_loader = DataLoader(valid_dataset,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              pin_memory=True)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
 
+    # do we want wandb
+    wandb_config = None
+    if wandb_project_name is not None:
+        import wandb
+        wandb.init(project = wandb_project_name,
+                   name = model_id,
+                   id = model_id,
+                   resume = False)
+        wandb_config = wandb.config
+        
+        # log HP
+        wandb_config.dim1 = dim1
+        wandb_config.dim2 = dim2
+        wandb_config.latent_dim = latent_dim
+        
+        # optimizer
+        wandb_config.optimizer_name = optimizer_hparams.name
+        for param in optimizer_hparams.hparams:
+            wandb_config['optimizer_' + param] = optimizer_hparams.hparams[param]
+            
+        # watch model
+        wandb.watch(vae.model)
+    
     # Optional callbacks
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter()
-    loss_callback = LossCallback(join(model_path, 'loss.json'), writer)
+    loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    embedding_callback = EmbeddingCallback(input_path,
-                                           join(model_path, 'embedddings'),
-                                           input_shape,
-                                           sparse=sparse,
-                                           writer=writer,
-                                           sample_interval=sample_interval,
-                                           batch_size=batch_size,
-                                           gpu=encoder_gpu)
+    embedding3d_callback = Embedding3dCallback(input_path,
+                                               join(model_path, 'embedddings'),
+                                               input_shape,
+                                               sparse=sparse,
+                                               writer=writer,
+                                               sample_interval = sample_interval,
+                                               batch_size=batch_size,
+                                               gpu=encoder_gpu)
+
+    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
+                                               path = input_path,
+                                               rmsd_name = 'rmsd',
+                                               projection_type = '3d_project',
+                                               sample_interval = sample_interval,
+                                               writer = writer,
+                                               wandb_config = wandb_config)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
               checkpoint=checkpoint if checkpoint is not None else '',
-              callbacks=[loss_callback, checkpoint_callback, embedding_callback])
+              callbacks=[loss_callback, checkpoint_callback,
+                         embedding2d_callback, embedding3d_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))

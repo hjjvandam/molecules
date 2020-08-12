@@ -1,4 +1,5 @@
 import time
+import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
@@ -42,14 +43,14 @@ class VAEModel(nn.Module):
     def forward(self, x):
         # x should be placed on encoder gpu in the dataset class
         mu, logvar = self.encoder(x)
-        x = self.reparameterize(mu, logvar).to(self.device.decoder)
-        x = self.decoder(x).to(self.device.encoder)
+        z = self.reparameterize(mu, logvar).to(self.device.decoder)
+        x = self.decoder(z).to(self.device.encoder)
         # TODO: see if we can remove this to speed things up
         #       or find an inplace way. Only necessary for bad
         #       hyperparam config such as optimizer learning rate
         #       being large.
         #x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
-        return x, mu, logvar
+        return x, z, mu, logvar
 
     def encode(self, x):
         # mu layer
@@ -169,7 +170,7 @@ class VAE:
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
-        self.optimizer = get_optimizer(self.model, optimizer_hparams)
+        self.optimizer = get_optimizer(self.model.parameters(), optimizer_hparams)
 
         self.loss_fnc = vae_loss if loss is None else loss
 
@@ -251,7 +252,7 @@ class VAE:
                 callback.on_epoch_begin(epoch, logs)
 
             self._train(train_loader, epoch, callbacks, logs)
-            self._validate(valid_loader, callbacks, logs)
+            self._validate(valid_loader, epoch, callbacks, logs)
 
             for callback in callbacks:
                 callback.on_epoch_end(epoch, logs)
@@ -281,8 +282,11 @@ class VAE:
 
         self.model.train()
         train_loss = 0.
-        for batch_idx, data in enumerate(train_loader):
+        for batch_idx, token in enumerate(train_loader):
 
+            data, rmsd = token
+            data = data.to(self.device[0])
+            
             if self.verbose:
                 start = time.time()
 
@@ -295,10 +299,10 @@ class VAE:
             # TODO: Consider passing device argument into dataset class instead
             # data = data.to(self.device.encoder)
             self.optimizer.zero_grad()
-            recon_batch, mu, logvar = self.model(data)
+            recon_batch, codes, mu, logvar = self.model(data)
             loss = self.loss_fnc(recon_batch, data, mu, logvar)
             loss.backward()
-            train_loss += loss.item()
+            train_loss += loss.item() / len(data)
             self.optimizer.step()
 
             if callbacks:
@@ -314,16 +318,15 @@ class VAE:
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
 
-        train_loss /= len(train_loader.dataset)
+        train_loss_ave = train_loss / float(batch_idx + 1)
 
         if callbacks:
-                logs['train_loss'] = train_loss
-                logs['global_step'] = epoch
+            logs['train_loss_average'] = train_loss_ave
 
         if self.verbose:
-            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss))
+            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss_ave))
 
-    def _validate(self, valid_loader, callbacks, logs):
+    def _validate(self, valid_loader, epoch, callbacks, logs):
         """
         Test model on validation set.
 
@@ -341,17 +344,32 @@ class VAE:
         """
         self.model.eval()
         valid_loss = 0
-        with torch.no_grad():
-            for data in valid_loader:
-                # data = data.to(self.device)
-                recon_batch, mu, logvar = self.model(data)
-                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item()
+        for callback in callbacks:
+            callback.on_validation_begin(epoch, logs)
 
-        valid_loss /= len(valid_loader.dataset)
+        with torch.no_grad():
+            for batch_idx, token in enumerate(valid_loader):
+                data, rmsd = token
+                data = data.to(self.device[0])
+                
+                # data = data.to(self.device)
+                recon_batch, codes, mu, logvar = self.model(data)
+                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item() / len(data)
+
+                for callback in callbacks:
+                    callback.on_validation_batch_end(logs,
+                                                     input = data.detach(),
+                                                     rmsd = rmsd.detach(),
+                                                     mu = mu.detach())
+                
+        valid_loss /= float(batch_idx + 1)
 
         if callbacks:
             logs['valid_loss'] = valid_loss
-
+        
+        for callback in callbacks:
+            callback.on_validation_end(epoch, logs)
+        
         if self.verbose:
             print('====> Validation loss: {:.4f}'.format(valid_loss))
 
