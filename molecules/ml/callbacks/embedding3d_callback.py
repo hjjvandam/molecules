@@ -98,8 +98,7 @@ class Embedding3dCallback(Callback):
 
         # create figure
         fig, axs = plt.subplots(figsize=(ncols * 4, nrows * 4),
-                                nrows = nrows, ncols = ncols,
-                                sharey = True)
+                                nrows = nrows, ncols = ncols)
 
         # set up constants
         color = self.scalar_map.to_rgba(rmsd)
@@ -139,19 +138,21 @@ class Embedding3dCallback(Callback):
                 z1mm = self.minmax(z1)
                 z2mm = self.minmax(z2)
                 z3mm = self.minmax(z3)
-                zmm = (min([z1mm[0], z2mm[0], z3mm[0]]) * 0.95, max([z1mm[1], z2mm[1], z3mm[1]]) * 1.05)
+                z1mm = (z1mm[0] * 0.95, z1mm[1] * 1.05)
+                z2mm = (z2mm[0] * 0.95, z2mm[1] * 1.05)
+                z3mm = (z3mm[0] * 0.95, z3mm[1] * 1.05)
                 # x-y
                 ax1 = axs[idr, 0]
                 ax1.scatter(z1, z2, marker = '.', c = color)
-                ax1.set_xlim(zmm)
-                ax1.set_ylim(zmm)
+                ax1.set_xlim(z1mm)
+                ax1.set_ylim(z2mm)
                 ax1.set_xlabel(r'$z_1$')
                 ax1.set_ylabel(r'$z_2$')
                 # x-z
                 ax2 = axs[idr, 1]
                 ax2.scatter(z1, z3, marker = '.', c = color)
-                ax2.set_xlim(zmm)
-                ax2.set_ylim(zmm)
+                ax2.set_xlim(z1mm)
+                ax2.set_ylim(z3mm)
                 ax2.set_xlabel(r'$z_1$')
                 ax2.set_ylabel(r'$z_3$')
                 if idr == 0:
@@ -159,8 +160,8 @@ class Embedding3dCallback(Callback):
                 # y-z
                 ax3 = axs[idr, 2]
                 ax3.scatter(z2, z3, marker = '.', c = color)
-                ax3.set_xlim(zmm)
-                ax3.set_ylim(zmm)
+                ax3.set_xlim(z2mm)
+                ax3.set_ylim(z3mm)
                 ax3.set_xlabel(r'$z_2$')
                 ax3.set_ylabel(r'$z_3$')
                 # colorbar
@@ -172,8 +173,12 @@ class Embedding3dCallback(Callback):
                 ax = axs[idr]
                 z1, z2 = emb_trans[:, 0], emb_trans[:, 1]
                 ax.scatter(z1, z2, marker = '.', c = color)
-                ax.set_xlim(self.minmax(z1))
-                ax.set_ylim(self.minmax(z2))
+                z1mm = self.minmax(z1)
+                z2mm = self.minmax(z2)
+                z1mm = (z1mm[0] * 0.95, z1mm[1] * 1.05)
+                z2mm = (z2mm[0] * 0.95, z2mm[1] * 1.05)
+                ax.set_xlim(z1mm)
+                ax.set_ylim(z2mm)
                 ax.set_xlabel(r'$z_1$')
                 ax.set_ylabel(r'$z_2$')
                 if idr == 0:
