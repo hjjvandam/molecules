@@ -80,17 +80,42 @@ class Embedding3dCallback(Callback):
         # perplexities
         self.perplexities = [2, 5, 30, 50, 100]
 
+
+    def on_validation_begin(self, epoch, logs):
+        self.sample_counter = 0
+        self.embeddings = []
+        self.rmsd = []
         
-    def on_epoch_end(self, epoch, logs):
+        
+    def on_validation_batch_end(self, logs, mu = None, rmsd = None, **kwargs):
+        if self.sample_interval == 0:
+            return
+
+        if (mu is None) or (rmsd is None):
+            pass
+        
+        # decide what to store
+        for idx in range(0, len(mu)):
+            if (self.sample_counter + idx) % self.sample_interval == 0:
+                # use a singleton slice to keep dimensions intact
+                self.embeddings.append(mu[idx:idx+1].cpu().numpy())
+                self.rmsd.append(rmsd[idx:idx+1].cpu().numpy())
+
+        # increase sample counter
+        self.sample_counter += len(mu)
+
+        
+    def on_validation_end(self, epoch, logs):
         # prepare plot data
-        embeddings = logs["embeddings"][::self.sample_interval,...]
-        rmsd = logs["rmsd"][::self.sample_interval,...]
-
+        embeddings = np.concatenate(self.embeddings, axis = 0)
+        rmsd = np.concatenate(self.rmsd, axis = 0)
+        
         # t-sne plots
-        self.tsne_plot(embeddings, rmsd, logs)
+        if self.sample_interval > 0:
+            self.tsne_plot(epoch, embeddings, rmsd, logs)
 
         
-    def tsne_plot(self, embeddings, rmsd, logs):
+    def tsne_plot(self, epoch, embeddings, rmsd, logs):
 
         # create plot grid
         nrows = len(self.perplexities)
@@ -102,7 +127,7 @@ class Embedding3dCallback(Callback):
 
         # set up constants
         color = self.scalar_map.to_rgba(rmsd)
-        titlestring = f'RMSD to native state after step {logs["global_step"]}'
+        titlestring = f'RMSD to reference state after epoch {epoch}'
         
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
@@ -118,22 +143,8 @@ class Embedding3dCallback(Callback):
             #       so far there are only 2D versions implemented.
             emb_trans = tsne.fit_transform(embeddings)
 
-            # plot
-            if self.projection_type == "3d":
-                ax = axs[idr]
-                z1, z2, z3 = emb_trans[:, 0], emb_trans[:, 1], emb_trans[:, 2]
-                ax.scatter3D(z1, z2, z3, marker = '.', c = color)
-                ax.set_xlim3d(self.minmax(z1))
-                ax.set_ylim3d(self.minmax(z2))
-                ax.set_zlim3d(self.minmax(z3))
-                ax.set_xlabel(r'$z_1$')
-                ax.set_ylabel(r'$z_2$')
-                ax.set_zlabel(r'$z_3$')
-                if idr == 0:
-                    ax.set_title(titlestring)
-                fig.colorbar(self.scalar_map)
-            
-            elif self.projection_type == "3d_project":
+            # plot            
+            if self.projection_type == "3d_project":
                 z1, z2, z3 = emb_trans[:, 0], emb_trans[:, 1], emb_trans[:, 2]
                 z1mm = self.minmax(z1)
                 z2mm = self.minmax(z2)
@@ -197,7 +208,7 @@ class Embedding3dCallback(Callback):
 
         # summary writer
         if self.writer is not None:
-            self.writer.add_figure('step t-SNE embeddings', fig, logs['global_step'])
+            self.writer.add_figure('epoch t-SNE embeddings', fig, epoch)
 
         # wandb logging
         if self.wandb_config is not None:
