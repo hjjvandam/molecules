@@ -5,7 +5,7 @@ from torchsummary import summary
 from torch.utils.data import DataLoader
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import LossCallback, CheckpointCallback, Embedding3dCallback, PointCloud3dCallback
+from molecules.ml.callbacks import LossCallback, CheckpointCallback, Embedding2dCallback, PointCloud3dCallback
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 
@@ -165,17 +165,17 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))    
-    embedding_callback = Embedding3dCallback(out_dir = join(model_path, 'embedddings'),
-                                             path = input_path,
-                                             rmsd_name = rmsd_name,
-                                             projection_type = "3d_project",
-                                             sample_interval = len(valid_dataset) // 1000,
-                                             writer = writer,
-                                             wandb_config = wandb_config)
+    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
+                                               path = input_path,
+                                               rmsd_name = rmsd_name,
+                                               projection_type = "3d_project",
+                                               sample_interval = len(valid_dataset) // 1000,
+                                               writer = writer,
+                                               wandb_config = wandb_config)
 
     # Train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              callbacks = [loss_callback, checkpoint_callback, embedding_callback])
+              callbacks = [loss_callback, checkpoint_callback, embedding2d_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))

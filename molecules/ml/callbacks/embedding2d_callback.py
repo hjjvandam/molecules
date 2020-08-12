@@ -4,17 +4,19 @@ import torch
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from sklearn.manifold import TSNE
 from .callback import Callback
-from molecules.utils import open_h5
+from PIL import Image
 import numba
+import wandb
+from molecules.utils import open_h5
 
 
 class Embedding2dCallback(Callback):
 
     # Helper function. Returns tuple of min and max of 1d np.ndarray.
-    # Min and max in single pass.
     @staticmethod
     @numba.jit
     def minmax(x):
@@ -28,164 +30,190 @@ class Embedding2dCallback(Callback):
     """
     Saves VAE embeddings of random samples.
     """
-    def __init__(self, path, out_dir, shape, sparse=False,
-                 sample_interval=20, batch_size=128,
-                 gpu=None, writer=None):
+    def __init__(self, out_dir,
+                 path, rmsd_name,
+                 projection_type = "3d",
+                 sample_interval = 20,
+                 writer = None, wandb_config = None):
         """
         Parameters
         ----------
         path : str
-            Path to h5 file containing contact matrices.
+            H5 File with rmsd data.
+        
+        rmsd_name : str
+            Dataset name for rmsd data.
+        projection_type: str
+            Type of projection: 2D or 3D.
         out_dir : str
             Directory to store output plots.
-        shape : tuple
-            Shape of contact matrices (H, W), may be (1, H, W).
-        sparse : bool
-            If True, process data as sparse row/col COO format. Data
-            should not contain any values because they are all 1's and
-            generated on the fly. If False, input data is normal tensor.
         sample_interval : int
             Plots every sample_interval'th point in the data set
-        batch_size : int
-            Batch size to load raw contact matrices into memory.
-            Batches are loaded into memory, encoded to a latent
-            dimension and then collected in a np.ndarray. The
-            np.ndarray is then passed to the TSNE algorithm.
-            NOTE: Not a learning hyperparameter, simply needs to
-                  be small enough to load batch into memory.
-        gpu : int, None
-            If None, then data will be put onto the default GPU if CUDA
-            is available and otherwise is put onto a CPU. If gpu is int
-            type, then data is put onto the specified GPU.
         writer : torch.utils.tensorboard.SummaryWriter
+        wandb_config : wandb configuration file
         """
 
         os.makedirs(out_dir, exist_ok=True)
 
-        # Open h5 file. Python's garbage collector closes the
-        # file when class is destructed.
-        h5_file = open_h5(path)
-
-        if sparse:
-            group = h5_file['contact_maps']
-            self.row_dset = group.get('row')
-            self.col_dset = group.get('col')
-            self.len = len(self.row_dset)
-        else:
-            # contact_maps dset has shape (N, W, H, 1)
-            self.dset = h5_file['contact_maps']
-            self.len = len(self.dset)
-
-        self.shape = shape
-        self.sparse = sparse
         self.out_dir = out_dir
         self.sample_interval = sample_interval
-        self.batch_size = batch_size
+        self.projection_type = projection_type.lower()
         self.writer = writer
+        self.wandb_config = wandb_config
 
-        if gpu is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device(f'cuda:{gpu}')
+        # needed for init plot
+        self._init_plot(path, rmsd_name)
 
-        self._init_plot(h5_file)
-
-    def batches(self):
-        """
-        Generator to return batches of contact map dset.
-        Batches consist of every self.sample_interval'th point.
-        NOTE: last batch may have diferent size.
-        """
-        start, step = 0, self.sample_interval * self.batch_size
-        for idx in range(0, self.len, step):
-            if self.sparse:
-                # Retrieve sparse row,col from disk and make dense in memory
-                data = []
-                for i in range(start, start + step, self.sample_interval):
-                    if i >= self.len:
-                        break
-                    indices = torch.from_numpy(np.vstack((self.row_dset[i],
-                                                          self.col_dset[i]))) \
-                                          .to(self.device).to(torch.long)
-                    values = torch.ones(indices.shape[1], dtype=torch.float32,
-                                        device=self.device)
-                    # Set shape to the last 2 elements of self.shape.
-                    # Handles (1, W, H) and (W, H)
-                    data.append(torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense())
-
-                yield torch.stack(data).view(-1, *self.shape)
-
-            else:
-                yield torch.from_numpy(
-                        np.array(self.dset[start: start + step: self.sample_interval]) \
-                            .reshape(-1, *self.shape)).to(torch.float32).to(self.device)
-            start += step
-
-    def sample(self, h5_file):
-        """
-        Returns
-        -------
-        tuple : np.arrays of RMSD to native state and fraction of
-                native contacts sampled every self.sample_interval'th
-                frames of the MD trajectory.
-        (rmsd array, fnc array) arrays of equal length.
-        """
-        return (np.array(dset[0: len(dset): self.sample_interval])
-                for dset in (h5_file['rmsd'], h5_file['fnc']))
-
-    def _init_plot(self, h5_file):
-
-        rmsd, fnc = self.sample(h5_file)
-
-        # TODO: Make rmsd_fig and nc_fig
-        self.fig = plt.figure()
-        self.ax = self.fig.add_subplot(111, projection='3d')
-
+        
+    def _init_plot(self, path, rmsd_name):
+        # load all rmsd data
+        f = open_h5(path)
+        rmsd = f[rmsd_name][...]
         vmin, vmax = self.minmax(rmsd)
+
+        # create colormaps
         cmi = plt.get_cmap('jet')
         cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
-        scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
-        scalar_map.set_array(rmsd)
-        self.fig.colorbar(scalar_map)
-        self.color = scalar_map.to_rgba(rmsd)
+        self.scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
+        self.scalar_map.set_array(rmsd)
 
-    def on_epoch_end(self, epoch, logs):
-        self.tsne_plot(epoch, logs)
+        # perplexities
+        self.perplexities = [2, 5, 30, 50, 100]
 
-    def tsne_plot(self, epoch, logs):
 
-        # Collect latent vectors for TSNE.
-        # Process is batched in case dset does not fit into memory.
-        embeddings = np.concatenate([logs['model'].encode(batch).cpu().numpy()
-                                    for batch in self.batches()])
+    def on_validation_begin(self, epoch, logs):
+        self.sample_counter = 0
+        self.embeddings = []
+        self.rmsd = []
+        
+        
+    def on_validation_batch_end(self, logs, mu = None, rmsd = None, **kwargs):
+        if self.sample_interval == 0:
+            return
 
-        print('Number of embeddings: ', len(embeddings))
+        if (mu is None) or (rmsd is None):
+            pass
+        
+        # decide what to store
+        for idx in range(0, len(mu)):
+            if (self.sample_counter + idx) % self.sample_interval == 0:
+                # use a singleton slice to keep dimensions intact
+                self.embeddings.append(mu[idx:idx+1].cpu().numpy())
+                self.rmsd.append(rmsd[idx:idx+1].cpu().numpy())
+
+        # increase sample counter
+        self.sample_counter += len(mu)
+
+        
+    def on_validation_end(self, epoch, logs):
+        # prepare plot data
+        embeddings = np.concatenate(self.embeddings, axis = 0)
+        rmsd = np.concatenate(self.rmsd, axis = 0)
+        
+        # t-sne plots
+        if self.sample_interval > 0:
+            self.tsne_plot(epoch, embeddings, rmsd, logs)
+
+        
+    def tsne_plot(self, epoch, embeddings, rmsd, logs):
+
+        # create plot grid
+        nrows = len(self.perplexities)
+        ncols = 3 if (self.projection_type == "3d_project") else 1
+
+        # create figure
+        fig, axs = plt.subplots(figsize=(ncols * 4, nrows * 4),
+                                nrows = nrows, ncols = ncols)
+
+        # set up constants
+        color = self.scalar_map.to_rgba(rmsd)
+        titlestring = f'RMSD to reference state after epoch {epoch}'
+        
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
         #       https://pytorch.org/docs/master/generated/torch.pca_lowrank.html
 
-        # TODO: plot different charts using different perplexity values
+        for idr, perplexity in enumerate(self.perplexities):
+        
+            # Outputs 3D embeddings using all available processors
+            tsne = TSNE(n_components = int(self.projection_type[0]), n_jobs=-1, perplexity = perplexity)
 
-        # Outputs 3D embeddings using all available processors
-        tsne = TSNE(n_components=3, n_jobs=-1)
+            # TODO: running on cpu as a numpy array may be an issue for large systems
+            #       consider using pytorch tSNE implemenation. Drawback is that
+            #       so far there are only 2D versions implemented.
+            emb_trans = tsne.fit_transform(embeddings)
 
-        # TODO: running on cpu as a numpy array may be an issue for large systems
-        #       consider using pytorch tSNE implemenation. Drawback is that
-        #       so far there are only 2D versions implemented.
-        embeddings = tsne.fit_transform(embeddings)
+            # plot            
+            if self.projection_type == "3d_project":
+                z1, z2, z3 = emb_trans[:, 0], emb_trans[:, 1], emb_trans[:, 2]
+                z1mm = self.minmax(z1)
+                z2mm = self.minmax(z2)
+                z3mm = self.minmax(z3)
+                z1mm = (z1mm[0] * 0.95, z1mm[1] * 1.05)
+                z2mm = (z2mm[0] * 0.95, z2mm[1] * 1.05)
+                z3mm = (z3mm[0] * 0.95, z3mm[1] * 1.05)
+                # x-y
+                ax1 = axs[idr, 0]
+                ax1.scatter(z1, z2, marker = '.', c = color)
+                ax1.set_xlim(z1mm)
+                ax1.set_ylim(z2mm)
+                ax1.set_xlabel(r'$z_1$')
+                ax1.set_ylabel(r'$z_2$')
+                # x-z
+                ax2 = axs[idr, 1]
+                ax2.scatter(z1, z3, marker = '.', c = color)
+                ax2.set_xlim(z1mm)
+                ax2.set_ylim(z3mm)
+                ax2.set_xlabel(r'$z_1$')
+                ax2.set_ylabel(r'$z_3$')
+                if idr == 0:
+                    ax2.set_title(titlestring)
+                # y-z
+                ax3 = axs[idr, 2]
+                ax3.scatter(z2, z3, marker = '.', c = color)
+                ax3.set_xlim(z2mm)
+                ax3.set_ylim(z3mm)
+                ax3.set_xlabel(r'$z_2$')
+                ax3.set_ylabel(r'$z_3$')
+                # colorbar
+                divider = make_axes_locatable(axs[idr, 2])
+                cax = divider.append_axes("right", size="5%", pad=0.1)
+                fig.colorbar(self.scalar_map, ax = axs[idr, 2], cax = cax)
+            
+            else:
+                ax = axs[idr]
+                z1, z2 = emb_trans[:, 0], emb_trans[:, 1]
+                ax.scatter(z1, z2, marker = '.', c = color)
+                z1mm = self.minmax(z1)
+                z2mm = self.minmax(z2)
+                z1mm = (z1mm[0] * 0.95, z1mm[1] * 1.05)
+                z2mm = (z2mm[0] * 0.95, z2mm[1] * 1.05)
+                ax.set_xlim(z1mm)
+                ax.set_ylim(z2mm)
+                ax.set_xlabel(r'$z_1$')
+                ax.set_ylabel(r'$z_2$')
+                if idr == 0:
+                    ax.set_title(titlestring)
+                # colorbar
+                divider = make_axes_locatable(ax)
+                cax = divider.append_axes("right", size="5%", pad=0.1)
+                fig.colorbar(self.scalar_map, ax = axs, cax = cax)
 
-        z1, z2, z3 = embeddings[:, 0], embeddings[:, 1], embeddings[:, 2]
+        # tight layout
+        plt.tight_layout()
 
-        self.ax.scatter3D(z1, z2, z3, marker='.', c=self.color)
-        self.ax.set_xlim3d(self.minmax(z1))
-        self.ax.set_ylim3d(self.minmax(z2))
-        self.ax.set_zlim3d(self.minmax(z3))
-        self.ax.set_xlabel(r'$z_1$')
-        self.ax.set_ylabel(r'$z_2$')
-        self.ax.set_zlabel(r'$z_3$')
-        self.ax.set_title(f'RMSD to reference state after epoch {epoch}')
-        time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
+        # save figure
+        time_stamp = time.strftime(f'step-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
+
+        # summary writer
         if self.writer is not None:
-            self.writer.add_figure('epoch t-SNE embeddings', self.fig, logs['global_step'])
-        self.ax.clear()
+            self.writer.add_figure('epoch t-SNE embeddings', fig, epoch)
+
+        # wandb logging
+        if self.wandb_config is not None:
+            img = Image.open(os.path.join(self.out_dir, time_stamp))
+            wandb.log({"step t-SNE embeddings": [wandb.Image(img, caption="Latent Space Visualizations")]}, step = logs['global_step'])
+
+        # close plot
+        plt.close(fig)

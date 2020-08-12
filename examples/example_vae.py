@@ -161,7 +161,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    embedding2d_callback = Embedding2dCallback(input_path,
+    embedding3d_callback = Embedding3dCallback(input_path,
                                                join(model_path, 'embedddings'),
                                                input_shape,
                                                sparse=sparse,
@@ -170,7 +170,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                                                batch_size=batch_size,
                                                gpu=encoder_gpu)
 
-    embedding3d_callback = Embedding3dCallback(out_dir = join(model_path, 'embedddings'),
+    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
                                                path = input_path,
                                                rmsd_name = 'rmsd',
                                                projection_type = '3d_project',
