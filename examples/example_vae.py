@@ -166,7 +166,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                                                input_shape,
                                                sparse=sparse,
                                                writer=writer,
-                                               sample_interval=sample_interval,
+                                               sample_interval = sample_interval,
                                                batch_size=batch_size,
                                                gpu=encoder_gpu)
 
@@ -174,7 +174,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                                                path = input_path,
                                                rmsd_name = 'rmsd',
                                                projection_type = '3d_project',
-                                               sample_interval = len(valid_dataset) // 1000,
+                                               sample_interval = sample_interval,
                                                writer = writer,
                                                wandb_config = wandb_config)
 

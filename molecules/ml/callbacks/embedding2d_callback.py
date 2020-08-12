@@ -106,7 +106,13 @@ class Embedding2dCallback(Callback):
 
         
     def on_validation_end(self, epoch, logs):
-        # prepare plot data
+        # if the sample interval was too large, we should warn here and return
+        if not self.embeddings or not self.rmsd:
+            print("Warning, not enough samples collected for tSNE, \
+                  try to reduce sampling interval")
+            return
+
+        # prepare plot data 
         embeddings = np.concatenate(self.embeddings, axis = 0)
         rmsd = np.concatenate(self.rmsd, axis = 0)
         
