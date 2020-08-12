@@ -150,15 +150,16 @@ class Embedding2dCallback(Callback):
         self.color = scalar_map.to_rgba(rmsd)
 
     def on_epoch_end(self, epoch, logs):
-        self.tsne_plot(logs)
+        self.tsne_plot(epoch, logs)
 
-    def tsne_plot(self, logs):
+    def tsne_plot(self, epoch, logs):
 
         # Collect latent vectors for TSNE.
         # Process is batched in case dset does not fit into memory.
         embeddings = np.concatenate([logs['model'].encode(batch).cpu().numpy()
                                     for batch in self.batches()])
 
+        print('Number of embeddings: ', len(embeddings))
         # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
         #       https://pytorch.org/docs/master/generated/torch.pca_lowrank.html
@@ -182,7 +183,7 @@ class Embedding2dCallback(Callback):
         self.ax.set_xlabel(r'$z_1$')
         self.ax.set_ylabel(r'$z_2$')
         self.ax.set_zlabel(r'$z_3$')
-        self.ax.set_title(f'RMSD to native state after epoch {logs["global_step"]}')
+        self.ax.set_title(f'RMSD to reference state after epoch {epoch}')
         time_stamp = time.strftime(f'epoch-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
         if self.writer is not None:

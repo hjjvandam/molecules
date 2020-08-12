@@ -113,7 +113,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                                       sparse=sparse)
     
     train_loader = DataLoader(train_dataset,
-                              batch_size = batch_size,
+                              batch_size=batch_size,
                               shuffle=True,
                               pin_memory=True)
 

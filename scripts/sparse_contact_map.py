@@ -14,10 +14,18 @@ from molecules.sim.contact_maps import sparse_contact_maps_from_matrices
 def main(input_path, out_path):
 
     f = open_h5(input_path)
-    contact_maps = np.array(f['contact_maps'][:])
+    contact_maps = f['contact_maps'][...]
+    if 'rmsd' in f.keys():
+        rmsd = f['rmsd'][..., 2]
+    else:
+        rmsd = None
     f.close()
 
-    sparse_contact_maps_from_matrices(contact_maps, out_path)
+    # TODO: currently dummy data
+    fnc = np.ones(len(contact_maps), dtype=np.float32)
+
+    sparse_contact_maps_from_matrices(contact_maps, rmsd=rmsd,
+                                      fnc=fnc, save_file=out_path)
 
 
 if __name__ == '__main__':
