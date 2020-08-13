@@ -412,6 +412,7 @@ def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None, save_fi
         col.append(coo.col.astype('int16'))
 
     if save_file:
+        # TODO: fix. call _save
         _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
 
     return row, col
