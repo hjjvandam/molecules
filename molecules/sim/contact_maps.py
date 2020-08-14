@@ -276,7 +276,7 @@ def traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files,
         rows_, cols_ = [], []
 
     # Negligible runtime (1e-05 seconds)
-    for _, rmsdi_data, fnc_data, pc_data, row, col  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols)):
+    for _, rmsd_data, fnc_data, pc_data, row, col  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols)):
         if rmsd:
             rmsds_.append(rmsd_data)
         if fnc:
@@ -315,7 +315,6 @@ def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None, save_fi
         col.append(coo.col.astype('int16'))
 
     if save_file:
-        # TODO: fix. call _save
-        _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
+        _save(save_file, rmsd=rmsd, fnc=fnc, contact_maps=(row, col))
 
     return row, col
