@@ -1,6 +1,8 @@
+import h5py
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.analysis import distances, rms, align
+from molecules.utils import open_h5
 
 def _save_sparse_contact_maps(h5_file, contact_maps, **kwargs):
     """
@@ -13,7 +15,7 @@ def _save_sparse_contact_maps(h5_file, contact_maps, **kwargs):
     Parameters
     ----------
     h5_file : h5py.File
-        HDF5 file to write contact maps to
+        Open HDF5 file to write contact maps to
 
     contact_maps : tuple
         (row, col) where row,col are lists of np.ndarrays.
@@ -81,71 +83,26 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None, contact_maps=None):
     # Save point cloud
     if point_cloud is not None:
         h5_file.create_dataset('point_cloud', data=point_cloud,
-                               **float_kwargs)
+                               dtype='float32', **kwargs)
 
     # Save contact maps
     if contact_maps is not None:
-        _save_sparse_contact_maps(h5_file, contact_maps, kwargs)
+        _save_sparse_contact_maps(h5_file, contact_maps, **kwargs)
 
     # Flush data to file and close
     h5_file.flush()
     h5_file.close()
 
-
-# def _save_sparse_contact_maps(save_file, row, col, rmsd=None, fnc=None):
-#     """Helper function. Saves COO row/col matrices to file."""
-#     import h5py
-#     from molecules.utils import open_h5
-
-#     kwargs = {'fletcher32': True}
-
-#     h5_file = open_h5(save_file, 'w')
-#     group = h5_file.create_group('contact_maps')
-#     # Specify variable length arrays
-#     dt = h5py.vlen_dtype(np.dtype('int16'))
-#     # The i'th element of both row,col dset will be
-#     # arrays of the same length. However, neighboring
-#     # arrays may be any variable length.
-#     group.create_dataset('row', dtype=dt, data=row, **kwargs)
-#     group.create_dataset('col', dtype=dt, data=col, **kwargs)
-
-#     # If specified, write rmsd and/or fraction of native contacts
-#     if rmsd is not None:
-#         h5_file.create_dataset('rmsd', dtype='float16', data=rmsd, **kwargs)
-#     if fnc is not None:
-#         h5_file.create_dataset('fnc', dtype='float16', data=fnc, **kwargs)
-
-#     h5_file.flush()
-#     h5_file.close()
-
-# def _save_point_cloud(save_file, positions, rmsd=None, fnc=None):
-#     """ Helper function - save point cloud representations to file"""
-#     import h5py
-#     import numpy as np
-#     from molecules.utils import open_h5
-#     kwargs = {'fletcher32': True}
-
-#     h5_file = open_h5(save_file, 'w')
-#     group = h5_file.create_group('point_cloud')
-#     dt = h5py.vlen_dtype(np.dtype('float16'))
-#     group.create_dataset('positions', dtype='float16', data=positions, **kwargs)
-#     if rmsd is not None:
-#         h5_file.create_dataset('rmsd', dtype='float16', data=rmsd, **kwargs)
-#     if fnc is not None:
-#         h5_file.create_dataset('fnc', dtype='float16', data=fnc, **kwargs)
-#     h5_file.flush()
-#     h5_file.close()
-
 def fraction_of_contacts(cm, ref_cm):
     return 1 - (cm != ref_cm).mean()
 
-def traj_to_dataset(pdb_file, ref_pdb_file, traj_file,
-                    sel='protein and name CA',
-                    rmsd=True, fnc=True,
-                    point_cloud=True,
-                    contact_maps=True,
-                    save_file=None,
-                    verbose=False):
+def _traj_to_dset(pdb_file, ref_pdb_file, traj_file,
+                  sel='protein and name CA', cutoff=8.,
+                  rmsd=True, fnc=True,
+                  point_cloud=True,
+                  contact_map=True,
+                  save_file=None,
+                  verbose=False):
     """
     Get a point cloud representation from trajectory.
 
@@ -184,21 +141,21 @@ def traj_to_dataset(pdb_file, ref_pdb_file, traj_file,
         fnc_data = np.empty(**params)
 
     # Buffers for sparse contact row/col data
-    if contact_maps:
+    if contact_map:
         row, col = [], []
         contact_map_data = (row, col)
 
     # Buffer for point cloud data
     if point_cloud:
-        pc_data = np.empty('shape': ref_positions.shape,
-                           'dtype': np.float16)
+        pc_data = np.empty(shape=(len(sim.trajectory), *ref_positions.shape),
+                           dtype=np.float32)
 
     for i, frame in enumerate(sim.trajectory):
 
         # Point cloud positions of selected atoms in frame i
         positions = atoms.positions
 
-        if contact_maps or fnc:
+        if contact_map or fnc:
             # Compute contact map of current frame (scipy lil_matrix form)
             cm = distances.contact_matrix(positions, cutoff, returntype='sparse')
 
@@ -210,7 +167,7 @@ def traj_to_dataset(pdb_file, ref_pdb_file, traj_file,
             # Compute fraction of contacts to reference state
             fnc_data[i] = fraction_of_contacts(cm, ref_cm)
 
-        if contact_maps:
+        if contact_map:
             # Represent contact map in COO sparse format
             coo = cm.tocoo()
             row.append(coo.row.astype('int16'))
@@ -221,7 +178,7 @@ def traj_to_dataset(pdb_file, ref_pdb_file, traj_file,
             pc_data[i] = positions.copy()
 
         if verbose:
-            if i % 50 == 0: # Print every 50 frames
+            if i % 100 == 0: # Print every 100 frames
                 str_ = f'Frame {i}/{len(sim.trajectory)}'
                 if rmsd:
                     str_ += f'\trmsd: {rmsd_data[i]}'
@@ -231,86 +188,31 @@ def traj_to_dataset(pdb_file, ref_pdb_file, traj_file,
 
                 print(str_)
 
-        if save_file:
-            # Write data to HDF5 file
-            _save(save_file, rmsd=rmsd_data, fnc=fnc_data,
-                  point_cloud=pc_data, contact_maps=contact_map_data)
+    if point_cloud:
+        pc_data = np.reshape(pc_data, (len(sim.trajectory), 3, -1))
 
-        # Any of these could be None based on the user input
-        return rmsd_data, fnc_data, pc_data, contact_map_data
+    if save_file:
+        # Write data to HDF5 file
+        _save(save_file, rmsd=rmsd_data, fnc=fnc_data,
+              point_cloud=pc_data, contact_maps=contact_map_data)
 
-
-# def sparse_contact_maps_from_traj(pdb_file, ref_pdb_file, traj_file,
-#                                   cutoff=8., sel='protein and name CA',
-#                                   save_file=None, verbose=False):
-#     """
-#     Get contact map from trajectory. Requires all row,col indicies
-#     from the traj to fit into memory at the same time.
-
-#     Parameters
-#     ----------
-#     sel : str
-#         Select carbon-alpha atoms in the protein for RMSD and contact maps
-#     """
-#     # TODO: update docstring
-
-#     # Load simulation trajectory and reference structure into memory
-#     sim = mda.Universe(pdb_file, traj_file)
-#     ref = mda.Universe(ref_pdb_file)
-
-#     if verbose:
-#         print('Traj length: ', len(sim.trajectory))
-
-#     # TODO: update ca_atoms to be a more general var name
-#     # Select atoms for RMSD, fnc and contact map
-#     ca_atoms = sim.select_atoms(sel)
-
-#     # Select atoms in reference structure for RMSD
-#     ref_positions = ref.select_atoms(sel).positions.copy()
-#     # Generate reference contact map
-#     ref_cm = distances.contact_matrix(ref_positions, cutoff, returntype='sparse')
-
-#     # Align trajectory to compute accurate RMSD
-#     align.AlignTraj(sim, ref, in_memory=True).run()
-
-#     # Buffers for sparse contact row/col data
-#     row, col = [], []
-#     # Buffers for RMSD to native state and fraction of native contacts
-#     params = {'shape': len(sim.trajectory), 'dtype': np.float32}
-#     rmsd, fnc = np.empty(**params), np.empty(**params)
-
-#     for i, frame in enumerate(sim.trajectory):
-
-#         # Compute contact map in scipy lil_matrix form
-#         cm = distances.contact_matrix(ca_atoms.positions, cutoff, returntype='sparse')
-
-#         # Compute and store RMSD and fraction of native contacts
-#         positions = sim.select_atoms(sel).positions
-#         rmsd[i] = rms.rmsd(positions, ref_positions, center=True,
-#                            superposition=True)
-#         fnc[i] = fraction_of_native_contacts(cm, ref_cm)
-
-#         # Represent contact map in COO sparse format
-#         coo = cm.tocoo()
-#         row.append(coo.row.astype('int16'))
-#         col.append(coo.col.astype('int16'))
-
-#         if verbose:
-#             print(f'Writing frame {i}/{len(sim.trajectory)}\tfnc:'
-#                   f'{fnc[i]}\trmsd: {rmsd[i]}\tshape: {coo.shape}')
-
-#     if save_file:
-#         _save_sparse_contact_maps(save_file, row, col, rmsd, fnc)
-
-#     return row, col, rmsd, fnc
+    # Any of these could be None based on the user input
+    return rmsd_data, fnc_data, pc_data, contact_map_data
 
 def _worker(kwargs):
         id_ = kwargs.pop('id')
-        return sparse_contact_maps_from_traj(**kwargs), id_
+        return _traj_to_dset(**kwargs), id_
 
-def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
-                          rmsd=True, fnc=True, point_cloud=True, contact_maps=True,
-                          cutoff=8., num_workers=None, verbose=False):
+def traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files,
+                 rmsd=True, fnc=True, point_cloud=True, contact_map=True,
+                 sel='protein and name CA', cutoff=8.,
+                 num_workers=None, verbose=False):
+
+    if num_workers == 1:
+       return _traj_to_dset(pdb_file, ref_pdb_file, traj_files, sel=sel,
+                            cutoff=cutoff, rmsd=rmsd, fnc=fnc,
+                            point_cloud=point_cloud, contact_map=contact_map,
+                            save_file=save_file, verbose=verbose)
 
     import itertools
     from concurrent.futures import ProcessPoolExecutor
@@ -327,13 +229,12 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
                'rmsd': rmsd,
                'fnc': fnc,
                'point_cloud': point_cloud,
-               'contact_maps': contact_maps,
+               'contact_map': contact_map,
                'cutoff': cutoff,
                'verbose': verbose and (i % num_workers == 0),
                'id': i}
               for i, traj_file in enumerate(traj_files)]
 
-    rmsd_data, fnc_data, pc_data, contact_map_data
     # initialize buffers
     ids = []
     if rmsd:
@@ -342,18 +243,18 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
         fncs = []
     if point_cloud:
         point_clouds = []
-    if contact_maps:
+    if contact_map:
         rows, cols = [], []
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         for (rmsd_data, fnc_data, pc_data, contact_map_data), id_ in executor.map(_worker, kwargs):
             if rmsd:
-                rmsd_buf.append(rmsd_data)
+                rmsds.append(rmsd_data)
             if fnc:
-                fnc_buf.append(fnc_data)
+                fncs.append(fnc_data)
             if point_cloud:
-                point_cloud_buf.append(pc_data)
-            if contact_maps:
+                point_clouds.append(pc_data)
+            if contact_map:
                 row, col = contact_map_data
                 rows.append(row)
                 cols.append(col)
@@ -371,17 +272,17 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
         fncs_ = []
     if point_cloud:
         point_clouds_ = []
-    if contact_maps:
+    if contact_map:
         rows_, cols_ = [], []
 
     # Negligible runtime (1e-05 seconds)
-    for _, rmsd, fnc, pc, row, col  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols)):
+    for _, rmsdi_data, fnc_data, pc_data, row, col  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols)):
         if rmsd:
-            rmsds_.append(rmsd)
+            rmsds_.append(rmsd_data)
         if fnc:
-            fncs_.append(fnc)
+            fncs_.append(fnc_data)
         if point_cloud:
-            point_clouds_.append(pc)
+            point_clouds_.append(pc_data)
         if contact_map:
             rows_.append(row)
             cols_.append(col)
@@ -393,12 +294,14 @@ def parallel_traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files=[],
         fncs_ = np.concatenate(fncs_)
     if point_cloud:
         point_clouds_ = np.concatenate(point_clouds_)
-    if contact_maps:
+    if contact_map:
         rows_ = list(itertools.chain.from_iterable(rows_))
         cols_ = list(itertools.chain.from_iterable(cols_))
         contact_maps_ = (rows_, cols_)
 
     _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_, contact_maps=contact_maps_)
+
+    return rmsds_, fncs_, point_clouds_, contact_maps_
 
 def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None, save_file=None):
     """Convert normal contact matrices to sparse format."""
