@@ -209,7 +209,7 @@ class Embedding2dCallback(Callback):
         plt.tight_layout()
 
         # save figure
-        time_stamp = time.strftime(f'step-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
+        time_stamp = time.strftime(f'embeddings-step-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
 
         # summary writer
