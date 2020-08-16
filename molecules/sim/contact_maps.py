@@ -38,8 +38,9 @@ def _save_sparse_contact_maps(h5_file, contact_maps, **kwargs):
     # The i'th element of both row,col dset will be
     # arrays of the same length. However, neighboring
     # arrays may be any variable length.
-    group.create_dataset('row', dtype=dt, data=row, **kwargs)
-    group.create_dataset('col', dtype=dt, data=col, **kwargs)
+    ragged = lambda data: np.array(data, dtype=object)
+    group.create_dataset('row', dtype=dt, data=ragged(row), **kwargs)
+    group.create_dataset('col', dtype=dt, data=ragged(col), **kwargs)
 
 def _save(save_file, rmsd=None, fnc=None, point_cloud=None, contact_maps=None):
     """
