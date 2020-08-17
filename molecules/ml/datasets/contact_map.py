@@ -10,7 +10,7 @@ class ContactMapDataset(Dataset):
     """
     def __init__(self, path, dataset_name, rmsd_name,
                  shape, split_ptc=0.8,
-                 split='train', sparse=False):
+                 split='train', sparse='stack'):
         """
         Parameters
         ----------
@@ -47,11 +47,14 @@ class ContactMapDataset(Dataset):
         # file when class is destructed.
         h5_file = open_h5(path)
 
-        if sparse:
+        if sparse == 'row_col':
             group = h5_file[dataset_name]
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
             self.len = len(self.row_dset)
+        elif sparse == 'stack':
+            self.dset = h5_file[dataset_name]
+            self.len = len(self.dset)
         else:
             # contact_maps dset has shape (N, W, H, 1)
             self.dset = h5_file[dataset_name]
@@ -74,9 +77,17 @@ class ContactMapDataset(Dataset):
         if self.split == 'valid':
             idx += self.split_ind
 
-        if self.sparse:
+        if self.sparse == 'row_col':
             indices = torch.from_numpy(np.vstack((self.row_dset[idx],
                                                   self.col_dset[idx]))).to(torch.long)
+            values = torch.ones(indices.shape[1], dtype=torch.float32)
+            # Set shape to the last 2 elements of self.shape.
+            # Handles (1, W, H) and (W, H)
+            data = torch.sparse.FloatTensor(indices, values,
+                        self.shape[-2:]).to_dense()
+        elif self.sparse == 'stack':
+            indices = torch.from_numpy(self.dset[idx].reshape(2, -1) \
+                           .astype('int16')).to(torch.long)
             values = torch.ones(indices.shape[1], dtype=torch.float32)
             # Set shape to the last 2 elements of self.shape.
             # Handles (1, W, H) and (W, H)

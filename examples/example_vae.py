@@ -106,11 +106,11 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      'contact_maps',
+                                      'contact_map',
                                       'rmsd',
                                       input_shape,
                                       split='train',
-                                      sparse=sparse)
+                                      sparse='row_col')
     
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
@@ -119,11 +119,11 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      'contact_maps',
+                                      'contact_map',
                                       'rmsd',
                                       input_shape,
                                       split='valid',
-                                      sparse=sparse)
+                                      sparse='row_col')
     
     valid_loader = DataLoader(valid_dataset,
                               batch_size=batch_size,
@@ -161,28 +161,28 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    embedding3d_callback = Embedding3dCallback(input_path,
-                                               join(model_path, 'embedddings'),
-                                               input_shape,
-                                               sparse=sparse,
-                                               writer=writer,
-                                               sample_interval = sample_interval,
-                                               batch_size=batch_size,
-                                               gpu=encoder_gpu)
+    #embedding3d_callback = Embedding3dCallback(input_path,
+    #                                           join(model_path, 'embedddings'),
+    #                                           input_shape,
+    #                                           sparse=sparse,
+    #                                           writer=writer,
+    #                                           sample_interval = sample_interval,
+    #                                           batch_size=batch_size,
+    #                                           gpu=encoder_gpu)
 
-    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
-                                               path = input_path,
-                                               rmsd_name = 'rmsd',
-                                               projection_type = '3d_project',
-                                               sample_interval = sample_interval,
-                                               writer = writer,
-                                               wandb_config = wandb_config)
+    #embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
+    #                                           path = input_path,
+    #                                           rmsd_name = 'rmsd',
+    #                                           projection_type = '3d_project',
+    #                                           sample_interval = sample_interval,
+    #                                           writer = writer,
+    #                                           wandb_config = wandb_config)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
               checkpoint=checkpoint if checkpoint is not None else '',
-              callbacks=[loss_callback, checkpoint_callback,
-                         embedding2d_callback, embedding3d_callback])
+              callbacks=[loss_callback, checkpoint_callback])
+                         #embedding2d_callback, embedding3d_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))

@@ -4,7 +4,7 @@ import MDAnalysis as mda
 from MDAnalysis.analysis import distances, rms, align
 from molecules.utils import open_h5
 
-def _save_sparse_contact_maps(h5_file, contact_maps, **kwargs):
+def _save_sparse_contact_maps(h5_file, contact_maps, version='latest', **kwargs):
     """
     Saves contact maps in sparse format. Only stores row,col
     indices of the 1s in the contact matrix. Values must be
@@ -22,27 +22,37 @@ def _save_sparse_contact_maps(h5_file, contact_maps, **kwargs):
         row[i], col[i] represents the indices of a contact
         map where a 1 exists.
 
+    version : str
+        latest: new format with single dataset
+        oldest: old format with group containing row,col datasets
+
     kwargs : dict
         Optional h5py parameters to be used in dataset creation.
     """
 
-    row, col = contact_maps
+    rows, cols = contact_maps
 
-    # Check row,col vectors are the same length
-    assert len(row) == len(col)
-    assert all(len(r) == len(c) for r, c in zip(row, col))
-
-    group = h5_file.create_group('contact_maps')
-    # Specify variable length arrays
+     # Specify variable length arrays
     dt = h5py.vlen_dtype(np.dtype('int16'))
-    # The i'th element of both row,col dset will be
-    # arrays of the same length. However, neighboring
-    # arrays may be any variable length.
-    ragged = lambda data: np.array(data, dtype=object)
-    group.create_dataset('row', dtype=dt, data=ragged(row), **kwargs)
-    group.create_dataset('col', dtype=dt, data=ragged(col), **kwargs)
 
-def _save(save_file, rmsd=None, fnc=None, point_cloud=None, contact_maps=None):
+    # Helper function to create ragged array
+    ragged = lambda data: np.array(data, dtype=object)
+
+    if version == 'latest':
+        # list of np arrays of shape (2 * X) where X varies
+        data = [np.concatenate(row_col) for row_col in zip(rows, cols)]
+        h5_file.create_dataset('contact_map', data=ragged(data), dtype=dt, **kwargs)
+
+    elif version == 'oldest':
+        group = h5_file.create_group('contact_map')
+        # The i'th element of both row,col dset will be
+        # arrays of the same length. However, neighboring
+        # arrays may be any variable length.
+        group.create_dataset('row', dtype=dt, data=ragged(rows), **kwargs)
+        group.create_dataset('col', dtype=dt, data=ragged(cols), **kwargs)
+
+def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
+          contact_maps=None, version='latest'):
     """
     Saves data to h5 file. All data is optional, can save any
     combination of data input arrays.
@@ -88,7 +98,7 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None, contact_maps=None):
 
     # Save contact maps
     if contact_maps is not None:
-        _save_sparse_contact_maps(h5_file, contact_maps, **kwargs)
+        _save_sparse_contact_maps(h5_file, contact_maps, version=version, **kwargs)
 
     # Flush data to file and close
     h5_file.flush()
@@ -103,6 +113,7 @@ def _traj_to_dset(pdb_file, ref_pdb_file, traj_file,
                   point_cloud=True,
                   contact_map=True,
                   save_file=None,
+                  version='latest',
                   verbose=False):
     """
     Get a point cloud representation from trajectory.
@@ -195,7 +206,8 @@ def _traj_to_dset(pdb_file, ref_pdb_file, traj_file,
     if save_file:
         # Write data to HDF5 file
         _save(save_file, rmsd=rmsd_data, fnc=fnc_data,
-              point_cloud=pc_data, contact_maps=contact_map_data)
+              point_cloud=pc_data, contact_maps=contact_map_data,
+              version=version)
 
     # Any of these could be None based on the user input
     return rmsd_data, fnc_data, pc_data, contact_map_data
@@ -206,14 +218,14 @@ def _worker(kwargs):
 
 def traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files,
                  rmsd=True, fnc=True, point_cloud=True, contact_map=True,
-                 sel='protein and name CA', cutoff=8.,
-                 num_workers=None, verbose=False):
+                 sel='protein and name CA', cutoff=8., num_workers=None,
+                 version='latest', verbose=False):
 
     if num_workers == 1:
        return _traj_to_dset(pdb_file, ref_pdb_file, traj_files, sel=sel,
                             cutoff=cutoff, rmsd=rmsd, fnc=fnc,
                             point_cloud=point_cloud, contact_map=contact_map,
-                            save_file=save_file, verbose=verbose)
+                            save_file=save_file, version=version, verbose=verbose)
 
     import itertools
     from concurrent.futures import ProcessPoolExecutor
@@ -300,11 +312,13 @@ def traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files,
         cols_ = list(itertools.chain.from_iterable(cols_))
         contact_maps_ = (rows_, cols_)
 
-    _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_, contact_maps=contact_maps_)
+    _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
+            contact_maps=contact_maps_, version=version)
 
     return rmsds_, fncs_, point_clouds_, contact_maps_
 
-def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None, save_file=None):
+def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None,
+        save_file=None, version='latest'):
     """Convert normal contact matrices to sparse format."""
     from scipy.sparse import coo_matrix
 
@@ -316,6 +330,7 @@ def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None, save_fi
         col.append(coo.col.astype('int16'))
 
     if save_file:
-        _save(save_file, rmsd=rmsd, fnc=fnc, contact_maps=(row, col))
+        _save(save_file, rmsd=rmsd, fnc=fnc, contact_maps=(row, col),
+                version=version)
 
     return row, col
