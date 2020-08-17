@@ -33,8 +33,9 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
              help='Model checkpoint file to resume training. ' \
                   'Checkpoint files saved as .pt by CheckpointCallback.')
 
-@click.option('-s', '--sparse', is_flag=True,
-              help='Specifiy whether input matrices are sparse format')
+@click.option('-f', '--cm_format', default='sparse-concat',
+              help='Format of contact map files. Options ' \
+                   '[full, sparse-concat, sparse-rowcol]')
 
 @click.option('-E', '--encoder_gpu', default=None, type=int,
               help='Encoder GPU id')
@@ -60,7 +61,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
-def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder_gpu,
+def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
          decoder_gpu, epochs, batch_size, model_type, latent_dim,
          sample_interval, wandb_project_name):
 
@@ -110,7 +111,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                                       'rmsd',
                                       input_shape,
                                       split='train',
-                                      sparse='row_col')
+                                      cm_format=cm_format)
     
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
@@ -123,7 +124,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                                       'rmsd',
                                       input_shape,
                                       split='valid',
-                                      sparse='row_col')
+                                      cm_format=cm_format)
     
     valid_loader = DataLoader(valid_dataset,
                               batch_size=batch_size,

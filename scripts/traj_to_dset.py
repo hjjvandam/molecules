@@ -51,15 +51,15 @@ from molecules.sim.contact_maps import traj_to_dset
 @click.option('--point_cloud', is_flag=True,
               help='Computes and saves point cloud.')
 
-@click.option('--version', default='latest',
-              help='Options: [latest, oldest]. Refers to format the ' \
+@click.option('-f', '--cm_format', default='sparse-concat',
+              help='Options: [sparse-concat, sparse-rowcol]. Refers to format the ' \
                    'the contact maps are stored as. latest gives single ' \
                    'dset format while oldest gives group with row,col dset.')
 
 @click.option('-v', '--verbose', is_flag=True)
 
 def main(pdb_path, ref_pdb_path, traj_path, ext, out_path, num_workers,
-         selection, cutoff, rmsd, fnc, contact_map, point_cloud, version, verbose):
+         selection, cutoff, rmsd, fnc, contact_map, point_cloud, cm_format, verbose):
 
     if os.path.isdir(traj_path):
         traj_path = sorted(glob.glob(os.path.join(traj_path, f'*.{ext}')))
@@ -77,7 +77,7 @@ def main(pdb_path, ref_pdb_path, traj_path, ext, out_path, num_workers,
     traj_to_dset(pdb_path, ref_pdb_path, out_path, traj_path,
                  rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
                  contact_map=contact_map, sel=selection,
-                 cutoff=cutoff, version=version, verbose=verbose,
+                 cutoff=cutoff, cm_format=cm_format, verbose=verbose,
                  num_workers=num_workers) 
     
 if __name__ == '__main__':
