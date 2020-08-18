@@ -24,7 +24,7 @@ from molecules.sim.contact_maps import traj_to_dset
               help='Trajectory file extension.')
 
 @click.option('-o', '--out_path', required=True,
-              help='Path to file to write sparse contact matrices to.')
+              help='Path to file to write dataset to.')
 
 @click.option('-w', '--num_workers', default=None, type=int,
               help='Number of parallel workers for processing multiple ' \
