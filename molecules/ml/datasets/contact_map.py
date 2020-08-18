@@ -50,9 +50,7 @@ class ContactMapDataset(Dataset):
 
         if cm_format == 'sparse-rowcol':
             group = h5_file[dataset_name]
-            self.row_dset = group.get('row')
-            self.col_dset = group.get('col')
-            self.len = len(self.row_dset)
+            self.len = len(group.get('row'))
         elif cm_format == 'sparse-concat':
             self.dset = h5_file[dataset_name]
             self.len = len(self.dset)
@@ -64,13 +62,16 @@ class ContactMapDataset(Dataset):
             raise ValueError(f'Invalid cm_format {cm_format}. Should be one of ' \
                               '[sparse-rowcol, sparse-concat, full].')
 
-        self.rmsd = h5_file[rmsd_name]
-
         # train validation split index
         self.split_ind = int(split_ptc * self.len)
         self.split = split
         self.cm_format = cm_format
         self.shape = shape
+        self.not_init = True
+        self.path = path
+        self.dataset_name = dataset_name
+        self.rmsd_name = rmsd_name
+
 
     def __len__(self):
         if self.split == 'train':
@@ -80,6 +81,21 @@ class ContactMapDataset(Dataset):
     def __getitem__(self, idx):
         if self.split == 'valid':
             idx += self.split_ind
+
+        if self.not_init:
+            h5_file = open_h5(self.path)
+            if self.cm_format == 'sparse-rowcol':
+                group = h5_file[self.dataset_name]
+                self.row_dset = group.get('row')
+                self.col_dset = group.get('col')
+            elif self.cm_format == 'sparse-concat':
+                self.dset = h5_file[self.dataset_name]
+            elif self.cm_format == 'full':
+                # contact_maps dset has shape (N, W, H, 1)
+                self.dset = h5_file[self.dataset_name]
+
+            self.rmsd = h5_file[self.rmsd_name]
+            self.not_init = False
 
         if self.cm_format == 'sparse-rowcol':
             indices = torch.from_numpy(np.vstack((self.row_dset[idx],

@@ -25,5 +25,5 @@ def open_h5(h5_file, mode='r', libver='latest', swmr=True, **kwargs):
     open h5py file to be used in a context manager
 
     """
-    # TODO: bug in scripts/traj_to_dset.py when swmr is used
-    return h5py.File(h5_file, mode, libver=libver, **kwargs)
+    # TODO: bug in scripts/traj_to_dset.py when swmr, libver='latest' is used
+    return h5py.File(h5_file, mode, **kwargs)
