@@ -62,7 +62,8 @@ def main(data_root, out_path, fields, verbose):
 
     # Centor of mass (CMS) subtraction
     if 'point_cloud' in data:
-        print('Subtract center of mass (CMS) from point cloud')
+        if verbose:
+            print('Subtract center of mass (CMS) from point cloud')
         cms = np.mean(data['point_cloud'][:, 0:3, :].astype(np.float128), axis=2, keepdims=True).astype(np.float32)
         data['point_cloud'][:, 0:3, :] -= cms
 
