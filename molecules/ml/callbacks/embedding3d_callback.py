@@ -122,8 +122,9 @@ class Embedding3dCallback(Callback):
                                             device=self.device)
                     elif self.cm_format == 'sparse-concat':
                         indices = torch.from_numpy(self.dset[idx].reshape(2, -1) \
-                                       .astype('int16')).to(torch.long)
-                        values = torch.ones(indices.shape[1], dtype=torch.float32)
+                                       .astype('int16')).to(self.device).to(torch.long)
+                        values = torch.ones(indices.shape[1], dtype=torch.float32,
+                                            device=self.device)
 
                     # Set shape to the last 2 elements of self.shape.
                     # Handles (1, W, H) and (W, H)
