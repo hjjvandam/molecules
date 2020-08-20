@@ -1,10 +1,12 @@
 import json
 from .callback import Callback
 import wandb
+import torch.distributed as dist
 
 class LossCallback(Callback):
     
     def __init__(self, path,
+                 device,
                  writer = None,
                  wandb_config = None):
         """
@@ -13,10 +15,14 @@ class LossCallback(Callback):
         path : str
             path to save loss history to
 
+        device: torch.Device
+            device needed for reductions
+
         writer : torch.utils.tensorboard.SummaryWriter
         """
         self.writer = writer
         self.path = path
+        self.device = device
         self.wandb_config = wandb_config
         
     def on_train_begin(self, logs):
@@ -32,6 +38,12 @@ class LossCallback(Callback):
     
         # train_losses
         for lossname in [x for x in logs if x.startswith("train_loss")]:
+
+            # reduce losses
+            if dist.is_initialized():
+                logs[lossname] = dist.all_reduce(torch.Tensor(logs[lossname]).to(self.device)).item()
+                logs[lossname] /= float(dist.get_world_size())
+            
             # manual logging
             if lossname in self.train_losses:
                 self.train_losses[lossname].append(logs[lossname])
@@ -51,6 +63,12 @@ class LossCallback(Callback):
 
         # validation losses
         for lossname in [x for x in logs if x.startswith("valid_loss")]:
+
+            # reduce losses
+            if dist.is_initialized():
+                logs[lossname] = dist.all_reduce(torch.Tensor(logs[lossname]).to(self.device)).item()
+                logs[lossname] /= float(dist.get_world_size())
+                
             # manual logging
             if lossname in self.valid_losses:
                 self.valid_losses[lossname].append(logs[lossname])
@@ -69,7 +87,9 @@ class LossCallback(Callback):
 
                 
         # save to json for manual logging
-        self.save(self.path)
+        if dist.is_initialized() and (dist.get_rank() == 0):
+            self.save(self.path)
+
 
     def save(self, path):
         """

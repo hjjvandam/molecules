@@ -28,6 +28,7 @@ class LatspaceStatisticsCallback(Callback):
     Saves AE projections for mu and std of random samples.
     """
     def __init__(self, out_dir,
+                 device = torch.device("cpu"),
                  sample_interval = 20,
                  writer = None, wandb_config = None):
         """
@@ -40,10 +41,15 @@ class LatspaceStatisticsCallback(Callback):
         writer : torch.utils.tensorboard.SummaryWriter
         wandb_config : wandb configuration file
         """
-
-        os.makedirs(out_dir, exist_ok=True)
+        self.is_eval_node = True
+        if dist.is_initialized() and (dist.get_rank() != 0):
+            self.is_eval_node = False
+            
+        if self.is_eval_node:
+            os.makedirs(out_dir, exist_ok=True)
 
         self.out_dir = out_dir
+        self.device = device
         self.sample_interval = sample_interval
         self.writer = writer
         self.wandb_config = wandb_config
@@ -82,9 +88,14 @@ class LatspaceStatisticsCallback(Callback):
         # prepare plot data 
         mu = np.concatenate(self.mu, axis = 0)
         std = np.concatenate(self.std, axis = 0)
+
+        # communicate if necessary
+        if dist.is_initialized():
+            mu = dist.gather(torch.Tensor(mu).to(self.device), dst = 0).cpu().numpy()
+            std = dist.gather(torch.Tensor(std).to(self.device), dst = 0).cpu().numpy()
         
-        # t-sne plots
-        if self.sample_interval > 0:
+        # dist plots
+        if self.is_eval_node and (self.sample_interval > 0):
             self.dist_plot(epoch, mu, std, logs)
 
         

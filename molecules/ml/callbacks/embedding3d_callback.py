@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import torch.distributed as dist
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -30,7 +31,7 @@ class Embedding3dCallback(Callback):
     """
     def __init__(self, path, out_dir, shape, cm_format='sparse-concat',
                  sample_interval=20, batch_size=128,
-                 gpu=None, writer=None):
+                 device=torch.device("cpu"), writer=None):
         """
         Parameters
         ----------
@@ -54,14 +55,19 @@ class Embedding3dCallback(Callback):
             np.ndarray is then passed to the TSNE algorithm.
             NOTE: Not a learning hyperparameter, simply needs to
                   be small enough to load batch into memory.
-        gpu : int, None
+        device : torch.Device, torch.device("cpu")
             If None, then data will be put onto the default GPU if CUDA
             is available and otherwise is put onto a CPU. If gpu is int
             type, then data is put onto the specified GPU.
         writer : torch.utils.tensorboard.SummaryWriter
         """
 
-        os.makedirs(out_dir, exist_ok=True)
+        self.is_eval_node = True
+        if dist.is_initialized() and (dist.get_rank() != 0):
+            self.is_eval_node = False
+
+        if self.is_eval_node:
+            os.makedirs(out_dir, exist_ok=True)
 
         # Open h5 file. Python's garbage collector closes the
         # file when class is destructed.
@@ -92,11 +98,7 @@ class Embedding3dCallback(Callback):
         self.sample_interval = sample_interval
         self.batch_size = batch_size
         self.writer = writer
-
-        if gpu is None:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device(f'cuda:{gpu}')
+        self.device = device
 
         self.rmsd, self.fnc = self.sample(h5_file)
 
@@ -151,7 +153,8 @@ class Embedding3dCallback(Callback):
                 for dset in (h5_file['rmsd'], h5_file['fnc']))
 
     def on_epoch_end(self, epoch, logs):
-        self.tsne_plot(epoch, logs)
+        if self.is_eval_node:
+            self.tsne_plot(epoch, logs)
 
     def tsne_plot(self, epoch, logs):
 

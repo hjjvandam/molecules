@@ -2,6 +2,7 @@ import os
 import time
 import torch
 from .callback import Callback
+import torch.distributed as dist
 
 class CheckpointCallback(Callback):
     def __init__(self, interval=0,
@@ -25,17 +26,22 @@ class CheckpointCallback(Callback):
         if interval < 0:
             raise ValueError('Checkpoint interval must be non-negative')
 
-        os.makedirs(out_dir, exist_ok=True)
+        self.is_eval_node = True
+        if dist.is_initialized() and (dist.get_rank() != 0):
+            self.is_eval_node = False
+
+        if self.is_eval_node:
+            os.makedirs(out_dir, exist_ok=True)
 
         self.interval = interval
         self.out_dir = out_dir
 
     def on_batch_end(self, batch, epoch, logs):
-        if self.interval and batch % self.interval == 0:
+        if self.is_eval_node and self.interval and (batch % self.interval == 0):
             self._save(epoch, logs)
 
     def on_epoch_end(self, epoch, logs):
-        if not self.interval:
+        if self.is_eval_node and not self.interval:
             self._save(epoch, logs)
 
     def _save(self, epoch, logs):

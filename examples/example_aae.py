@@ -1,13 +1,18 @@
 import os
 import click
 from os.path import join
+
+# torch stuff
 from torchsummary import summary
-from torch.utils.data import DataLoader
+import torch.distributed as dist
+from torch.nn.parallel import DistributedDataParallel as DDP
+from torch.utils.data import DataLoader, Subset
+
+# molecules stuff
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
 from molecules.ml.callbacks import LossCallback, CheckpointCallback, Embedding2dCallback, LatspaceStatisticsCallback
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
-
 
 def parse_dict(ctx, param, value):
     if value is not None:
@@ -69,6 +74,9 @@ def parse_dict(ctx, param, value):
 @click.option('-ndw', '--num_data_workers', default=1, type=int,
               help='Number of workers for data loading')
 
+@click.option('--local_rank', default=0, type=int,
+              help='Local rank on the machine, required for DDP')
+
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
@@ -76,10 +84,21 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
-         loss_weights, num_data_workers,
+         loss_weights, num_data_workers, local_rank,
          wandb_project_name):
     """Example for training Fs-peptide with AAE3d."""
 
+    # do some scaffolding for DDP
+    comm_rank = 0
+    comm_size = 1
+    comm_local_rank = 0
+    if dist.is_available():
+        dist.init_process_group(backend='nccl',
+                                             init_method='env://')
+        comm_rank = dist.get_rank()
+        comm_size = dist.get_world_size()
+        comm_local_rank = local_rank
+    
     # HP
     # model
     aae_hparams = {
@@ -99,11 +118,15 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu))
 
-    # Diplay model
-    print(aae)
+    if comm_size > 1:
+        aae.model = DDP(aae.model, device_ids = None, output_device = None)
     
-    # Only print summary when encoder_gpu is None or 0
-    summary(aae.model, (3 + num_features, num_points))
+    if comm_rank == 0:
+        # Diplay model 
+        print(aae)
+    
+        # Only print summary when encoder_gpu is None or 0
+        summary(aae.model, (3 + num_features, num_points))
 
     # Load training and validation data
     train_dataset = PointCloudDataset(input_path,
@@ -114,6 +137,13 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                       split='train',
                                       normalize='box',
                                       cms_transform=True)
+
+    # split across nodes
+    if comm_size > 1:
+        chunksize = len(train_dataset) // comm_size
+        train_dataset = Subset(train_dataset,
+                               list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
+    
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
                               pin_memory=True, num_workers = num_data_workers)
 
@@ -125,6 +155,13 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                       split='valid',
                                       normalize='box',
                                       cms_transform=True)
+
+    # split across nodes
+    if comm_size > 1:
+        chunksize = len(valid_dataset) // comm_size
+        valid_dataset = Subset(valid_dataset,
+                               list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
+    
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
                               pin_memory=True, num_workers = num_data_workers)
 
@@ -135,7 +172,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
 
     # do we want wandb
     wandb_config = None
-    if wandb_project_name is not None:
+    if (comm_rank == 0) and (wandb_project_name is not None):
         import wandb
         wandb.init(project = wandb_project_name,
                    name = model_id,
@@ -162,36 +199,48 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     
     # Optional callbacks
     from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter()
-    loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
-    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))    
+    writer = SummaryWriter() if comm_rank == 0 else None
+    loss_callback = LossCallback(join(model_path, 'loss.json'),
+                                 device = device = torch.device(f'cuda:{encoder_gpu}'),
+                                 writer = writer,
+                                 wandb_config = wandb_config)
+    
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
+    
     embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
                                                path = input_path,
                                                rmsd_name = rmsd_name,
+                                               device = torch.device(f'cuda:{encoder_gpu}'),
                                                projection_type = "3d_project",
                                                sample_interval = len(valid_dataset) // 1000,
                                                writer = writer,
                                                wandb_config = wandb_config)
+    
     latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
                                                    sample_interval = len(valid_dataset) // 1000,
+                                                   device = torch.device(f'cuda:{encoder_gpu}'),
                                                    writer = writer,
                                                    wandb_config = wandb_config)
 
     # Train model with callbacks
+    callbacks = [loss_callback, checkpoint_callback, embedding2d_callback, latspace_callback]
+
+    # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              callbacks = [loss_callback, checkpoint_callback, embedding2d_callback, latspace_callback])
+              callbacks = callbacks)
 
     # Save loss history to disk.
-    loss_callback.save(join(model_path, 'loss.json'))
+    if comm_rank == 0:
+        loss_callback.save(join(model_path, 'loss.json'))
 
-    # Save hparams to disk
-    hparams.save(join(model_path, 'model-hparams.json'))
-    optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
+        # Save hparams to disk
+        hparams.save(join(model_path, 'model-hparams.json'))
+        optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
 
-    # Save final model weights to disk
-    aae.save_weights(join(model_path, 'encoder-weights.pt'),
-                     join(model_path, 'generator-weights.pt'),
-                     join(model_path, 'discriminator-weights.pt'))
+        # Save final model weights to disk
+        aae.save_weights(join(model_path, 'encoder-weights.pt'),
+                         join(model_path, 'generator-weights.pt'),
+                         join(model_path, 'discriminator-weights.pt'))
 
     # Output directory structure
     #  out_path
