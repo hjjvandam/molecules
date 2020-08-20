@@ -28,7 +28,7 @@ class Embedding3dCallback(Callback):
     """
     Saves VAE embeddings of random samples.
     """
-    def __init__(self, path, out_dir, shape, sparse=False,
+    def __init__(self, path, out_dir, shape, cm_format='sparse-concat',
                  sample_interval=20, batch_size=128,
                  gpu=None, writer=None):
         """
@@ -40,10 +40,11 @@ class Embedding3dCallback(Callback):
             Directory to store output plots.
         shape : tuple
             Shape of contact matrices (H, W), may be (1, H, W).
-        sparse : bool
-            If True, process data as sparse row/col COO format. Data
-            should not contain any values because they are all 1's and
-            generated on the fly. If False, input data is normal tensor.
+        cm_format : str
+            If 'sparse-concat', process data as concatenated row,col indicies.
+            If 'sparse-rowcol', process data as sparse row/col COO format.
+            If 'full', process data is normal torch tensors (matrices).
+            If none of the above, raise a ValueError.
         sample_interval : int
             Plots every sample_interval'th point in the data set
         batch_size : int
@@ -66,18 +67,27 @@ class Embedding3dCallback(Callback):
         # file when class is destructed.
         h5_file = open_h5(path)
 
-        if sparse:
-            group = h5_file['contact_maps']
+        # TODO: only works for concat map data. need to generalize
+        #       for other input data types. pass embeddings from training.
+
+        if cm_format == 'sparse-rowcol':
+            group = h5_file['contact_map']
             self.row_dset = group.get('row')
             self.col_dset = group.get('col')
             self.len = len(self.row_dset)
-        else:
-            # contact_maps dset has shape (N, W, H, 1)
-            self.dset = h5_file['contact_maps']
+        elif cm_format == 'sparse-concat':
+            self.dset = h5_file['contact_map']
             self.len = len(self.dset)
+        elif cm_format == 'full':
+            # contact_maps dset has shape (N, W, H, 1)
+            self.dset = h5_file['contact_map']
+            self.len = len(self.dset)
+        else:
+            raise ValueError(f'Invalid cm_format {cm_format}. Should be one of ' \
+                              '[sparse-rowcol, sparse-concat, full].')
 
         self.shape = shape
-        self.sparse = sparse
+        self.cm_format = cm_format
         self.out_dir = out_dir
         self.sample_interval = sample_interval
         self.batch_size = batch_size
@@ -98,17 +108,24 @@ class Embedding3dCallback(Callback):
         """
         start, step = 0, self.sample_interval * self.batch_size
         for idx in range(0, self.len, step):
-            if self.sparse:
+            if self.cm_format != 'full':
                 # Retrieve sparse row,col from disk and make dense in memory
                 data = []
                 for i in range(start, start + step, self.sample_interval):
                     if i >= self.len:
                         break
-                    indices = torch.from_numpy(np.vstack((self.row_dset[i],
-                                                          self.col_dset[i]))) \
-                                          .to(self.device).to(torch.long)
-                    values = torch.ones(indices.shape[1], dtype=torch.float32,
-                                        device=self.device)
+                    if self.cm_format == 'sparse-rowcol':
+                        indices = torch.from_numpy(np.vstack((self.row_dset[i],
+                                                              self.col_dset[i]))) \
+                                              .to(self.device).to(torch.long)
+                        values = torch.ones(indices.shape[1], dtype=torch.float32,
+                                            device=self.device)
+                    elif self.cm_format == 'sparse-concat':
+                        indices = torch.from_numpy(self.dset[idx].reshape(2, -1) \
+                                       .astype('int16')).to(self.device).to(torch.long)
+                        values = torch.ones(indices.shape[1], dtype=torch.float32,
+                                            device=self.device)
+
                     # Set shape to the last 2 elements of self.shape.
                     # Handles (1, W, H) and (W, H)
                     data.append(torch.sparse.FloatTensor(indices, values, self.shape[-2:]).to_dense())

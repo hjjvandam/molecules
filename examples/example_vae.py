@@ -61,9 +61,12 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
+@click.option('-a', '--amp', is_flag=True,
+              help='Specify if we want to enable automatic mixed precision (AMP)')
+
 def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
          decoder_gpu, epochs, batch_size, model_type, latent_dim,
-         sample_interval, wandb_project_name):
+         sample_interval, wandb_project_name, amp):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
@@ -79,7 +82,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                              'strides': [1, 2, 1, 1],
                              'affine_widths': [64],
                              'affine_dropouts': [0],
-                             'latent_dim': latent_dim}
+                             'latent_dim': latent_dim,
+                             'output_activation': 'None'}
 
         input_shape = (1, dim1, dim2)
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
@@ -89,7 +93,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         resnet_hparams = {'max_len': dim1,
                           'nchars': dim2,
                           'latent_dim': latent_dim,
-                          'dec_filters': dim1}
+                          'dec_filters': dim1,
+                          'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
         hparams = ResnetVAEHyperparams(**resnet_hparams)
@@ -97,7 +102,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
     vae = VAE(input_shape, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, decoder_gpu))
+              gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
 
     # Diplay model
     print(vae)
@@ -162,28 +167,28 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     writer = SummaryWriter()
     loss_callback = LossCallback(join(model_path, 'loss.json'), writer, wandb_config)
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
-    #embedding3d_callback = Embedding3dCallback(input_path,
-    #                                           join(model_path, 'embedddings'),
-    #                                           input_shape,
-    #                                           sparse=sparse,
-    #                                           writer=writer,
-    #                                           sample_interval = sample_interval,
-    #                                           batch_size=batch_size,
-    #                                           gpu=encoder_gpu)
+    embedding3d_callback = Embedding3dCallback(input_path,
+                                               join(model_path, 'embedddings'),
+                                               input_shape,
+                                               cm_format=cm_format,
+                                               writer=writer,
+                                               sample_interval = sample_interval,
+                                               batch_size=batch_size,
+                                               gpu=encoder_gpu)
 
-    #embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
-    #                                           path = input_path,
-    #                                           rmsd_name = 'rmsd',
-    #                                           projection_type = '3d_project',
-    #                                           sample_interval = sample_interval,
-    #                                           writer = writer,
-    #                                           wandb_config = wandb_config)
+    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
+                                               path = input_path,
+                                               rmsd_name = 'rmsd',
+                                               projection_type = '3d_project',
+                                               sample_interval = sample_interval,
+                                               writer = writer,
+                                               wandb_config = wandb_config)
 
     # Train model with callbacks
     vae.train(train_loader, valid_loader, epochs,
               checkpoint=checkpoint if checkpoint is not None else '',
-              callbacks=[loss_callback, checkpoint_callback])
-                         #embedding2d_callback, embedding3d_callback])
+              callbacks=[loss_callback, checkpoint_callback,
+                         embedding2d_callback, embedding3d_callback])
 
     # Save loss history to disk.
     loss_callback.save(join(model_path, 'loss.json'))
