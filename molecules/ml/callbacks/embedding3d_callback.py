@@ -99,6 +99,8 @@ class Embedding3dCallback(Callback):
             self.device = torch.device(f'cuda:{gpu}')
 
         self.rmsd, self.fnc = self.sample(h5_file)
+        self.vmin, self.vmax = self.minmax(self.rmsd)
+
 
     def batches(self):
         """
@@ -181,9 +183,8 @@ class Embedding3dCallback(Callback):
         fig = plt.figure()
         ax = fig.add_subplot(111, projection='3d')
 
-        vmin, vmax = self.minmax(self.rmsd)
         cmi = plt.get_cmap('jet')
-        cnorm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
+        cnorm = matplotlib.colors.Normalize(vmin=self.vmin, vmax=self.vmax)
         scalar_map = matplotlib.cm.ScalarMappable(norm=cnorm, cmap=cmi)
         scalar_map.set_array(self.rmsd)
         fig.colorbar(scalar_map)
