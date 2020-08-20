@@ -124,7 +124,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
               gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
 
     if comm_size > 1:
-        vae.model = DDP(vae.model, device_ids = None, output_device = None)
+        devid = torch.device(f'cuda:{encoder_gpu}') if (encoder_gpu == decoder_gpu) else None
+        vae.model = DDP(vae.model, device_ids = [devid], output_device = devid)
 
     if comm_rank == 0:
         # Diplay model
