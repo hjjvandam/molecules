@@ -4,17 +4,6 @@ import click
 import h5py
 import numpy as np
 
-# Helper class to allow list inputs with the click CLI
-import ast
-class PythonLiteralOption(click.Option):
-
-    def type_cast_value(self, ctx, value):
-        try:
-            return ast.literal_eval(value)
-        except:
-            raise click.BadParameter(value)
-
-
 @click.command()
 
 @click.option('-d', '--data_root', required=True,
@@ -108,3 +97,4 @@ def main(data_root, pattern, out_path, rmsd, fnc, contact_map, point_cloud, verb
 
 if __name__ == '__main__':
     main()
+
