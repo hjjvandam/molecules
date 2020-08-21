@@ -1,6 +1,7 @@
 import time
 import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn as nn
 from itertools import chain 
 from collections import OrderedDict, namedtuple
@@ -379,6 +380,14 @@ class AAE3d(object):
         hparams.validate()
         optimizer_hparams.validate()
 
+        # these are helpers for distributed computing
+        self.comm_rank = 0
+        self.comm_size = 1
+        if dist.is_initialized():
+            self.comm_rank = dist.get_rank()
+            self.comm_size = dist.get_world_size()
+
+        # verbose level
         self.verbose = verbose
 
         # Tuple of encoder, decoder device
@@ -611,9 +620,10 @@ class AAE3d(object):
                 logs['train_loss_eg'] = loss_eg.item()
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
             
-            if self.verbose:
+            if self.verbose and (self.comm_rank == 0):
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss_d: {:.6f}\tLoss_eg: {:.6f}\tTime: {:.3f}'.format(
-                      epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
+                      epoch, (batch_idx + 1) * self.comm_size * len(data),
+                      self.comm_size * len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
                       loss_d.item(), loss_eg.item(),
                       time.time() - start))
@@ -629,9 +639,10 @@ class AAE3d(object):
             logs['train_loss_d_average'] = train_loss_d_ave
             logs['train_loss_eg_average'] = train_loss_eg_ave
 
-        if self.verbose:
+        if self.verbose and (self.comm_rank == 0):
             print('====> Epoch: {} Average loss_d: {:.4f} loss_eg: {:.4f}'.format(epoch, train_loss_d_ave, train_loss_eg_ave))
-                
+
+            
     def _validate(self, valid_loader, epoch, callbacks, logs):
         """
         Test model on validation set.
@@ -679,7 +690,7 @@ class AAE3d(object):
         for callback in callbacks:
             callback.on_validation_end(epoch, logs)
 
-        if self.verbose:
+        if self.verbose and (self.comm_rank == 0):
             print('====> Validation loss: {:.4f}'.format(valid_loss))
     
     def _load_checkpoint(self, path):

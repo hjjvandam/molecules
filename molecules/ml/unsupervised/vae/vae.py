@@ -2,6 +2,7 @@ import time
 import numpy as np
 import torch
 from torch import nn
+import torch.distributed as dist
 from torch.nn import functional as F
 from collections import namedtuple
 from .resnet import ResnetVAEHyperparams
@@ -174,7 +175,7 @@ class VAE:
 
         verbose : bool
             True prints training and validation loss to stdout.
-        """
+        """        
 
         hparams.validate()
         optimizer_hparams.validate()
@@ -196,6 +197,14 @@ class VAE:
 
         self.loss_fnc = vae_logit_loss if loss is None else loss
 
+        # these are helpers for distributed computing
+        self.comm_rank = 0
+        self.comm_size = 1
+        if dist.is_initialized():
+            self.comm_rank = dist.get_rank()
+            self.comm_size = dist.get_world_size()
+
+            
     def _configure_device(self, gpu):
         """
         Configures GPU/CPU device for training VAE. Allows encoder
@@ -336,9 +345,10 @@ class VAE:
                 logs['train_loss'] = loss.item() / len(data)
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
-            if self.verbose:
+            if self.verbose and (self.comm_rank == 0):
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
-                      epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
+                      epoch, (batch_idx + 1) * self.comm_size * len(data),
+                      self.comm_size * len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
                       loss.item() / len(data), time.time() - start))
 
@@ -350,7 +360,7 @@ class VAE:
         if callbacks:
             logs['train_loss_average'] = train_loss_ave
 
-        if self.verbose:
+        if self.verbose and (self.comm_rank == 0):
             print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss_ave))
 
     def _validate(self, valid_loader, epoch, callbacks, logs):
@@ -397,7 +407,7 @@ class VAE:
         for callback in callbacks:
             callback.on_validation_end(epoch, logs)
         
-        if self.verbose:
+        if self.verbose and (self.comm_rank == 0):
             print('====> Validation loss: {:.4f}'.format(valid_loss))
 
     def _load_checkpoint(self, path):
