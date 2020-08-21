@@ -28,7 +28,10 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
 
     kwargs : dict
         Optional h5py parameters to be used in dataset creation.
-    """
+
+   Note: The sparse-concat format has more efficient chunking than
+         the sparse-rowcol format.
+   """
 
     rows, cols = contact_maps
 
@@ -41,15 +44,14 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
     if cm_format == 'sparse-concat':
         # list of np arrays of shape (2 * X) where X varies
         data = ragged([np.concatenate(row_col) for row_col in zip(rows, cols)])
-        h5_file.create_dataset('contact_map', data=data, chunks=(2,) + data.shape[1:], dtype=dt, **kwargs)
+        h5_file.create_dataset('contact_map', data=data, chunks=(1,) + data.shape[1:], dtype=dt, **kwargs)
 
     elif cm_format == 'sparse-rowcol':
         group = h5_file.create_group('contact_map')
-        # The i'th element of both row,col dset will be
-        # arrays of the same length. However, neighboring
-        # arrays may be any variable length.
-        group.create_dataset('row', dtype=dt, data=ragged(rows), chunks=(1, len(rows)), **kwargs)
-        group.create_dataset('col', dtype=dt, data=ragged(cols), chunks=(1, len(cols)), **kwargs)
+        # The i'th element of both row,col dset will be arrays of the
+        # same length. However, neighboring arrays may be any variable length.
+        group.create_dataset('row', dtype=dt, data=ragged(rows), chunks=(1,), **kwargs)
+        group.create_dataset('col', dtype=dt, data=ragged(cols), chunks=(1,), **kwargs)
 
 def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
           contact_maps=None, cm_format='sparse-concat'):
@@ -81,18 +83,18 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
         format to save contact maps with.
     """
     kwargs = {'fletcher32': True}
-    float_kwargs = {'fletcher32': True, 'dtype': 'float16'}
+    scalar_kwargs = {'fletcher32': True, 'dtype': 'float16', 'chunks':(1,)}
 
     # Open h5 file in swmr mode
     h5_file = open_h5(save_file, 'w')
 
     # Save rmsd
     if rmsd is not None:
-        h5_file.create_dataset('rmsd', data=rmsd, chunks=(1,), **cfloat_kwargs)
+        h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
 
     # Save fraction of native contacts
     if fnc is not None:
-        h5_file.create_dataset('fnc', data=fnc, chunks=(1,), **float_kwargs)
+        h5_file.create_dataset('fnc', data=fnc, **scalar_kwargs)
 
     # Save point cloud
     if point_cloud is not None:
