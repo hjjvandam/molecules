@@ -1,7 +1,7 @@
 import click
 import numpy as np
 from molecules.utils import open_h5
-from molecules.sim.contact_maps import sparse_contact_maps_from_matrices
+from molecules.sim.dataset import sparse_contact_maps_from_matrices
 
 @click.command()
 @click.option('-i', 'input_path', required=True,

@@ -1,7 +1,7 @@
 import os
 import glob
 import click
-from molecules.sim.contact_maps import traj_to_dset
+from molecules.sim.dataset import traj_to_dset
 
 @click.command()
 
