@@ -74,11 +74,10 @@ def main(pdb_path, ref_pdb_path, traj_path, ext, out_path, num_workers,
         num_traj_files = len(traj_path) if isinstance(traj_path, list) else 1
         print(f'Using {num_workers} workers to process {num_traj_files} traj files')
 
-    traj_to_dset(pdb_path, ref_pdb_path, out_path, traj_path,
-                 rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
-                 contact_map=contact_map, sel=selection,
-                 cutoff=cutoff, cm_format=cm_format, verbose=verbose,
-                 num_workers=num_workers) 
+    traj_to_dset(topology=pdb_path, ref_topology=ref_pdb_path, traj_files=traj_path,
+                 save_file=out_path, rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
+                 contact_map=contact_map, sel=selection, cutoff=cutoff,
+                 cm_format=cm_format, num_workers=num_workers, verbose=verbose)
     
 if __name__ == '__main__':
     main()
