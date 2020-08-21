@@ -3,10 +3,16 @@ import click
 from os.path import join
 
 # torch stuff
+import torch
 from torchsummary import summary
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Subset
+
+# mpi4py
+import mpi4py
+mpi4py.rc.initialize = False
+from mpi4py import MPI
 
 # molecules stuff
 from molecules.ml.datasets import PointCloudDataset
@@ -80,21 +86,36 @@ def parse_dict(ctx, param, value):
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
+@click.option('--distributed', is_flag=True,
+              help='Enable distributed training')
+
 def main(input_path, dataset_name, rmsd_name, out_path, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
          loss_weights, num_data_workers, local_rank,
-         wandb_project_name):
+         wandb_project_name, distributed):
     """Example for training Fs-peptide with AAE3d."""
 
     # do some scaffolding for DDP
     comm_rank = 0
     comm_size = 1
     comm_local_rank = 0
-    if dist.is_available():
+    comm = None
+    if distributed and dist.is_available():
+        # init mpi4py:
+        MPI.Init_thread()
+
+        # get communicator: duplicate from comm world
+        comm = MPI.COMM_WORLD.Dup()
+
+        # now match ranks between the mpi comm and the nccl comm
+        os.environ["WORLD_SIZE"] = str(comm.Get_size())
+        os.environ["RANK"] = str(comm.Get_rank())
+
+        # init pytorch
         dist.init_process_group(backend='nccl',
-                                             init_method='env://')
+                                init_method='env://')
         comm_rank = dist.get_rank()
         comm_size = dist.get_world_size()
         comm_local_rank = local_rank
@@ -144,8 +165,8 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
         train_dataset = Subset(train_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
-    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True,
-                              pin_memory=True, num_workers = num_data_workers)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
+                              pin_memory = True, num_workers = num_data_workers)
 
     valid_dataset = PointCloudDataset(input_path,
                                       dataset_name,
@@ -162,8 +183,8 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
         valid_dataset = Subset(valid_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
-    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle=True,
-                              pin_memory=True, num_workers = num_data_workers)
+    valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
+                              pin_memory = True, num_workers = num_data_workers)
 
     print(f"Having {len(train_dataset)} training and {len(valid_dataset)} validation samples.")
     
@@ -201,29 +222,30 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter() if comm_rank == 0 else None
     loss_callback = LossCallback(join(model_path, 'loss.json'),
-                                 device = device = torch.device(f'cuda:{encoder_gpu}'),
                                  writer = writer,
-                                 wandb_config = wandb_config)
+                                 wandb_config = wandb_config,
+                                 mpi_comm = comm)
     
-    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
+                                             mpi_comm = comm)
     
     embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
                                                path = input_path,
                                                rmsd_name = rmsd_name,
-                                               device = torch.device(f'cuda:{encoder_gpu}'),
                                                projection_type = "3d_project",
                                                sample_interval = len(valid_dataset) // 1000,
                                                writer = writer,
-                                               wandb_config = wandb_config)
+                                               wandb_config = wandb_config,
+                                               mpi_comm = comm)
     
     latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
                                                    sample_interval = len(valid_dataset) // 1000,
-                                                   device = torch.device(f'cuda:{encoder_gpu}'),
                                                    writer = writer,
-                                                   wandb_config = wandb_config)
+                                                   wandb_config = wandb_config,
+                                                   mpi_comm = comm)
 
     # Train model with callbacks
-    callbacks = [loss_callback, checkpoint_callback, embedding2d_callback, latspace_callback]
+    callbacks = [loss_callback, checkpoint_callback, embedding2d_callback] #, latspace_callback]
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,

@@ -8,6 +8,11 @@ import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Subset
 
+# mpi4py
+import mpi4py
+mpi4py.rc.initialize = False
+from mpi4py import MPI
+
 # molecules stuff
 from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
@@ -72,9 +77,12 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-a', '--amp', is_flag=True,
               help='Specify if we want to enable automatic mixed precision (AMP)')
 
+@click.option('--distributed', is_flag=True,
+              help='Enable distributed training')
+
 def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
          decoder_gpu, epochs, batch_size, model_type, latent_dim,
-         sample_interval, wandb_project_name, local_rank, amp):
+         sample_interval, wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
@@ -82,12 +90,29 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     comm_rank = 0
     comm_size = 1
     comm_local_rank = 0
-    if torch.distributed.is_available():
+    comm = None
+    if distributed and dist.is_available():
+        # init mpi4py:
+        MPI.Init_thread()
+
+        # get communicator: duplicate from comm world
+        comm = MPI.COMM_WORLD.Dup()
+
+        # now match ranks between the mpi comm and the nccl comm
+        os.environ["WORLD_SIZE"] = str(comm.Get_size())
+        os.environ["RANK"] = str(comm.Get_rank())
+
+        # init torch distributed
         torch.distributed.init_process_group(backend='nccl',
                                              init_method='env://')
         comm_rank = torch.distributed.get_rank()
         comm_size = torch.distributed.get_world_size()
-        comm_local_rank = local_rank
+        if local_rank is not None:
+            comm_local_rank = local_rank
+        else:
+            comm_local_rank = int(os.getenv("LOCAL_RANK", 0))
+
+    print(comm_size, comm_rank, comm_local_rank)
 
     assert model_type in ['symmetric', 'resnet']
 
@@ -202,11 +227,12 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     from torch.utils.tensorboard import SummaryWriter
     writer = SummaryWriter() if (comm_rank == 0) else None
     loss_callback = LossCallback(join(model_path, 'loss.json'),
-                                 device = torch.device(f'cuda:{encoder_gpu}'),
                                  writer = writer,
-                                 wandb_config = wandb_config)
+                                 wandb_config = wandb_config,
+                                 mpi_comm = comm)
     
-    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'))
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
+                                             mpi_comm = comm)
     
     embedding3d_callback = Embedding3dCallback(input_path,
                                                join(model_path, 'embedddings'),
@@ -215,16 +241,17 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                                                writer = writer,
                                                sample_interval = sample_interval,
                                                batch_size = batch_size,
+                                               mpi_comm = comm,
                                                device = torch.device(f'cuda:{encoder_gpu}'))
 
     embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
                                                path = input_path,
                                                rmsd_name = 'rmsd',
-                                               device = torch.device(f'cuda:{encoder_gpu}'),
                                                projection_type = '3d_project',
                                                sample_interval = sample_interval,
                                                writer = writer,
-                                               wandb_config = wandb_config)
+                                               wandb_config = wandb_config,
+                                               mpi_comm = comm)
 
     # Train model with callbacks
     callbacks = [loss_callback, checkpoint_callback,

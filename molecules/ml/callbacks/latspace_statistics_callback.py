@@ -1,6 +1,7 @@
 import os
 import time
 import torch
+import torch.distributed as dist
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -28,9 +29,10 @@ class LatspaceStatisticsCallback(Callback):
     Saves AE projections for mu and std of random samples.
     """
     def __init__(self, out_dir,
-                 device = torch.device("cpu"),
                  sample_interval = 20,
-                 writer = None, wandb_config = None):
+                 writer = None,
+                 wandb_config = None,
+                 mpi_comm = None):
         """
         Parameters
         ----------
@@ -41,15 +43,15 @@ class LatspaceStatisticsCallback(Callback):
         writer : torch.utils.tensorboard.SummaryWriter
         wandb_config : wandb configuration file
         """
+        self.comm = mpi_comm
         self.is_eval_node = True
-        if dist.is_initialized() and (dist.get_rank() != 0):
+        if (self.comm is not None) and (self.comm.Get_rank() != 0):
             self.is_eval_node = False
             
         if self.is_eval_node:
             os.makedirs(out_dir, exist_ok=True)
 
         self.out_dir = out_dir
-        self.device = device
         self.sample_interval = sample_interval
         self.writer = writer
         self.wandb_config = wandb_config
@@ -90,9 +92,15 @@ class LatspaceStatisticsCallback(Callback):
         std = np.concatenate(self.std, axis = 0)
 
         # communicate if necessary
-        if dist.is_initialized():
-            mu = dist.gather(torch.Tensor(mu).to(self.device), dst = 0).cpu().numpy()
-            std = dist.gather(torch.Tensor(std).to(self.device), dst = 0).cpu().numpy()
+        if (self.comm is not None):
+            # gather data
+            mu_gather = self.comm.gather(mu, root = 0)
+            std_gather = self.comm.gather(std, root = 0)
+            
+            # concat
+            if self.is_eval_node:
+                mu = np.concatenate(mu_gather, axis = 0)
+                std = np.concatenate(std_gather, axis = 0)
         
         # dist plots
         if self.is_eval_node and (self.sample_interval > 0):

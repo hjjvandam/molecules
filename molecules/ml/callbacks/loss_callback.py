@@ -1,14 +1,14 @@
 import json
 from .callback import Callback
 import wandb
-import torch.distributed as dist
+import numpy as np
 
 class LossCallback(Callback):
     
     def __init__(self, path,
-                 device,
                  writer = None,
-                 wandb_config = None):
+                 wandb_config = None,
+                 mpi_comm = None):
         """
         Parameters
         ----------
@@ -20,9 +20,13 @@ class LossCallback(Callback):
 
         writer : torch.utils.tensorboard.SummaryWriter
         """
+        self.comm = mpi_comm
+        self.is_eval_node = True
+        if (self.comm is not None) and (self.comm.Get_rank() != 0):
+            self.is_eval_node = False
+        
         self.writer = writer
         self.path = path
-        self.device = device
         self.wandb_config = wandb_config
         
     def on_train_begin(self, logs):
@@ -40,9 +44,10 @@ class LossCallback(Callback):
         for lossname in [x for x in logs if x.startswith("train_loss")]:
 
             # reduce losses
-            if dist.is_initialized():
-                logs[lossname] = dist.all_reduce(torch.Tensor(logs[lossname]).to(self.device)).item()
-                logs[lossname] /= float(dist.get_world_size())
+            if self.comm is not None:
+                lossarr = np.array(logs[lossname], dtype = np.float32)
+                logs[lossname] = np.asscalar(self.comm.allreduce(lossarr))
+                logs[lossname] /= float(self.comm.Get_size())
             
             # manual logging
             if lossname in self.train_losses:
@@ -65,9 +70,10 @@ class LossCallback(Callback):
         for lossname in [x for x in logs if x.startswith("valid_loss")]:
 
             # reduce losses
-            if dist.is_initialized():
-                logs[lossname] = dist.all_reduce(torch.Tensor(logs[lossname]).to(self.device)).item()
-                logs[lossname] /= float(dist.get_world_size())
+            if self.comm is not None:
+                lossarr = np.array(logs[lossname], dtype = np.float32)
+                logs[lossname] = np.asscalar(self.comm.allreduce(lossarr))
+                logs[lossname] /= float(self.comm.Get_size())
                 
             # manual logging
             if lossname in self.valid_losses:
@@ -87,7 +93,7 @@ class LossCallback(Callback):
 
                 
         # save to json for manual logging
-        if dist.is_initialized() and (dist.get_rank() == 0):
+        if self.is_eval_node:
             self.save(self.path)
 
 

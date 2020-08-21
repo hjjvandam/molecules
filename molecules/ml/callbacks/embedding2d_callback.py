@@ -1,7 +1,6 @@
 import os
 import time
 import torch
-import torch.distributed as dist
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -33,10 +32,11 @@ class Embedding2dCallback(Callback):
     """
     def __init__(self, out_dir,
                  path, rmsd_name,
-                 device, 
-                 projection_type = "3d",
+                 projection_type = "2d",
                  sample_interval = 20,
-                 writer = None, wandb_config = None):
+                 writer = None,
+                 wandb_config = None,
+                 mpi_comm = None):
         """
         Parameters
         ----------
@@ -45,8 +45,6 @@ class Embedding2dCallback(Callback):
         
         rmsd_name : str
             Dataset name for rmsd data.
-        device : torch.Device
-            Device ID for reductions in multinode case
         projection_type: str
             Type of projection: 2D or 3D.
         out_dir : str
@@ -55,16 +53,17 @@ class Embedding2dCallback(Callback):
             Plots every sample_interval'th point in the data set
         writer : torch.utils.tensorboard.SummaryWriter
         wandb_config : wandb configuration file
+        mpi_comm : mpi communicator for distributed training
         """
+        self.comm = mpi_comm
         self.is_eval_node = True
-        if dist.is_initialized() and (dist.get_rank() != 0):
+        if (self.comm is not None) and (self.comm.Get_rank() != 0):
             self.is_eval_node = False
 
         if self.is_eval_node:
             os.makedirs(out_dir, exist_ok=True)
 
         self.out_dir = out_dir
-        self.device = device
         self.sample_interval = sample_interval
         self.projection_type = projection_type.lower()
         self.writer = writer
@@ -122,16 +121,22 @@ class Embedding2dCallback(Callback):
             return
 
         # prepare plot data 
-        embeddings = np.concatenate(self.embeddings, axis = 0)
-        rmsd = np.concatenate(self.rmsd, axis = 0)
+        embeddings = np.concatenate(self.embeddings, axis = 0).astype(np.float32)
+        rmsd = np.concatenate(self.rmsd, axis = 0).astype(np.float32)
 
         # communicate if necessary
-        if dist.is_initialized():
-            embeddings = dist.gather(torch.Tensor(embeddings).to(self.device), dst = 0).cpu().numpy()
-            rmsd = dist.gather(torch.Tensor(rmsd).to(self.device), dst = 0).cpu().numpy()
+        if (self.comm is not None):
+            # gather data
+            embeddings_gather = self.comm.gather(embeddings, root = 0)
+            rmsd_gather = self.comm.gather(rmsd, root = 0)
+
+            # concat
+            if self.is_eval_node:
+                embeddings = np.concatenate(embeddings_gather, axis = 0)
+                rmsd = np.concatenate(rmsd_gather, axis = 0)
         
         # t-sne plots
-        if self.is_eval_node and ( self.sample_interval > 0):
+        if self.is_eval_node and (self.sample_interval > 0):
             self.tsne_plot(epoch, embeddings, rmsd, logs)
 
         

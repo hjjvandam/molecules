@@ -6,7 +6,8 @@ import torch.distributed as dist
 
 class CheckpointCallback(Callback):
     def __init__(self, interval=0,
-                 out_dir=os.path.join('.', 'checkpoints')):
+                 out_dir=os.path.join('.', 'checkpoints'),
+                 mpi_comm = None):
         """
         Checkpoint interface for saving dictionary objects to disk
         during training. Typically used to save model state_dict
@@ -26,8 +27,9 @@ class CheckpointCallback(Callback):
         if interval < 0:
             raise ValueError('Checkpoint interval must be non-negative')
 
+        self.comm = mpi_comm
         self.is_eval_node = True
-        if dist.is_initialized() and (dist.get_rank() != 0):
+        if (self.comm is not None) and (self.comm.Get_rank() != 0):
             self.is_eval_node = False
 
         if self.is_eval_node:
