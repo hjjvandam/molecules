@@ -113,7 +113,6 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         else:
             comm_local_rank = int(os.getenv("LOCAL_RANK", 0))
 
-    print(comm_size, comm_rank, comm_local_rank)
 
     assert model_type in ['symmetric', 'resnet']
 
