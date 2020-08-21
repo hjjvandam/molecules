@@ -139,6 +139,10 @@ class Embedding2dCallback(Callback):
         if self.is_eval_node and (self.sample_interval > 0):
             self.tsne_plot(epoch, embeddings, rmsd, logs)
 
+        # we need to wait for it
+        if (self.comm is not None):
+            self.comm.barrier()
+
         
     def tsne_plot(self, epoch, embeddings, rmsd, logs):
 

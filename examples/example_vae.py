@@ -177,7 +177,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
     train_loader = DataLoader(train_dataset,
-                              batch_size=batch_size,
+                              batch_size = batch_size,
+                              drop_last = True,
                               shuffle = True,
                               pin_memory = True,
                               num_workers = 1)
@@ -197,7 +198,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
     valid_loader = DataLoader(valid_dataset,
-                              batch_size=batch_size,
+                              batch_size = batch_size,
+                              drop_last = True,
                               shuffle = True,
                               pin_memory = True,
                               num_workers = 1)
@@ -239,15 +241,15 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
                                              mpi_comm = comm)
     
-    embedding3d_callback = Embedding3dCallback(input_path,
-                                               join(model_path, 'embedddings'),
-                                               input_shape,
-                                               cm_format = cm_format,
-                                               writer = writer,
-                                               sample_interval = sample_interval,
-                                               batch_size = batch_size,
-                                               mpi_comm = comm,
-                                               device = torch.device(f'cuda:{encoder_gpu}'))
+   # embedding3d_callback = Embedding3dCallback(input_path,
+   #                                            join(model_path, 'embedddings'),
+   #                                            input_shape,
+   #                                            cm_format = cm_format,
+   #                                            writer = writer,
+   #                                            sample_interval = sample_interval,
+   #                                            batch_size = batch_size,
+   #                                            mpi_comm = comm,
+   #                                            device = torch.device(f'cuda:{encoder_gpu}'))
 
     embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
                                                path = input_path,
@@ -260,7 +262,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
 
     # Train model with callbacks
     callbacks = [loss_callback, checkpoint_callback,
-                 embedding2d_callback, embedding3d_callback]
+                 embedding2d_callback] #, embedding3d_callback]
 
     # create model
     vae.train(train_loader, valid_loader, epochs,
