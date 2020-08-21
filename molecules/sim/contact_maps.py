@@ -286,7 +286,7 @@ def _worker(kwargs):
     id_ = kwargs.pop('id')
     return _traj_to_dset(**kwargs), id_
 
-def traj_to_dset(topology, ref_topology, traj_files, save_file
+def traj_to_dset(topology, ref_topology, traj_files, save_file,
                  rmsd=True, fnc=True, point_cloud=True, contact_map=True,
                  sel='protein and name CA', cutoff=8., cm_format='sparse-concat',
                  num_workers=None, verbose=False):
@@ -351,12 +351,17 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file
         of computation. See _save function parameters for the data format.
     """
 
-    if num_workers == 1:
-       return _traj_to_dset(topology, ref_topology, traj_files,
-                            sel=sel, save_file=save_file,
-                            cutoff=cutoff, rmsd=rmsd, fnc=fnc,
-                            point_cloud=point_cloud, contact_map=contact_map,
-                            cm_format=cm_format, verbose=verbose)
+    if num_workers == 1 or isinstance(traj_files, str):
+
+        if verbose:
+           num_traj_files = len(traj_files) if isinstance(traj_files, list) else 1
+           print(f'Using 1 worker to process {num_traj_files} traj file')
+
+        return _traj_to_dset(topology, ref_topology, traj_files,
+                             sel=sel, save_file=save_file,
+                             cutoff=cutoff, rmsd=rmsd, fnc=fnc,
+                             point_cloud=point_cloud, contact_map=contact_map,
+                             cm_format=cm_format, verbose=verbose)
 
     import itertools
     from concurrent.futures import ProcessPoolExecutor
@@ -365,6 +370,9 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file
     if num_workers is None:
         import os
         num_workers = min(os.cpu_count(), len(traj_files))
+
+    if verbose:
+        print(f'Using {num_workers} workers to process {len(traj_files)} traj files')
 
     # Arguments for workers
     kwargs = [{'topology': topology,
@@ -491,3 +499,4 @@ def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None,
               cm_format=cm_format)
 
     return row, col
+

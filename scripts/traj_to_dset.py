@@ -28,8 +28,8 @@ from molecules.sim.contact_maps import traj_to_dset
 
 @click.option('-w', '--num_workers', default=None, type=int,
               help='Number of parallel workers for processing multiple ' \
-                   'traj files in parallel. Defaults to number of cpus ' \
-                   'on machine.')
+                   'traj files in parallel. Defaults to the smaller of ' \
+                   'number of cpus on machine or the number of traj files.')
 
 @click.option('-s', '--selection', default='protein and name CA',
               help='Atom selection for creating contact maps, ' \
@@ -66,13 +66,6 @@ def main(pdb_path, ref_pdb_path, traj_path, ext, out_path, num_workers,
 
         if verbose:
             print(f'Collected {len(traj_path)} {ext} files')
-    else:
-        # Can't parallelize over single file
-        num_workers = 1
-
-    if verbose:
-        num_traj_files = len(traj_path) if isinstance(traj_path, list) else 1
-        print(f'Using {num_workers} workers to process {num_traj_files} traj files')
 
     traj_to_dset(topology=pdb_path, ref_topology=ref_pdb_path, traj_files=traj_path,
                  save_file=out_path, rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
