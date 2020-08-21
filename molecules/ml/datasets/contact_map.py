@@ -43,34 +43,32 @@ class ContactMapDataset(Dataset):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
         if split_ptc < 0 or split_ptc > 1:
             raise ValueError('Parameter split_ptc must satisfy 0 <= split_ptc <= 1.')
+        if cm_format not in ('sparse-concat', 'sparse-rowcol', 'full'):
+            raise ValueError(f'Invalid cm_format {cm_format}. Should be one of ' \
+                              '[sparse-rowcol, sparse-concat, full].')
 
-        # Open h5 file. Python's garbage collector closes the
-        # file when class is destructed.
+        # Open dataset file to get length (number of samples)
         h5_file = open_h5(path)
 
         if cm_format == 'sparse-rowcol':
             group = h5_file[dataset_name]
-            self.row_dset = group.get('row')
-            self.col_dset = group.get('col')
-            self.len = len(self.row_dset)
-        elif cm_format == 'sparse-concat':
-            self.dset = h5_file[dataset_name]
-            self.len = len(self.dset)
-        elif cm_format == 'full':
-            # contact_maps dset has shape (N, W, H, 1)
-            self.dset = h5_file[dataset_name]
-            self.len = len(self.dset)
+            self.len = len(group.get('row'))
         else:
-            raise ValueError(f'Invalid cm_format {cm_format}. Should be one of ' \
-                              '[sparse-rowcol, sparse-concat, full].')
+            # Works for sparse-concat and full
+            self.len = len(h5_file[dataset_name])
 
-        self.rmsd = h5_file[rmsd_name]
+        # Close and open again later
+        h5_file.close()
 
         # train validation split index
         self.split_ind = int(split_ptc * self.len)
         self.split = split
         self.cm_format = cm_format
         self.shape = shape
+        self.not_init = True
+        self.path = path
+        self.dataset_name = dataset_name
+        self.rmsd_name = rmsd_name
 
     def __len__(self):
         if self.split == 'train':
@@ -81,25 +79,39 @@ class ContactMapDataset(Dataset):
         if self.split == 'valid':
             idx += self.split_ind
 
-        if self.cm_format == 'sparse-rowcol':
-            indices = torch.from_numpy(np.vstack((self.row_dset[idx],
-                                                  self.col_dset[idx]))).to(torch.long)
-            values = torch.ones(indices.shape[1], dtype=torch.float32)
-            # Set shape to the last 2 elements of self.shape.
-            # Handles (1, W, H) and (W, H)
-            data = torch.sparse.FloatTensor(indices, values,
-                        self.shape[-2:]).to_dense()
-        elif self.cm_format == 'sparse-concat':
-            indices = torch.from_numpy(self.dset[idx].reshape(2, -1) \
-                           .astype('int16')).to(torch.long)
-            values = torch.ones(indices.shape[1], dtype=torch.float32)
-            # Set shape to the last 2 elements of self.shape.
-            # Handles (1, W, H) and (W, H)
-            data = torch.sparse.FloatTensor(indices, values,
-                        self.shape[-2:]).to_dense()
-        elif self.cm_format == 'full':
-            data = torch.Tensor(self.dset[idx, ...])
+        # Only happens once. Need to open h5 file in current process
+        if self.not_init:
+            h5_file = open_h5(self.path)
+            if self.cm_format == 'sparse-rowcol':
+                group = h5_file[self.dataset_name]
+                self.row_dset = group.get('row')
+                self.col_dset = group.get('col')
+            else:
+                # Works for sparse-concat and full
+                # full contact_maps dset has shape (N, W, H, 1)
+                self.dset = h5_file[self.dataset_name]
 
+            self.rmsd = h5_file[self.rmsd_name]
+            self.not_init = False
+
+        # Select data format and return data at idx
+        if self.cm_format == 'full':
+            data = torch.Tensor(self.dset[idx, ...])
+        else:
+
+            if self.cm_format == 'sparse-concat':
+                indices = torch.from_numpy(self.dset[idx] \
+                               .astype('int16').reshape(2, -1))
+            else: # sparse-rowcol
+                indices = torch.from_numpy(np.vstack((self.row_dset[idx],
+                                                      self.col_dset[idx])))
+
+            values = torch.ones(indices.shape[1], dtype=torch.float32)
+            # Set shape to the last 2 elements of self.shape.
+            # Handles (1, W, H) and (W, H)
+            data = torch.sparse.FloatTensor(indices.to(torch.long), values,
+                                            self.shape[-2:]).to_dense()
         rmsd = self.rmsd[idx]
 
         return data.view(self.shape), torch.tensor(rmsd, requires_grad=False)
+

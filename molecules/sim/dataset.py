@@ -23,12 +23,16 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
         map where a 1 exists.
 
     cm_format : str
+        Format to save contact maps with.
         sparse-concat: new format with single dataset
         sparse-rowcol: old format with group containing row,col datasets
 
     kwargs : dict
         Optional h5py parameters to be used in dataset creation.
-    """
+
+   Note: The sparse-concat format has more efficient chunking than
+         the sparse-rowcol format.
+   """
 
     rows, cols = contact_maps
 
@@ -40,16 +44,15 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
 
     if cm_format == 'sparse-concat':
         # list of np arrays of shape (2 * X) where X varies
-        data = [np.concatenate(row_col) for row_col in zip(rows, cols)]
-        h5_file.create_dataset('contact_map', data=ragged(data), dtype=dt, **kwargs)
+        data = ragged([np.concatenate(row_col) for row_col in zip(rows, cols)])
+        h5_file.create_dataset('contact_map', data=data, chunks=(1,) + data.shape[1:], dtype=dt, **kwargs)
 
     elif cm_format == 'sparse-rowcol':
         group = h5_file.create_group('contact_map')
-        # The i'th element of both row,col dset will be
-        # arrays of the same length. However, neighboring
-        # arrays may be any variable length.
-        group.create_dataset('row', dtype=dt, data=ragged(rows), **kwargs)
-        group.create_dataset('col', dtype=dt, data=ragged(cols), **kwargs)
+        # The i'th element of both row,col dset will be arrays of the
+        # same length. However, neighboring arrays may be any variable length.
+        group.create_dataset('row', dtype=dt, data=ragged(rows), chunks=(1,), **kwargs)
+        group.create_dataset('col', dtype=dt, data=ragged(cols), chunks=(1,), **kwargs)
 
 def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
           contact_maps=None, cm_format='sparse-concat'):
@@ -78,25 +81,28 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
         map where a 1 exists.
 
     cm_format : str
-        format to save contact maps with.
+        Format to save contact maps with.
+        sparse-concat: new format with single dataset
+        sparse-rowcol: old format with group containing row,col datasets
     """
     kwargs = {'fletcher32': True}
-    float_kwargs = {'fletcher32': True, 'dtype': 'float16'}
+    scalar_kwargs = {'fletcher32': True, 'dtype': 'float16', 'chunks':(1,)}
 
     # Open h5 file in swmr mode
     h5_file = open_h5(save_file, 'w')
 
     # Save rmsd
     if rmsd is not None:
-        h5_file.create_dataset('rmsd', data=rmsd, **float_kwargs)
+        h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
 
     # Save fraction of native contacts
     if fnc is not None:
-        h5_file.create_dataset('fnc', data=fnc, **float_kwargs)
+        h5_file.create_dataset('fnc', data=fnc, **scalar_kwargs)
 
     # Save point cloud
     if point_cloud is not None:
         h5_file.create_dataset('point_cloud', data=point_cloud,
+                               chunks=(1,) + point_cloud.shape[1:],
                                dtype='float32', **kwargs)
 
     # Save contact maps
@@ -108,29 +114,88 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
     h5_file.close()
 
 def fraction_of_contacts(cm, ref_cm):
-    return 1 - (cm != ref_cm).mean()
-
-def _traj_to_dset(pdb_file, ref_pdb_file, traj_file,
-                  sel='protein and name CA', cutoff=8.,
-                  rmsd=True, fnc=True,
-                  point_cloud=True,
-                  contact_map=True,
-                  save_file=None,
-                  cm_format='sparse-concat',
-                  verbose=False):
     """
-    Get a point cloud representation from trajectory.
+    Given two contact matices of equal dimensions, computes
+    the fraction of entries which are equal. This is
+    comonoly refered to as the fraction of contacts and
+    in the case where ref_cm represents the native state
+    this is the fraction of native contacts.
 
     Parameters
     ----------
-    sel: str
-        Select any set of atoms in the protein for RMSD and point clouds
+    cm : np.ndarray
+        A contact matrix.
+
+    ref_cm : np.ndarray
+        The reference contact matrix for comparison.
     """
-    # TODO: update doc string
+    return 1 - (cm != ref_cm).mean()
+
+def _traj_to_dset(topology, ref_topology, traj_file,
+                  save_file=None,
+                  rmsd=True, fnc=True,
+                  point_cloud=True,
+                  contact_map=True,
+                  sel='protein and name CA',
+                  cutoff=8.,
+                  cm_format='sparse-concat',
+                  verbose=False):
+    """
+    Implementation for generating machine learning datasets
+    from raw molecular dynamics trajectory data. This function
+    uses MDAnalysis to load the trajectory file and given a
+    custom atom selection computes contact matrices, RMSD to
+    reference state, fraction of reference contacts and the
+    point cloud (xyz coordinates) of each frame in the trajectory.
+
+    Parameters
+    ----------
+    topology : str
+        Path to topology file: CHARMM/XPLOR PSF topology file,
+        PDB file or Gromacs GRO file.
+
+    ref_topology : str
+        Path to reference topology file for aligning trajectory:
+        CHARMM/XPLOR PSF topology file, PDB file or Gromacs GRO file.
+
+    traj_file : str
+        Trajectory file (in CHARMM/NAMD/LAMMPS DCD, Gromacs XTC/TRR,
+        or generic. Stores coordinate information for the trajectory.
+
+    save_file : str
+        Path to output h5 dataset file name.
+
+    rmsd, fnc, point_cloud, contact_map : bool
+        Those flags that are marked true are computed and saved
+        into h5 dataset files. Any combination may be selected.
+
+    sel : str
+        Selection set of atoms in the protein.
+
+    cutoff : float
+        Cutoff in angstroms for determining contacts in the contact
+        matrix. Contact matrices have a 1 if two residues, or atom
+        selections in general, are within `cutoff` angstroms,
+        otherwise a 0 is entered.
+
+    cm_format : str
+        Format to save contact maps with.
+        sparse-concat: new format with single dataset
+        sparse-rowcol: old format with group containing row,col datasets
+
+    verbose: bool
+        If true, prints verbose output.
+
+    Returns
+    -------
+    tuple : rmsd_data, fnc_data, pc_data, contact_map_data
+        If not None then they will contain the raw data for each type
+        of computation. See _save function parameters for the data format.
+    """
 
     # Load simulation and reference structures
-    sim = mda.Universe(pdb_file, traj_file)
-    ref = mda.Universe(ref_pdb_file)
+    sim = mda.Universe(topology, traj_file)
+    ref = mda.Universe(ref_topology)
 
     if verbose:
         print('Traj length: ', len(sim.trajectory))
@@ -217,36 +282,107 @@ def _traj_to_dset(pdb_file, ref_pdb_file, traj_file,
     return rmsd_data, fnc_data, pc_data, contact_map_data
 
 def _worker(kwargs):
-        id_ = kwargs.pop('id')
-        return _traj_to_dset(**kwargs), id_
+    """Helper function for parallel data collection."""
+    id_ = kwargs.pop('id')
+    return _traj_to_dset(**kwargs), id_
 
-def traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files,
+def traj_to_dset(topology, ref_topology, traj_files, save_file,
                  rmsd=True, fnc=True, point_cloud=True, contact_map=True,
-                 sel='protein and name CA', cutoff=8., num_workers=None,
-                 cm_format='sparse-concat', verbose=False):
+                 sel='protein and name CA', cutoff=8., cm_format='sparse-concat',
+                 num_workers=None, verbose=False):
+    """
+    User-level function for generating machine learning datasets
+    from raw molecular dynamics trajectory data. This function
+    uses MDAnalysis to load the trajectory file and given a
+    custom atom selection computes contact matrices, RMSD to
+    reference state, fraction of reference contacts and the
+    point cloud (xyz coordinates) of each frame in the trajectory.
+    If multiple traj_files are passed, then they can be processed
+    in parallel with a specified number of worker threads.
 
-    if num_workers == 1:
-       return _traj_to_dset(pdb_file, ref_pdb_file, traj_files, sel=sel,
-                            cutoff=cutoff, rmsd=rmsd, fnc=fnc,
-                            point_cloud=point_cloud, contact_map=contact_map,
-                            save_file=save_file, cm_format=cm_format, verbose=verbose)
+    Parameters
+    ----------
+    topology : str
+        Path to topology file: CHARMM/XPLOR PSF topology file,
+        PDB file or Gromacs GRO file.
+
+    ref_topology : str
+        Path to reference topology file for aligning trajectory:
+        CHARMM/XPLOR PSF topology file, PDB file or Gromacs GRO file.
+
+    traj_file : str
+        Trajectory file (in CHARMM/NAMD/LAMMPS DCD, Gromacs XTC/TRR,
+        or generic. Stores coordinate information for the trajectory.
+
+    save_file : str
+        Path to output h5 dataset file name.
+
+    rmsd, fnc, point_cloud, contact_map : bool
+        Those flags that are marked true are computed and saved
+        into h5 dataset files. Any combination may be selected.
+
+    sel : str
+        Selection set of atoms in the protein.
+
+    cutoff : float
+        Cutoff in angstroms for determining contacts in the contact
+        matrix. Contact matrices have a 1 if two residues, or atom
+        selections in general, are within `cutoff` angstroms,
+        otherwise a 0 is entered.
+
+    cm_format : str
+        Format to save contact maps with.
+        sparse-concat: new format with single dataset
+        sparse-rowcol: old format with group containing row,col datasets
+
+    num_workers : int, None
+        Number of worker threads. Parallelism is applied over the number
+        of input trajectory files. If left as None, will default to the
+        the smaller of the number of input trajectory files and the
+        number of available cpus.
+
+    verbose: bool
+        If true, prints verbose output.
+
+    Returns
+    -------
+    tuple : rmsd_data, fnc_data, pc_data, contact_map_data
+        If not None then they will contain the raw data for each type
+        of computation. See _save function parameters for the data format.
+    """
+
+    if num_workers == 1 or isinstance(traj_files, str):
+
+        if verbose:
+           num_traj_files = len(traj_files) if isinstance(traj_files, list) else 1
+           print(f'Using 1 worker to process {num_traj_files} traj file')
+
+        return _traj_to_dset(topology, ref_topology, traj_files,
+                             sel=sel, save_file=save_file,
+                             cutoff=cutoff, rmsd=rmsd, fnc=fnc,
+                             point_cloud=point_cloud, contact_map=contact_map,
+                             cm_format=cm_format, verbose=verbose)
 
     import itertools
     from concurrent.futures import ProcessPoolExecutor
 
-    # Set num_workers to max possible unless specified by user
+    # Set num_workers to max necessary/possible unless specified by user
     if num_workers is None:
         import os
-        num_workers = os.cpu_count()
+        num_workers = min(os.cpu_count(), len(traj_files))
+
+    if verbose:
+        print(f'Using {num_workers} workers to process {len(traj_files)} traj files')
 
     # Arguments for workers
-    kwargs = [{'pdb_file': pdb_file,
-               'ref_pdb_file': ref_pdb_file,
+    kwargs = [{'topology': topology,
+               'ref_topology': ref_topology,
                'traj_file': traj_file,
                'rmsd': rmsd,
                'fnc': fnc,
                'point_cloud': point_cloud,
                'contact_map': contact_map,
+               'sel': sel,
                'cutoff': cutoff,
                'verbose': verbose and (i % num_workers == 0),
                'id': i}
@@ -317,13 +453,36 @@ def traj_to_dset(pdb_file, ref_pdb_file, save_file, traj_files,
         contact_maps_ = (rows_, cols_)
 
     _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
-            contact_maps=contact_maps_, cm_format=cm_format)
+          contact_maps=contact_maps_, cm_format=cm_format)
 
     return rmsds_, fncs_, point_clouds_, contact_maps_
 
 def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None,
-        save_file=None, cm_format='sparse-concat'):
-    """Convert normal contact matrices to sparse format."""
+                                      point_cloud=None, save_file=None,
+                                      cm_format='sparse-concat'):
+    """
+    User-level function. Convert normal full contact matrices to
+    a sparse format. Can also be used to save rmsd, fnc, point_cloud
+    after converting contact map format (for convenience).
+
+    Parameters
+    ----------
+    contact_maps : np.ndarray
+        Full contact matrices of either dimension (N, W, H, 1)
+        or (N, W, H).
+
+    rmsd, fnc, point_cloud, contact_map : bool
+        Those flags that are marked true are computed and saved
+        into h5 dataset files. Any combination may be selected.
+
+    save_file : str
+        Path to output h5 dataset file name.
+
+    cm_format : str
+        Format to save contact maps with.
+        sparse-concat: new format with single dataset
+        sparse-rowcol: old format with group containing row,col datasets
+    """
     from scipy.sparse import coo_matrix
 
     row, col = [], []
@@ -334,7 +493,10 @@ def sparse_contact_maps_from_matrices(contact_maps, rmsd=None, fnc=None,
         col.append(coo.col.astype('int16'))
 
     if save_file:
-        _save(save_file, rmsd=rmsd, fnc=fnc, contact_maps=(row, col),
+        _save(save_file, rmsd=rmsd, fnc=fnc,
+              point_cloud=point_clouds,
+              contact_maps=(row, col),
               cm_format=cm_format)
 
     return row, col
+
