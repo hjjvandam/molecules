@@ -1,7 +1,6 @@
 import os
 import time
 import torch
-import torch.distributed as dist
 import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
@@ -31,7 +30,9 @@ class Embedding3dCallback(Callback):
     """
     def __init__(self, path, out_dir, shape, cm_format='sparse-concat',
                  sample_interval=20, batch_size=128,
-                 device=torch.device("cpu"), writer=None):
+                 device = torch.device("cpu"),
+                 writer = None,
+                 mpi_comm = None):
         """
         Parameters
         ----------
@@ -60,10 +61,11 @@ class Embedding3dCallback(Callback):
             is available and otherwise is put onto a CPU. If gpu is int
             type, then data is put onto the specified GPU.
         writer : torch.utils.tensorboard.SummaryWriter
+        mpi_comm: mpi communicator
         """
-
+        self.comm = mpi_comm
         self.is_eval_node = True
-        if dist.is_initialized() and (dist.get_rank() != 0):
+        if (self.comm is not None) and (self.comm.Get_rank() != 0):
             self.is_eval_node = False
 
         if self.is_eval_node:

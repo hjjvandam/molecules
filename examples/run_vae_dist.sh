@@ -10,6 +10,10 @@ wandb login ${1}
 # create output dir
 mkdir -p ${output_dir}
 
+# determine gpu
+enc_gpu=$(( 2 * ${LOCAL_RANK} ))
+dec_gpu=$(( 2 * ${LOCAL_RANK} + 1 ))
+
 # launch code
 python ./example_vae.py \
        -i "/data/spike-full-point-cloud_closed.h5" \
@@ -19,7 +23,7 @@ python ./example_vae.py \
        -f sparse-concat \
        -t resnet \
        -e 150 \
-       -b 2 \
-       -E 0 -D 0 \
+       -b 4 \
+       -E ${enc_gpu} -D ${dec_gpu} \
        -S 3 \
        -h 3768 -w 3768 -d 471

@@ -72,7 +72,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
-@click.option('--local_rank', default=0, type=int,
+@click.option('--local_rank', default=None, type=int,
               help='Local rank on the machine, required for DDP')
 
 @click.option('-a', '--amp', is_flag=True,
@@ -150,14 +150,17 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
               gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
 
     if comm_size > 1:
-        devid = torch.device(f'cuda:{encoder_gpu}') if (encoder_gpu == decoder_gpu) else None
-        vae.model = DDP(vae.model, device_ids = [devid], output_device = devid)
+        if (encoder_gpu == decoder_gpu):
+            devid = torch.device(f'cuda:{encoder_gpu}')
+            vae.model = DDP(vae.model, device_ids = [devid], output_device = devid)
+        else:
+            vae.model = DDP(vae.model, device_ids = None, output_device = None)
 
     if comm_rank == 0:
         # Diplay model
         print(vae)
         # Only print summary when encoder_gpu is None or 0
-        summary(vae.model, input_shape)
+        #summary(vae.model, input_shape)
 
     # Load training and validation data
     # training

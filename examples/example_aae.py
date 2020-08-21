@@ -80,7 +80,7 @@ def parse_dict(ctx, param, value):
 @click.option('-S', '--sample_interval', default=20, type=int,
               help="For embedding plots. Plots every sample_interval'th point")
 
-@click.option('--local_rank', default=0, type=int,
+@click.option('--local_rank', default=None, type=int,
               help='Local rank on the machine, required for DDP')
 
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
@@ -118,7 +118,10 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                 init_method='env://')
         comm_rank = dist.get_rank()
         comm_size = dist.get_world_size()
-        comm_local_rank = local_rank
+        if local_rank is not None:
+            comm_local_rank = local_rank
+        else:
+            comm_local_rank = int(os.getenv("LOCAL_RANK", 0))
     
     # HP
     # model
@@ -140,14 +143,18 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu))
 
     if comm_size > 1:
-        aae.model = DDP(aae.model, device_ids = None, output_device = None)
+        if (encoder_gpu == decoder_gpu):
+            devid = torch.device(f'cuda:{encoder_gpu}')
+            aae.model = DDP(aae.model, device_ids = [devid], output_device = devid)
+        else:
+            aae.model = DDP(aae.model, device_ids = None, output_device = None)
     
     if comm_rank == 0:
         # Diplay model 
         print(aae)
     
         # Only print summary when encoder_gpu is None or 0
-        summary(aae.model, (3 + num_features, num_points))
+        #summary(aae.model, (3 + num_features, num_points))
 
     # Load training and validation data
     train_dataset = PointCloudDataset(input_path,
