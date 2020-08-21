@@ -3,8 +3,8 @@ import click
 from os.path import join
 
 # torch stuff
-import torch
 from torchsummary import summary
+import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Subset
@@ -77,8 +77,8 @@ def parse_dict(ctx, param, value):
 @click.option('-lw', '--loss_weights', callback=parse_dict,
               help='Loss parameters')
 
-@click.option('-ndw', '--num_data_workers', default=1, type=int,
-              help='Number of workers for data loading')
+@click.option('-S', '--sample_interval', default=20, type=int,
+              help="For embedding plots. Plots every sample_interval'th point")
 
 @click.option('--local_rank', default=0, type=int,
               help='Local rank on the machine, required for DDP')
@@ -93,7 +93,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
-         loss_weights, num_data_workers, local_rank,
+         loss_weights, sample_interval, local_rank,
          wandb_project_name, distributed):
     """Example for training Fs-peptide with AAE3d."""
 
@@ -155,9 +155,9 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                       rmsd_name,
                                       num_points,
                                       num_features,
-                                      split='train',
-                                      normalize='box',
-                                      cms_transform=True)
+                                      split = 'train',
+                                      normalize = 'box',
+                                      cms_transform = True)
 
     # split across nodes
     if comm_size > 1:
@@ -166,16 +166,16 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
-                              pin_memory = True, num_workers = num_data_workers)
+                              pin_memory = True, num_workers = 1)
 
     valid_dataset = PointCloudDataset(input_path,
                                       dataset_name,
                                       rmsd_name,
                                       num_points,
                                       num_features,
-                                      split='valid',
-                                      normalize='box',
-                                      cms_transform=True)
+                                      split = 'valid',
+                                      normalize = 'box',
+                                      cms_transform = True)
 
     # split across nodes
     if comm_size > 1:
@@ -184,7 +184,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
-                              pin_memory = True, num_workers = num_data_workers)
+                              pin_memory = True, num_workers = 1)
 
     print(f"Having {len(train_dataset)} training and {len(valid_dataset)} validation samples.")
     
@@ -233,13 +233,13 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
                                                path = input_path,
                                                rmsd_name = rmsd_name,
                                                projection_type = "3d_project",
-                                               sample_interval = len(valid_dataset) // 1000,
+                                               sample_interval = sample_interval,
                                                writer = writer,
                                                wandb_config = wandb_config,
                                                mpi_comm = comm)
     
     latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
-                                                   sample_interval = len(valid_dataset) // 1000,
+                                                   sample_interval = sample_interval,
                                                    writer = writer,
                                                    wandb_config = wandb_config,
                                                    mpi_comm = comm)

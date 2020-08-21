@@ -564,7 +564,7 @@ class AAE3d(object):
                 callback.on_batch_begin(batch_idx, epoch, logs)
 
             # copy to gpu
-            data, rmsd = token
+            data, rmsd, index = token
             data = data.to(self.devices[0])
                 
             # get reconstruction
@@ -656,7 +656,7 @@ class AAE3d(object):
         with torch.no_grad():
             for batch_idx, token in enumerate(valid_loader):
                 # copy to gpu
-                data, rmsd = token
+                data, rmsd, index = token
                 data = data.to(self.devices[0])
                 # get reconstruction
                 codes, mu, logvar = self.model.encode(data)

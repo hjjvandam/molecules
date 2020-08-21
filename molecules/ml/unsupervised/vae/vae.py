@@ -306,7 +306,7 @@ class VAE:
         train_loss = 0.
         for batch_idx, token in enumerate(train_loader):
 
-            data, rmsd = token
+            data, rmsd, index = token
             data = data.to(self.device[0])
             
             if self.verbose:
@@ -376,7 +376,7 @@ class VAE:
 
         with torch.no_grad():
             for batch_idx, token in enumerate(valid_loader):
-                data, rmsd = token
+                data, rmsd, index = token
                 data = data.to(self.device[0])
                 
                 with amp.autocast(self.enable_amp):

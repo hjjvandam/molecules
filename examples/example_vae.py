@@ -4,6 +4,7 @@ from os.path import join
 
 # torch stuff
 from torchsummary import summary
+import torch
 import torch.distributed as dist
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader, Subset
@@ -103,10 +104,10 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         os.environ["RANK"] = str(comm.Get_rank())
 
         # init torch distributed
-        torch.distributed.init_process_group(backend='nccl',
-                                             init_method='env://')
-        comm_rank = torch.distributed.get_rank()
-        comm_size = torch.distributed.get_world_size()
+        dist.init_process_group(backend='nccl',
+                                init_method='env://')
+        comm_rank = dist.get_rank()
+        comm_size = dist.get_world_size()
         if local_rank is not None:
             comm_local_rank = local_rank
         else:

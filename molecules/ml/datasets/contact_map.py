@@ -2,6 +2,7 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 from molecules.utils import open_h5
+import time
 
 class ContactMapDataset(Dataset):
     """
@@ -9,8 +10,8 @@ class ContactMapDataset(Dataset):
     files and only reads into memory what is necessary for one batch.
     """
     def __init__(self, path, dataset_name, rmsd_name,
-                 shape, split_ptc=0.8,
-                 split='train', cm_format='sparse-concat'):
+                 shape, split_ptc=0.8, split='train', seed=333,
+                 cm_format='sparse-concat'):
         """
         Parameters
         ----------
@@ -38,6 +39,10 @@ class ContactMapDataset(Dataset):
             If 'sparse-rowcol', process data as sparse row/col COO format.
             If 'full', process data is normal torch tensors (matrices).
             If none of the above, raise a ValueError.
+
+        seed : int
+            Seed for the RNG for the splitting. Make sure it is the same for all workers reading
+            from the same file.  
         """
         if split not in ('train', 'valid'):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
@@ -46,60 +51,90 @@ class ContactMapDataset(Dataset):
 
         # Open h5 file. Python's garbage collector closes the
         # file when class is destructed.
-        h5_file = open_h5(path)
+        self.file_path = path
+        self.dataset_name = dataset_name
+        self.rmsd_name = rmsd_name
 
-        if cm_format == 'sparse-rowcol':
-            group = h5_file[dataset_name]
-            self.row_dset = group.get('row')
-            self.col_dset = group.get('col')
-            self.len = len(self.row_dset)
-        elif cm_format == 'sparse-concat':
-            self.dset = h5_file[dataset_name]
-            self.len = len(self.dset)
-        elif cm_format == 'full':
-            # contact_maps dset has shape (N, W, H, 1)
-            self.dset = h5_file[dataset_name]
-            self.len = len(self.dset)
-        else:
-            raise ValueError(f'Invalid cm_format {cm_format}. Should be one of ' \
-                              '[sparse-rowcol, sparse-concat, full].')
-
-        self.rmsd = h5_file[rmsd_name]
-
-        # train validation split index
-        self.split_ind = int(split_ptc * self.len)
-        self.split = split
+        # more params
         self.cm_format = cm_format
         self.shape = shape
+        
+        # init file and set paths
+        self._init_file()
 
+        # get lengths
+        if self.cm_format == 'sparse-rowcol':
+            self.len = len(self.h5_file[self.dataset_name]['row'])
+        elif self.cm_format == 'sparse-concat':
+            self.len = len(self.h5_file[self.dataset_name])
+        elif self.cm_format == 'full':
+            self.len = len(self.h5_file[self.dataset_name])
+    
+        # do splitting
+        self.split_ind = int(split_ptc * self.len)
+        self.split = split
+        split_rng = np.random.default_rng(seed)
+        self.indices = split_rng.permutation(list(range(self.len)))
+        if self.split == "train":
+            self.indices = sorted(self.indices[:self.split_ind])
+        else:
+            self.indices = sorted(self.indices[self.split_ind:])
+
+        # inited:
+        self._close_file()
+        self.initialized = False
+
+        
+    def _init_file(self):
+        self.h5_file = open_h5(self.file_path, 'r', libver = 'latest', swmr = False)
+
+        
+    def _close_file(self):            
+        # close file
+        self.h5_file.close()
+        del self.h5_file
+
+        
     def __len__(self):
-        if self.split == 'train':
-            return self.split_ind
-        return self.len - self.split_ind
+        return len(self.indices)
 
+    
     def __getitem__(self, idx):
-        if self.split == 'valid':
-            idx += self.split_ind
+
+        if not self.initialized:
+            self._init_file()
+            if self.cm_format == 'sparse-rowcol':
+                self.row_dset = self.h5_file[self.dataset_name]['row']
+                self.col_dset = self.h5_file[self.dataset_name]['col']
+            elif self.cm_format == 'sparse-concat':
+                self.dset = self.h5_file[self.dataset_name]
+            else:
+                self.dset = self.h5_file[self.dataset_name]
+            self.rmsd_dset = self.h5_file[self.rmsd_name]
+            self.initialized = True
+
+        # get real index
+        index = self.indices[idx]
 
         if self.cm_format == 'sparse-rowcol':
-            indices = torch.from_numpy(np.vstack((self.row_dset[idx],
-                                                  self.col_dset[idx]))).to(torch.long)
+            indices = torch.from_numpy(np.vstack((self.row_dset[index],
+                                                  self.col_dset[index]))).to(torch.long)
             values = torch.ones(indices.shape[1], dtype=torch.float32)
             # Set shape to the last 2 elements of self.shape.
             # Handles (1, W, H) and (W, H)
             data = torch.sparse.FloatTensor(indices, values,
                         self.shape[-2:]).to_dense()
         elif self.cm_format == 'sparse-concat':
-            indices = torch.from_numpy(self.dset[idx].reshape(2, -1) \
-                           .astype('int16')).to(torch.long)
+            ind = self.dset[index, ...].reshape(2, -1)
+            indices = torch.from_numpy(ind).to(torch.long)
             values = torch.ones(indices.shape[1], dtype=torch.float32)
             # Set shape to the last 2 elements of self.shape.
             # Handles (1, W, H) and (W, H)
             data = torch.sparse.FloatTensor(indices, values,
                         self.shape[-2:]).to_dense()
         elif self.cm_format == 'full':
-            data = torch.Tensor(self.dset[idx, ...])
+            data = torch.Tensor(self.dset[index, ...])
 
-        rmsd = self.rmsd[idx]
+        rmsd = self.rmsd_dset[index]
 
-        return data.view(self.shape), torch.tensor(rmsd, requires_grad=False)
+        return data, torch.tensor(rmsd, requires_grad=False), index

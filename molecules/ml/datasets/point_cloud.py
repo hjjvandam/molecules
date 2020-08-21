@@ -10,8 +10,8 @@ class PointCloudDataset(Dataset):
     files and only reads into memory what is necessary for one batch.
     """
     def __init__(self, path, dataset_name, rmsd_name,
-                 num_points, num_features, split_ptc=0.8,
-                 split = 'train',
+                 num_points, num_features,
+                 split_ptc=0.8, split = 'train', seed = 333,
                  normalize = 'box', cms_transform = False):
         """
         Parameters
@@ -34,6 +34,10 @@ class PointCloudDataset(Dataset):
         split : str
             Either 'train' or 'valid', specifies whether this
             dataset returns train or validation data.
+
+        seed : int
+            Seed for the RNG for the splitting. Make sure it is the same for all workers reading
+            from the same file.
         """
         if split not in ('train', 'valid'):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
@@ -43,17 +47,25 @@ class PointCloudDataset(Dataset):
         # Open h5 file. Python's garbage collector closes the
         # file when class is destructed.
         self.file_path = path
-        self.h5_file = open_h5(self.file_path)
+        self.h5_file = open_h5(self.file_path, swmr = False)
 
         # get point clouds
         self.dataset_name = dataset_name
         self.rmsd_name = rmsd_name
         self.dset = self.h5_file[self.dataset_name]
         self.len = self.dset.shape[0]
-        
-        # train validation split index
+
+        # do splitting
         self.split_ind = int(split_ptc * self.len)
         self.split = split
+        split_rng = np.random.default_rng(seed)
+        self.indices = split_rng.permutation(list(range(self.len)))
+        if self.split == "train":
+            self.indices = sorted(self.indices[:self.split_ind])
+        else:
+            self.indices = sorted(self.indices[self.split_ind:])
+        
+        # train validation split index
         self.num_points = num_points
         self.num_features = num_features
         self.num_points_total = self.dset.shape[2]
@@ -63,7 +75,7 @@ class PointCloudDataset(Dataset):
         assert (self.dset.shape[1] == (3 + self.num_features))
 
         # rng
-        self.rng = np.random.default_rng()
+        self.rng = np.random.default_rng(seed)
 
         # create temp buffer for IO
         self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
@@ -73,7 +85,7 @@ class PointCloudDataset(Dataset):
         cms = 0.
         if self.cms_transform:
             # average over points
-            cms = np.mean(self.dset[:, 0:3, :], axis = 2, keepdims = True)
+            cms = np.mean(self.dset[:, 0:3, :].astype(np.float64), axis = 2, keepdims = True).astype(np.float32)
 
         # normalize input
         self.bias = np.zeros((3 + self.num_features, self.num_points), dtype = np.float32)
@@ -82,9 +94,6 @@ class PointCloudDataset(Dataset):
         if self.normalize == 'box':
             self.bias[0:3, :] = (self.dset[:, 0:3, :] - cms).min()
             self.scale[0:3, :] = 1. / ((self.dset[:, 0:3, :] - cms).max() - self.bias)
-            # broadcast shapes
-            #self.bias = np.tile(self.bias, (3 + self.num_features, self.num_points)).astype(np.float32)
-            #self.scale = np.tile(self.scale, (3 + self.num_features, self.num_points)).astype(np.float32)
 
         # close and reopen later
         self.dset = None
@@ -92,41 +101,42 @@ class PointCloudDataset(Dataset):
         self.init = False
             
     def __len__(self):
-        if self.split == 'train':
-            return self.split_ind
-        return self.len - self.split_ind
+        return len(self.indices)
 
     def __getitem__(self, idx):
         # init if necessary
         if not self.init:
-            self.h5_file = open_h5(self.file_path)
+            self.h5_file = open_h5(self.file_path, swmr = False)
             self.dset = self.h5_file[self.dataset_name]
             self.rmsd = self.h5_file[self.rmsd_name]
             self.init = True
-        
-        if self.split == 'valid':
-            idx += self.split_ind
+
+        # translate index
+        index = self.indices[idx]
 
         self.dset.id.refresh()
         if self.num_points < self.num_points_total:
             # select points to read
-            indices = self.rng.choice(self.num_points_total, size = self.num_points,
-                                      replace = False, shuffle = False)
+            point_indices = self.rng.choice(self.num_points_total, size = self.num_points,
+                                            replace = False, shuffle = False)
 
             # read
-            self.token[0, ...] = self.dset[idx, :, indices]
+            self.token[0, ...] = self.dset[index, :, point_indices]
         else:            
             self.dset.read_direct(self.token,
-                                  np.s_[idx:idx+1, 0:(3 + self.num_features), 0:self.num_points],
+                                  np.s_[index:index+1, 0:(3 + self.num_features), 0:self.num_points],
                                   np.s_[0:1, 0:(3 + self.num_features), 0:self.num_points])
-
-        ## cms subtract
+        
+        # cms subtract
         if self.cms_transform:
             self.token[0, 0:3, :] -= np.mean(self.token[0, 0:3, :], axis = -1, keepdims = True)
+
+        if np.any(np.isnan(self.token)):
+            raise ValueError("NaN encountered in input.")
             
         # normalize
         result = (self.token[0, ...] - self.bias) * self.scale
-        rmsd = self.rmsd[idx]
-                    
-        return torch.tensor(result, requires_grad = False), torch.tensor(rmsd, requires_grad = False)
+        rmsd = self.rmsd[index]
+
+        return torch.tensor(result, requires_grad = False), torch.tensor(rmsd, requires_grad = False), index
 
