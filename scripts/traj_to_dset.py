@@ -20,8 +20,8 @@ from molecules.sim.dataset import traj_to_dset
                    'directory, files are sorted lexographically ' \
                    'by their names and then concatenated.')
 
-@click.option('-e', '--ext', default='dcd',
-              help='Trajectory file extension.')
+@click.option('-e', '--pattern', default='*.dcd',
+              help='Trajectory file pattern.')
 
 @click.option('-o', '--out_path', required=True,
               help='Path to file to write dataset to.')
@@ -58,14 +58,18 @@ from molecules.sim.dataset import traj_to_dset
 
 @click.option('-v', '--verbose', is_flag=True)
 
-def main(pdb_path, ref_pdb_path, traj_path, ext, out_path, num_workers,
+def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers,
          selection, cutoff, rmsd, fnc, contact_map, point_cloud, cm_format, verbose):
 
     if os.path.isdir(traj_path):
-        traj_path = sorted(glob.glob(os.path.join(traj_path, f'*.{ext}')))
+        traj_path = sorted(glob.glob(os.path.join(traj_path, pattern)))
+
+        if not traj_path:
+            raise ValueError('No traj files found in directory matching ' \
+                             f'the pattern {pattern}')
 
         if verbose:
-            print(f'Collected {len(traj_path)} {ext} files')
+            print(f'Collected {len(traj_path)} traj files')
 
     traj_to_dset(topology=pdb_path, ref_topology=ref_pdb_path, traj_files=traj_path,
                  save_file=out_path, rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
