@@ -15,7 +15,6 @@ python ./example_vae.py \
        --amp --distributed \
        -f sparse-concat \
        -t resnet \
-       -ndw 1 \
        -e 150 \
        -b 4 \
        -E 0 -D 0 \

@@ -175,8 +175,9 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
-                              shuffle=True,
-                              pin_memory=True)
+                              shuffle = True,
+                              pin_memory = True,
+                              num_workers = 1)
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
@@ -194,8 +195,9 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     
     valid_loader = DataLoader(valid_dataset,
                               batch_size=batch_size,
-                              shuffle=True,
-                              pin_memory=True)
+                              shuffle = True,
+                              pin_memory = True,
+                              num_workers = 1)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
