@@ -668,7 +668,8 @@ class AAE3d(object):
                     callback.on_validation_batch_end(logs,
                                                      input = data.detach(),
                                                      rmsd = rmsd.detach(),
-                                                     mu = mu.detach())
+                                                     mu = mu.detach(),
+                                                     logvar = logvar.detach())
         
         valid_loss /= float(batch_idx + 1)
 

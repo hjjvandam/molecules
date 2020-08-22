@@ -33,8 +33,9 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
              help='Model checkpoint file to resume training. ' \
                   'Checkpoint files saved as .pt by CheckpointCallback.')
 
-@click.option('-s', '--sparse', is_flag=True,
-              help='Specifiy whether input matrices are sparse format')
+@click.option('-f', '--cm_format', default='sparse-concat',
+              help='Format of contact map files. Options ' \
+                   '[full, sparse-concat, sparse-rowcol]')
 
 @click.option('-E', '--encoder_gpu', default=None, type=int,
               help='Encoder GPU id')
@@ -60,9 +61,12 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
-def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder_gpu,
+@click.option('-a', '--amp', is_flag=True,
+              help='Specify if we want to enable automatic mixed precision (AMP)')
+
+def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
          decoder_gpu, epochs, batch_size, model_type, latent_dim,
-         sample_interval, wandb_project_name):
+         sample_interval, wandb_project_name, amp):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
 
@@ -78,7 +82,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
                              'strides': [1, 2, 1, 1],
                              'affine_widths': [64],
                              'affine_dropouts': [0],
-                             'latent_dim': latent_dim}
+                             'latent_dim': latent_dim,
+                             'output_activation': 'None'}
 
         input_shape = (1, dim1, dim2)
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
@@ -88,7 +93,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
         resnet_hparams = {'max_len': dim1,
                           'nchars': dim2,
                           'latent_dim': latent_dim,
-                          'dec_filters': dim1}
+                          'dec_filters': dim1,
+                          'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
         hparams = ResnetVAEHyperparams(**resnet_hparams)
@@ -96,7 +102,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
     optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
 
     vae = VAE(input_shape, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, decoder_gpu))
+              gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
 
     # Diplay model
     print(vae)
@@ -106,11 +112,11 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      'contact_maps',
+                                      'contact_map',
                                       'rmsd',
                                       input_shape,
                                       split='train',
-                                      sparse=sparse)
+                                      cm_format=cm_format)
     
     train_loader = DataLoader(train_dataset,
                               batch_size=batch_size,
@@ -119,11 +125,11 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      'contact_maps',
+                                      'contact_map',
                                       'rmsd',
                                       input_shape,
                                       split='valid',
-                                      sparse=sparse)
+                                      cm_format=cm_format)
     
     valid_loader = DataLoader(valid_dataset,
                               batch_size=batch_size,
@@ -164,7 +170,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, sparse, encoder
     embedding3d_callback = Embedding3dCallback(input_path,
                                                join(model_path, 'embedddings'),
                                                input_shape,
-                                               sparse=sparse,
+                                               cm_format=cm_format,
                                                writer=writer,
                                                sample_interval = sample_interval,
                                                batch_size=batch_size,

@@ -7,6 +7,7 @@ from collections import namedtuple
 from .resnet import ResnetVAEHyperparams
 from .symmetric import SymmetricVAEHyperparams
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
+import torch.cuda.amp as amp
 
 __all__ = ['VAE']
 
@@ -87,6 +88,19 @@ def vae_loss(recon_x, x, mu, logvar):
     return BCE + KLD
 
 
+def vae_logit_loss(logit_recon_x, x, mu, logvar):
+    """
+    As above, but works directly on logits
+    """
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction='sum')
+    
+    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+
+    return BCE + KLD
+                    
+
+
 # TODO: set weight initialization hparams
 class VAE:
     """
@@ -128,6 +142,7 @@ class VAE:
                  optimizer_hparams=OptimizerHyperparams(),
                  loss=None,
                  gpu=None,
+                 enable_amp=False,
                  verbose=True):
         """
         Parameters
@@ -148,6 +163,9 @@ class VAE:
             Defines an optional loss function with inputs (recon_x, x, mu, logvar)
             and ouput torch loss.
 
+        enable_amp: bool
+            Set to true to enable automatic mixed precision.
+
         gpu : int, tuple, or None
             Encoder and decoder will train on ...
             If None, cuda GPU device if it is available, otherwise CPU.
@@ -161,6 +179,7 @@ class VAE:
         hparams.validate()
         optimizer_hparams.validate()
 
+        self.enable_amp = enable_amp
         self.verbose = verbose
 
         # Tuple of encoder, decoder device
@@ -172,7 +191,10 @@ class VAE:
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
         self.optimizer = get_optimizer(self.model.parameters(), optimizer_hparams)
 
-        self.loss_fnc = vae_loss if loss is None else loss
+        # amp grad scaler
+        self.gscaler = amp.GradScaler(enabled = self.enable_amp)
+
+        self.loss_fnc = vae_logit_loss if loss is None else loss
 
     def _configure_device(self, gpu):
         """
@@ -296,14 +318,19 @@ class VAE:
             for callback in callbacks:
                 callback.on_batch_begin(batch_idx, epoch, logs)
 
-            # TODO: Consider passing device argument into dataset class instead
-            # data = data.to(self.device.encoder)
+            # forward
+            with amp.autocast(self.enable_amp):
+                logit_recon_batch, codes, mu, logvar = self.model(data)
+                loss = self.loss_fnc(logit_recon_batch, data, mu, logvar)
+
+            # backward
             self.optimizer.zero_grad()
-            recon_batch, codes, mu, logvar = self.model(data)
-            loss = self.loss_fnc(recon_batch, data, mu, logvar)
-            loss.backward()
+            self.gscaler.scale(loss).backward()
+            self.gscaler.step(self.optimizer)
+            self.gscaler.update()
+
+            # update loss
             train_loss += loss.item() / len(data)
-            self.optimizer.step()
 
             if callbacks:
                 logs['train_loss'] = loss.item() / len(data)
@@ -352,9 +379,9 @@ class VAE:
                 data, rmsd = token
                 data = data.to(self.device[0])
                 
-                # data = data.to(self.device)
-                recon_batch, codes, mu, logvar = self.model(data)
-                valid_loss += self.loss_fnc(recon_batch, data, mu, logvar).item() / len(data)
+                with amp.autocast(self.enable_amp):
+                    logit_recon_batch, codes, mu, logvar = self.model(data)
+                    valid_loss += self.loss_fnc(logit_recon_batch, data, mu, logvar).item() / len(data)
 
                 for callback in callbacks:
                     callback.on_validation_batch_end(logs,

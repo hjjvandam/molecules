@@ -148,6 +148,8 @@ def get_activation(activation):
         return nn.ReLU()
     if activation is 'Sigmoid':
         return nn.Sigmoid()
+    if activation is 'None':
+        return nn.Identity()
     raise ValueError(f'Invalid activation type: {activation}')
 
 # TODO: generalize this more.
