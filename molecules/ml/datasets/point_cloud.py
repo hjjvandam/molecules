@@ -47,57 +47,58 @@ class PointCloudDataset(Dataset):
         # Open h5 file. Python's garbage collector closes the
         # file when class is destructed.
         self.file_path = path
-        self.h5_file = open_h5(self.file_path, swmr = False)
-
-        # get point clouds
         self.dataset_name = dataset_name
         self.rmsd_name = rmsd_name
-        self.dset = self.h5_file[self.dataset_name]
-        self.len = self.dset.shape[0]
-
-        # do splitting
-        self.split_ind = int(split_ptc * self.len)
-        self.split = split
-        split_rng = np.random.default_rng(seed)
-        self.indices = split_rng.permutation(list(range(self.len)))
-        if self.split == "train":
-            self.indices = sorted(self.indices[:self.split_ind])
-        else:
-            self.indices = sorted(self.indices[self.split_ind:])
-        
-        # train validation split index
         self.num_points = num_points
         self.num_features = num_features
-        self.num_points_total = self.dset.shape[2]
-
-        # sanity checks
-        assert (self.num_points_total >= self.num_points)
-        assert (self.dset.shape[1] == (3 + self.num_features))
-
-        # rng
-        self.rng = np.random.default_rng(seed)
-
-        # create temp buffer for IO
-        self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
-
-        # cms transform if requested
-        self.cms_transform = cms_transform
-        cms = 0.
-        if self.cms_transform:
-            # average over points
-            cms = np.mean(self.dset[:, 0:3, :].astype(np.float64), axis = 2, keepdims = True).astype(np.float32)
-
-        # normalize input
-        self.bias = np.zeros((3 + self.num_features, self.num_points), dtype = np.float32)
-        self.scale = np.ones((3 + self.num_features, self.num_points), dtype = np.float32)
         self.normalize = normalize
-        if self.normalize == 'box':
-            self.bias[0:3, :] = (self.dset[:, 0:3, :] - cms).min()
-            self.scale[0:3, :] = 1. / ((self.dset[:, 0:3, :] - cms).max() - self.bias)
+        self.cms_transform = cms_transform
 
-        # close and reopen later
-        self.dset = None
-        self.h5_file.close()
+        # get size of the dataset
+        with open_h5(self.file_path, 'r', libver = 'latest', swmr = False) as f:
+            
+            # get dataset
+            self.dset = f[self.dataset_name]
+
+            # get lengths
+            self.len = self.dset.shape[0]
+            self.num_features_total = self.dset.shape[1]
+            self.num_points_total = self.dset.shape[2]
+
+            # do splitting
+            self.split_ind = int(split_ptc * self.len)
+            self.split = split
+            split_rng = np.random.default_rng(seed)
+            self.indices = split_rng.permutation(list(range(self.len)))
+            if self.split == "train":
+                self.indices = sorted(self.indices[:self.split_ind])
+            else:
+                self.indices = sorted(self.indices[self.split_ind:])
+
+            # sanity checks
+            assert (self.num_points_total >= self.num_points)
+            assert (self.num_features_total == (3 + self.num_features))
+
+            # rng
+            self.rng = np.random.default_rng(seed)
+
+            # create temp buffer for IO
+            self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
+
+            # cms transform if requested
+            cms = 0.
+            if self.cms_transform:
+                # average over points
+                cms = np.mean(self.dset[:, 0:3, :].astype(np.float64), axis = 2, keepdims = True).astype(np.float32)
+
+            # normalize input
+            self.bias = np.zeros((3 + self.num_features, self.num_points), dtype = np.float32)
+            self.scale = np.ones((3 + self.num_features, self.num_points), dtype = np.float32)
+            if self.normalize == 'box':
+                self.bias[0:3, :] = (self.dset[:, 0:3, :] - cms).min()
+                self.scale[0:3, :] = 1. / ((self.dset[:, 0:3, :] - cms).max() - self.bias)
+
+        # set file to uninitialized
         self.init = False
             
     def __len__(self):

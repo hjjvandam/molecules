@@ -59,16 +59,14 @@ class ContactMapDataset(Dataset):
         self.cm_format = cm_format
         self.shape = shape
         
-        # init file and set paths
-        self._init_file()
-
-        # get lengths
-        if self.cm_format == 'sparse-rowcol':
-            self.len = len(self.h5_file[self.dataset_name]['row'])
-        elif self.cm_format == 'sparse-concat':
-            self.len = len(self.h5_file[self.dataset_name])
-        elif self.cm_format == 'full':
-            self.len = len(self.h5_file[self.dataset_name])
+        # get lengths and paths
+        with open_h5(self.file_path, 'r', libver = 'latest', swmr = False) as f:
+            if self.cm_format == 'sparse-rowcol':
+                self.len = len(f[self.dataset_name]['row'])
+            elif self.cm_format == 'sparse-concat':
+                self.len = len(f[self.dataset_name])
+            elif self.cm_format == 'full':
+                self.len = len(f[self.dataset_name])
     
         # do splitting
         self.split_ind = int(split_ptc * self.len)
@@ -81,7 +79,6 @@ class ContactMapDataset(Dataset):
             self.indices = sorted(self.indices[self.split_ind:])
 
         # inited:
-        self._close_file()
         self.initialized = False
 
         
@@ -92,7 +89,6 @@ class ContactMapDataset(Dataset):
     def _close_file(self):            
         # close file
         self.h5_file.close()
-        del self.h5_file
 
         
     def __len__(self):

@@ -76,7 +76,7 @@ class Embedding2dCallback(Callback):
         
     def _init_plot(self, path, rmsd_name):
         # load all rmsd data
-        with open_h5(path) as f:
+        with open_h5(path, 'r', swmr = False) as f:
             rmsd = f[rmsd_name][...]
         vmin, vmax = self.minmax(rmsd)
 
