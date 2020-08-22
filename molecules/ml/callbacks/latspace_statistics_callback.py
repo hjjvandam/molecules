@@ -73,8 +73,8 @@ class LatspaceStatisticsCallback(Callback):
         for idx in range(0, len(mu)):
             if (self.sample_counter + idx) % self.sample_interval == 0:
                 # use a singleton slice to keep dimensions intact
-                self.mu.append(mu[idx:idx+1].cpu().numpy())
-                self.std.append(torch.exp(0.5*logvar[idx:idx+1]).cpu().numpy())
+                self.mu.append(mu[idx:idx+1].detach().cpu().numpy())
+                self.std.append(torch.exp(0.5*logvar[idx:idx+1].detach()).cpu().numpy())
 
         # increase sample counter
         self.sample_counter += len(mu)
@@ -105,6 +105,10 @@ class LatspaceStatisticsCallback(Callback):
         # dist plots
         if self.is_eval_node and (self.sample_interval > 0):
             self.dist_plot(epoch, mu, std, logs)
+
+        # we need to wait for it 
+        if (self.comm is not None):
+            self.comm.barrier()
 
         
     def dist_plot(self, epoch, mu, std, logs):

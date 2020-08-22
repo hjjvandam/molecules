@@ -25,5 +25,5 @@ python ./example_vae.py \
        -e 150 \
        -b 4 \
        -E ${enc_gpu} -D ${dec_gpu} \
-       -S 3 \
+       -S 5 \
        -h 3768 -w 3768 -d 471

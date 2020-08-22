@@ -1,6 +1,6 @@
 import h5py
 
-def open_h5(h5_file, mode='r', libver='latest', swmr=True, **kwargs):
+def open_h5(h5_file, mode = 'r', libver = 'latest', swmr = False, **kwargs):
     """
     Opens file in single write multiple reader mode
     libver specifies newest available version,

@@ -70,13 +70,14 @@ class Embedding2dCallback(Callback):
         self.wandb_config = wandb_config
 
         # needed for init plot
-        self._init_plot(path, rmsd_name)
+        if self.is_eval_node:
+            self._init_plot(path, rmsd_name)
 
         
     def _init_plot(self, path, rmsd_name):
         # load all rmsd data
-        f = open_h5(path)
-        rmsd = f[rmsd_name][...]
+        with open_h5(path) as f:
+            rmsd = f[rmsd_name][...]
         vmin, vmax = self.minmax(rmsd)
 
         # create colormaps
@@ -106,8 +107,8 @@ class Embedding2dCallback(Callback):
         for idx in range(0, len(mu)):
             if (self.sample_counter + idx) % self.sample_interval == 0:
                 # use a singleton slice to keep dimensions intact
-                self.embeddings.append(mu[idx:idx+1].cpu().numpy())
-                self.rmsd.append(rmsd[idx:idx+1].cpu().numpy())
+                self.embeddings.append(mu[idx:idx+1].detach().cpu().numpy())
+                self.rmsd.append(rmsd[idx:idx+1].detach().cpu().numpy())
 
         # increase sample counter
         self.sample_counter += len(mu)
