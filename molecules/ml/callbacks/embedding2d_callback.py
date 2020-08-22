@@ -87,7 +87,7 @@ class Embedding2dCallback(Callback):
         self.scalar_map.set_array(rmsd)
 
         # perplexities
-        self.perplexities = [2, 5, 30, 50, 100]
+        self.perplexities = [5, 30, 50, 100, 200]
 
 
     def on_validation_begin(self, epoch, logs):
