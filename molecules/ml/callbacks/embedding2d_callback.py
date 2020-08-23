@@ -229,6 +229,11 @@ class Embedding2dCallback(Callback):
                 cax = divider.append_axes("right", size="5%", pad=0.1)
                 fig.colorbar(self.scalar_map, ax = axs, cax = cax)
 
+            # plot as 3D object on wandb
+            if self.wandb_config is not None:
+                point_data = np.concatenate([emb_trans, color[:,:3] * 255.], axis = 1)
+                wandb.log({"step t-SNE embeddings 3D": wandb.Object3D(point_data)}, step = logs['global_step'])
+
         # tight layout
         plt.tight_layout()
 
