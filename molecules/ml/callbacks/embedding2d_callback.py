@@ -233,7 +233,7 @@ class Embedding2dCallback(Callback):
             # plot as 3D object on wandb
             if (self.wandb_config is not None) and (perplexity == self.target_perplexity):
                 point_data = np.concatenate([emb_trans, color[:,:3] * 255.], axis = 1)
-                wandb.log({f"step t-SNE embeddings 3D for perplexity {perplexity}": wandb.Object3D(point_data)}, step = logs['global_step'])
+                wandb.log({"step t-SNE embeddings 3D": wandb.Object3D(point_data, caption=f"perplexity {perplexity}")}, step = logs['global_step'])
 
         # tight layout
         plt.tight_layout()
