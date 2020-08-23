@@ -88,6 +88,7 @@ class Embedding2dCallback(Callback):
 
         # perplexities
         self.perplexities = [5, 30, 50, 100, 200]
+        self.target_perplexity = 100
 
 
     def on_validation_begin(self, epoch, logs):
@@ -230,9 +231,9 @@ class Embedding2dCallback(Callback):
                 fig.colorbar(self.scalar_map, ax = axs, cax = cax)
 
             # plot as 3D object on wandb
-            if self.wandb_config is not None:
+            if (self.wandb_config is not None) and (perplexity == self.target_perplexity):
                 point_data = np.concatenate([emb_trans, color[:,:3] * 255.], axis = 1)
-                wandb.log({"step t-SNE embeddings 3D": wandb.Object3D(point_data)}, step = logs['global_step'])
+                wandb.log({f"step t-SNE embeddings 3D for perplexity {perplexity}": wandb.Object3D(point_data)}, step = logs['global_step'])
 
         # tight layout
         plt.tight_layout()

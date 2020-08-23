@@ -712,7 +712,8 @@ class AAE3d(object):
         self.model.encoder.load_state_dict(cp['encoder_state_dict'])
         self.model.generator.load_state_dict(cp['generator_state_dict'])
         self.model.discriminator.load_state_dict(cp['discriminator_state_dict'])
-        self.optimizer.load_state_dict(cp['optimizer_state_dict'])
+        self.optimizer_eg.load_state_dict(cp['optimizer_eg_state_dict'])
+        self.optimizer_d.load_state_dict(cp['optimizer_d_state_dict'])
         return cp['epoch']
         
     def encode(self, x):

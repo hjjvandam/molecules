@@ -44,6 +44,11 @@ def parse_dict(ctx, param, value):
               type=click.Path(exists=True),
               help='Output directory for model data')
 
+@click.option('-c', '--checkpoint',
+              type=click.Path(exists=True),
+              help='Model checkpoint file to resume training. ' \
+              'Checkpoint files saved as .pt by CheckpointCallback.')
+
 @click.option('-m', '--model_id', required=True, type=str,
               help='Model ID in for file naming')
 
@@ -89,7 +94,8 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, dataset_name, rmsd_name, out_path, model_id,
+def main(input_path, dataset_name, rmsd_name,
+         out_path, checkpoint, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
@@ -256,6 +262,7 @@ def main(input_path, dataset_name, rmsd_name, out_path, model_id,
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
+              checkpoint = checkpoint if checkpoint is not None else '',
               callbacks = callbacks)
 
     # Save loss history to disk.
