@@ -66,7 +66,6 @@ class ResnetVAEHyperparams(Hyperparams):
         # Calculate the downsampling factor
         self.downsample_dim = max_len
         for i in range(self.enc_reslayers):
-            print(self.downsample_dim)
             prev_downsample_dim = self.downsample_dim
             self.downsample_dim = ceil(self.downsample_dim / self.scale_factor)
             if self.downsample_dim == self.latent_dim:
@@ -105,7 +104,14 @@ class ResnetVAEHyperparams(Hyperparams):
         if self.downsample_dim < max_len:
             err_msg = 'max_len must be a multiple of downsample_dim'
             assert max_len % self.downsample_dim == 0, err_msg
-        self.upsample_rounds = max_len / self.downsample_dim - 1
+        # determine the number of upsample layers we need
+        rec_size = self.downsample_dim
+        for i in itertools.count():
+            rec_size *= self.scale_factor
+            if rec_size >= max_len:
+                self.upsample_rounds = i+1
+                break
+        #self.upsample_rounds = ceil(max_len / self.downsample_dim - 1)
 
         # make sure we have at least as many reslayers in decoder as
         # upsample rounds

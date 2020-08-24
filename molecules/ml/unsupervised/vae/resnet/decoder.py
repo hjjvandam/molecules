@@ -83,8 +83,8 @@ class ResnetDecoder(nn.Module):
                     self.hparams.upsample_rounds -= 1
                 else:
                     # we are done here: upsample to output size and thats it
-                    layers.append(nn.Upsample(size=output_shape[1]))
-                    res_input_shape = (res_input_shape[0], output_shape[1])
+                    layers.append(nn.Upsample(size=self.output_shape[1]))
+                    res_input_shape = (res_input_shape[0], self.output_shape[1])
                     self.hparams.upsample_rounds = 0
 
         padding = same_padding(res_input_shape[1],
