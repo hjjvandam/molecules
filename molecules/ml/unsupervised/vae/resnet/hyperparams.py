@@ -7,6 +7,7 @@ class ResnetVAEHyperparams(Hyperparams):
                  latent_dim=150, activation='ReLU',
                  output_activation='Sigmoid',
                  lambda_rec=1.,
+                 enc_reslayers=None,
                  dec_reslayers=3, dec_kernel_size=5,
                  dec_filters=1200, dec_filter_growth_rate=1.0):
 
@@ -32,6 +33,7 @@ class ResnetVAEHyperparams(Hyperparams):
         self.output_activation = output_activation
         self.lambda_rec = lambda_rec
         self.latent_dim = latent_dim
+        self.enc_reslayers = enc_reslayers
         self.dec_reslayers = dec_reslayers
         self.dec_kernel_size = dec_kernel_size
         self.dec_filters = dec_filters
@@ -69,7 +71,8 @@ class ResnetVAEHyperparams(Hyperparams):
         # This is a function of num_residues. We are computing the number
         # of times we need to divide num_residues by two before we get to one.
         # i.e., solving 2^x = num_residues for x.
-        self.enc_reslayers = ceil(log(max_len) / log(2))
+        if self.enc_reslayers is None:
+            self.enc_reslayers = ceil(log(max_len) / log(2))
 
         # Calculate the growth factor required to get to desired
         # hidden dim as a function of enc_reslayers and num_residues.

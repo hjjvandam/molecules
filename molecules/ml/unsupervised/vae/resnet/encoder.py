@@ -34,8 +34,10 @@ class ResnetEncoder(nn.Module):
         init_weights(self.logvar)
 
     def forward(self, x):
+        # encode
         x = self.encoder(x)
-        return self.mu(x), self.logvar(x)
+        xf = torch.mean(x, dim = 2)
+        return self.mu(xf), self.logvar(xf)
 
     def encode(self, x):
         self.eval()
@@ -85,8 +87,8 @@ class ResnetEncoder(nn.Module):
 
             res_input_shape = layers[-1].output_shape
 
-        return nn.Sequential(*layers, nn.Flatten()), prod(res_input_shape)
+        return nn.Sequential(*layers), res_input_shape[0]
 
     def _embedding_layer(self, output_shape):
-        return nn.Linear(in_features=output_shape,
-                         out_features=self.hparams.latent_dim)
+        return nn.Linear(in_features = output_shape,
+                         out_features = self.hparams.latent_dim)
