@@ -138,7 +138,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                           'nchars': dim2,
                           'latent_dim': latent_dim,
                           'dec_filters': dim1,
-                          'enc_reslayers': 10,
+                          'enc_reslayers': 6,
                           'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
