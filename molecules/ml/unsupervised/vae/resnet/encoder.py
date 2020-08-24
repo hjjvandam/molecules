@@ -85,7 +85,8 @@ class ResnetEncoder(nn.Module):
                                          filters,
                                          self.hparams.enc_kernel_size,
                                          self.hparams.activation,
-                                         shrink=True))
+                                         shrink=True,
+                                         kfac=self.hparams.scale_factor))
 
             res_input_shape = layers[-1].output_shape
 

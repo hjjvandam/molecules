@@ -8,6 +8,7 @@ class ResnetVAEHyperparams(Hyperparams):
                  output_activation='Sigmoid',
                  lambda_rec=1.,
                  enc_reslayers=None,
+                 scale_factor=2,
                  dec_reslayers=3, dec_kernel_size=5,
                  dec_filters=1200, dec_filter_growth_rate=1.0):
 
@@ -34,6 +35,7 @@ class ResnetVAEHyperparams(Hyperparams):
         self.lambda_rec = lambda_rec
         self.latent_dim = latent_dim
         self.enc_reslayers = enc_reslayers
+        self.scale_factor = scale_factor
         self.dec_reslayers = dec_reslayers
         self.dec_kernel_size = dec_kernel_size
         self.dec_filters = dec_filters
@@ -56,13 +58,13 @@ class ResnetVAEHyperparams(Hyperparams):
         # of times we need to divide num_residues by two before we get to one.
         # i.e., solving 2^x = num_residues for x.
         if self.enc_reslayers is None:
-            self.enc_reslayers = ceil(log(max_len) / log(2))
+            self.enc_reslayers = ceil(log(max_len) / log(self.scale_factor))
             
         # Calculate the downsampling factor
         self.downsample_dim = max_len
         for i in range(self.enc_reslayers):
             prev_downsample = self.downsample_dim
-            self.downsample_dim = ceil(self.downsample_dim / 2)
+            self.downsample_dim = ceil(self.downsample_dim / self.scale_factor)
             if self.downsample_dim == self.latent_dim:
                 break
             if self.downsample_dim < self.latent_dim:
@@ -71,7 +73,7 @@ class ResnetVAEHyperparams(Hyperparams):
             
         # compute dec layers based on this logic
         for i in itertools.count():
-            recon_dim = self.downsample_dim * (2 ** i)
+            recon_dim = self.downsample_dim * (self.scale_factor ** i)
             if recon_dim == self.max_len:
                 self.dec_reslayers = i
                 break
