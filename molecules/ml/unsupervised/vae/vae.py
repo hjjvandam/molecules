@@ -70,7 +70,7 @@ class VAEModel(nn.Module):
         self.decoder.load_weights(dec_path)
 
 
-def vae_loss(recon_x, x, mu, logvar):
+def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1.):
     """
     Effects
     -------
@@ -81,24 +81,24 @@ def vae_loss(recon_x, x, mu, logvar):
     https://arxiv.org/abs/1312.6114
     """
 
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+    BCE = F.binary_cross_entropy(recon_x, x, reduction='mean')
 
-    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return BCE + KLD
+    return lambda_rec * BCE + KLD
 
 
-def vae_logit_loss(logit_recon_x, x, mu, logvar):
+def vae_logit_loss(logit_recon_x, x, mu, logvar, lambda_rec = 1.):
     """
     As above, but works directly on logits
     """
-    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction='sum')
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction='mean')
     
-    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return BCE + KLD
+    return lambda_rec * BCE + KLD
                     
 
 
@@ -196,6 +196,7 @@ class VAE:
         self.gscaler = amp.GradScaler(enabled = self.enable_amp)
 
         self.loss_fnc = vae_logit_loss if loss is None else loss
+        self.lambda_rec = hparams.lambda_rec
 
         # these are helpers for distributed computing
         self.comm_rank = 0
@@ -330,7 +331,7 @@ class VAE:
             # forward
             with amp.autocast(self.enable_amp):
                 logit_recon_batch, codes, mu, logvar = self.model(data)
-                loss = self.loss_fnc(logit_recon_batch, data, mu, logvar)
+                loss = self.loss_fnc(logit_recon_batch, data, mu, logvar, self.lambda_rec)
 
             # backward
             self.optimizer.zero_grad()
@@ -391,7 +392,8 @@ class VAE:
                 
                 with amp.autocast(self.enable_amp):
                     logit_recon_batch, codes, mu, logvar = self.model(data)
-                    valid_loss += self.loss_fnc(logit_recon_batch, data, mu, logvar).item() / len(data)
+                    valid_loss += self.loss_fnc(logit_recon_batch, data,
+                                                mu, logvar, self.lambda_rec).item() / len(data)
 
                 for callback in callbacks:
                     callback.on_validation_batch_end(logs,

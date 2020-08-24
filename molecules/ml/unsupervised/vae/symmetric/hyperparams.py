@@ -1,10 +1,11 @@
 from molecules.ml.hyperparams import Hyperparams
 
 class SymmetricVAEHyperparams(Hyperparams):
-    def __init__(self, filters=[64, 64, 64], kernels=[3, 3, 3],
-                 strides=[1, 2, 1], latent_dim=3,
-                 affine_widths=[128], affine_dropouts=[0],
-                 activation='ReLU', output_activation='Sigmoid'):
+    def __init__(self, filters = [64, 64, 64], kernels = [3, 3, 3],
+                 strides = [1, 2, 1], latent_dim = 3,
+                 affine_widths = [128], affine_dropouts = [0],
+                 activation = 'ReLU', output_activation = 'Sigmoid',
+                 lambda_rec = 1.):
 
         self.filters = filters
         self.kernels = kernels
@@ -14,6 +15,7 @@ class SymmetricVAEHyperparams(Hyperparams):
         self.affine_dropouts = affine_dropouts
         self.activation = activation
         self.output_activation = output_activation
+        self.lambda_rec = lambda_rec
 
         # Placed after member vars are declared so that base class can validate
         super().__init__()

@@ -6,6 +6,7 @@ class ResnetVAEHyperparams(Hyperparams):
     def __init__(self, max_len, nchars, enc_kernel_size=5,
                  latent_dim=150, activation='ReLU',
                  output_activation='Sigmoid',
+                 lambda_rec=1.,
                  dec_reslayers=3, dec_kernel_size=5,
                  dec_filters=1200, dec_filter_growth_rate=1.0):
 
@@ -29,6 +30,7 @@ class ResnetVAEHyperparams(Hyperparams):
         self.enc_kernel_size = enc_kernel_size
         self.activation = activation
         self.output_activation = output_activation
+        self.lambda_rec = lambda_rec
         self.latent_dim = latent_dim
         self.dec_reslayers = dec_reslayers
         self.dec_kernel_size = dec_kernel_size
