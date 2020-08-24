@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # run tag
-run_tag="spike-cmaps_nnodes-${SLURM_NNODES}_run-1"
+run_tag=${2}
 output_dir="/runs/${run_tag}"
 
 # connect to wandb

@@ -48,14 +48,14 @@ class ContactMapDataset(Dataset):
             raise ValueError("Parameter split must be 'train' or 'valid'.")
         if split_ptc < 0 or split_ptc > 1:
             raise ValueError('Parameter split_ptc must satisfy 0 <= split_ptc <= 1.')
+        if cm_format not in ('sparse-concat', 'sparse-rowcol', 'full'):
+            raise ValueError(f'Invalid cm_format {cm_format}. Should be one of ' \
+                            '[sparse-rowcol, sparse-concat, full].')
 
-        # Open h5 file. Python's garbage collector closes the
-        # file when class is destructed.
+        # HDF5 data params
         self.file_path = path
         self.dataset_name = dataset_name
         self.rmsd_name = rmsd_name
-
-        # more params
         self.cm_format = cm_format
         self.shape = shape
         
@@ -85,18 +85,13 @@ class ContactMapDataset(Dataset):
     def _init_file(self):
         self.h5_file = open_h5(self.file_path, 'r', libver = 'latest', swmr = False)
 
-        
-    def _close_file(self):            
-        # close file
-        self.h5_file.close()
-
-        
     def __len__(self):
         return len(self.indices)
 
     
     def __getitem__(self, idx):
 
+        # Only happens once. Need to open h5 file in current process
         if not self.initialized:
             self._init_file()
             if self.cm_format == 'sparse-rowcol':
@@ -111,26 +106,27 @@ class ContactMapDataset(Dataset):
 
         # get real index
         index = self.indices[idx]
-
-        if self.cm_format == 'sparse-rowcol':
-            indices = torch.from_numpy(np.vstack((self.row_dset[index],
-                                                  self.col_dset[index]))).to(torch.long)
-            values = torch.ones(indices.shape[1], dtype=torch.float32)
-            # Set shape to the last 2 elements of self.shape.
-            # Handles (1, W, H) and (W, H)
-            data = torch.sparse.FloatTensor(indices, values,
-                        self.shape[-2:]).to_dense()
-        elif self.cm_format == 'sparse-concat':
-            ind = self.dset[index, ...].reshape(2, -1)
-            indices = torch.from_numpy(ind).to(torch.long)
-            values = torch.ones(indices.shape[1], dtype=torch.float32)
-            # Set shape to the last 2 elements of self.shape.
-            # Handles (1, W, H) and (W, H)
-            data = torch.sparse.FloatTensor(indices, values,
-                        self.shape[-2:]).to_dense()
-        elif self.cm_format == 'full':
+        
+        # Select data format and return data at idx
+        if self.cm_format == 'full':
             data = torch.Tensor(self.dset[index, ...])
+        else:
+            if self.cm_format == 'sparse-concat':
+                ind = self.dset[index, ...].reshape(2, -1)
+                indices = torch.from_numpy(ind).to(torch.long)
+            else: # sparse-rowcol
+                rowind = self.row_dset[index, ...]
+                colind = self.col_dset[index, ...]
+                indices = torch.from_numpy(np.vstack((rowind, colind))).to(torch.long)
 
+            # Create array of 1s, all values in the contact map are 1
+            values = torch.ones(indices.shape[1], dtype=torch.float32)
+            # Set shape to the last 2 elements of self.shape.
+            # Handles (1, W, H) and (W, H)
+            data = torch.sparse.FloatTensor(indices, values,
+                                            self.shape[-2:]).to_dense()
+        
+        # these are not dependent on the data format
         rmsd = self.rmsd_dset[index]
 
         return data, torch.tensor(rmsd, requires_grad=False), index
