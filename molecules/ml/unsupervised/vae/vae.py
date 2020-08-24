@@ -27,7 +27,7 @@ class VAEModel(nn.Module):
         elif isinstance(hparams, ResnetVAEHyperparams):
             from .resnet import ResnetEncoder, ResnetDecoder
             self.encoder = ResnetEncoder(input_shape, hparams)
-            self.decoder = ResnetDecoder(input_shape, hparams)
+            self.decoder = ResnetDecoder(self.encoder.match_shape, input_shape, hparams)
 
         else:
             raise TypeError(f'Invalid hparams type: {type(hparams)}.')

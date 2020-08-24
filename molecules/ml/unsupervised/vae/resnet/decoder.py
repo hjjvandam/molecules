@@ -1,18 +1,19 @@
 import torch
 from torch import nn
 from molecules.ml.unsupervised.utils import (conv_output_dim, same_padding,
-                                             get_activation, init_weights)
+                                             get_activation, init_weights, prod)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
 class ResnetDecoder(nn.Module):
-    def __init__(self, output_shape, hparams):
+    def __init__(self, match_shape, output_shape, hparams):
         super(ResnetDecoder, self).__init__()
 
         assert isinstance(hparams, ResnetVAEHyperparams)
         hparams.validate()
 
         # Assume input is square matrix
+        self.match_shape = match_shape
         self.output_shape = output_shape
         self.hparams = hparams
 
@@ -24,6 +25,9 @@ class ResnetDecoder(nn.Module):
         self.decoder.apply(init_weights)
 
     def forward(self, x):
+        x = self.match_layer(x)
+        print("shapes: ", x.shape, (x.shape[0], self.match_shape[0], self.match_shape[1]))
+        x = x.reshape((x.shape[0], self.match_shape[0], self.match_shape[1]))
         x = x.view(x.shape[0], x.shape[1], 1)
         return self.decoder(x)
 
@@ -44,6 +48,15 @@ class ResnetDecoder(nn.Module):
 
         res_input_shape = (1, self.hparams.latent_dim)
 
+        # insert an FC layer to get the shapes matching
+        if self.hparams.latent_dim != self.match_shape[0]:
+            self.match_layer = nn.Sequential(nn.Linear(in_features = self.hparams.latent_dim,
+                                                       out_features = prod(self.match_shape)),
+                                             get_activation(self.hparams.output_activation))
+        else:
+            self.match_layer = nn.Identity()
+
+        # construct decoder
         for lidx in range(self.hparams.dec_reslayers):
 
             filters = self.hparams.dec_filters * self.hparams.dec_filter_growth_rate**lidx

@@ -21,10 +21,10 @@ class ResnetEncoder(nn.Module):
         self.input_shape = input_shape
         self.hparams = hparams
 
-        self.encoder, output_shape = self._encoder_layers()
+        self.encoder, self.match_shape = self._encoder_layers()
 
-        self.mu = self._embedding_layer(output_shape)
-        self.logvar = self._embedding_layer(output_shape)
+        self.mu = self._embedding_layer(self.match_shape[0])
+        self.logvar = self._embedding_layer(self.match_shape[0])
 
         self.init_weights()
 
@@ -87,7 +87,7 @@ class ResnetEncoder(nn.Module):
 
             res_input_shape = layers[-1].output_shape
 
-        return nn.Sequential(*layers), res_input_shape[0]
+        return nn.Sequential(*layers), res_input_shape
 
     def _embedding_layer(self, output_shape):
         return nn.Linear(in_features = output_shape,
