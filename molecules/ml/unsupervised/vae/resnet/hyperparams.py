@@ -59,30 +59,35 @@ class ResnetVAEHyperparams(Hyperparams):
         # i.e., solving 2^x = num_residues for x.
         if self.enc_reslayers is None:
             self.enc_reslayers = ceil(log(max_len) / log(self.scale_factor))
+        else:
+            # once we pool down too much, then we can stop
+            self.enc_reslayers = min([ceil(log(max_len) / log(self.scale_factor)), self.enc_reslayers])
             
         # Calculate the downsampling factor
         self.downsample_dim = max_len
         for i in range(self.enc_reslayers):
-            prev_downsample = self.downsample_dim
+            print(self.downsample_dim)
+            prev_downsample_dim = self.downsample_dim
             self.downsample_dim = ceil(self.downsample_dim / self.scale_factor)
             if self.downsample_dim == self.latent_dim:
                 break
             if self.downsample_dim < self.latent_dim:
-                self.downsample_dim = prev_downsample
+                self.downsample_dim = prev_downsample_dim
                 break
-            
-        # compute dec layers based on this logic
-        for i in itertools.count():
-            recon_dim = self.downsample_dim * (self.scale_factor ** i)
-            if recon_dim == self.max_len:
-                self.dec_reslayers = i
-                break
-            if recon_dim > self.max_len:
-                raise ValueError(f'Unable to reconstruct downsample_dim {self.downsample_dim} ' \
-                                 f'to input size {self.max_len}. Must satisfy ' \
-                                 'downsample_dim * (2^k) == input_size for some ' \
-                                 'integer k.')
-                
+        
+        ## compute dec layers based on this logic
+        #for i in itertools.count():
+        #    recon_dim = self.downsample_dim * (self.scale_factor ** i)
+        #    print(recon_dim)
+        #    if recon_dim >= self.max_len:
+        #        self.dec_reslayers = i
+        #        break
+        #    #if recon_dim > self.max_len:
+        #    #    raise ValueError(f'Unable to reconstruct downsample_dim {self.downsample_dim} ' \
+        #    #                     f'to input size {self.max_len}. Must satisfy ' \
+        #    #                     'downsample_dim * (scale_factor^k) == input_size for some ' \
+        #    #                     'integer k.')
+        
         # Calculate the growth factor required to get to desired
         # hidden dim as a function of enc_reslayers and num_residues.
         # i.e., solving: num_residues * x^enc_reslayers = latent_dim; for x
@@ -101,6 +106,10 @@ class ResnetVAEHyperparams(Hyperparams):
             err_msg = 'max_len must be a multiple of downsample_dim'
             assert max_len % self.downsample_dim == 0, err_msg
         self.upsample_rounds = max_len / self.downsample_dim - 1
+
+        # make sure we have at least as many reslayers in decoder as
+        # upsample rounds
+        self.dec_reslayers = max([self.dec_reslayers, self.upsample_rounds])
 
         # If we choose a larger hidden_dim, then we must be able
         # to get back to max_len by using a strided conv. So we

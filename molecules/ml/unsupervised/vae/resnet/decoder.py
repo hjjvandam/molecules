@@ -76,10 +76,16 @@ class ResnetDecoder(nn.Module):
                 # TODO: consider upsample mode nearest neightbor etc.
                 #       https://pytorch.org/docs/master/generated/torch.nn.Upsample.html
                 scale_factor = self.hparams.scale_factor
-                layers.append(nn.Upsample(scale_factor=scale_factor))
-                self.hparams.upsample_rounds -= 1
-                res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
-
+                # do some matching in case we have a weird scaling factor
+                if res_input_shape[1] * scale_factor <= self.output_shape[1]:
+                    layers.append(nn.Upsample(scale_factor=scale_factor))
+                    res_input_shape = (res_input_shape[0], res_input_shape[1] * scale_factor)
+                    self.hparams.upsample_rounds -= 1
+                else:
+                    # we are done here: upsample to output size and thats it
+                    layers.append(nn.Upsample(size=output_shape[1]))
+                    res_input_shape = (res_input_shape[0], output_shape[1])
+                    self.hparams.upsample_rounds = 0
 
         padding = same_padding(res_input_shape[1],
                                self.hparams.dec_kernel_size,
