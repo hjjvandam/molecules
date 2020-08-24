@@ -68,7 +68,7 @@ class ResnetVAEHyperparams(Hyperparams):
             if self.downsample_dim < self.latent_dim:
                 self.downsample_dim = prev_downsample
                 break
-
+            
         # compute dec layers based on this logic
         for i in itertools.count():
             recon_dim = self.downsample_dim * (2 ** i)

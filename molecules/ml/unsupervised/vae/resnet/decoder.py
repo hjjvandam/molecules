@@ -26,9 +26,8 @@ class ResnetDecoder(nn.Module):
 
     def forward(self, x):
         x = self.match_layer(x)
-        print("shapes: ", x.shape, (x.shape[0], self.match_shape[0], self.match_shape[1]))
-        x = x.reshape((x.shape[0], self.match_shape[0], self.match_shape[1]))
-        x = x.view(x.shape[0], x.shape[1], 1)
+        x = x.reshape((x.shape[0], self.match_shape[1], self.match_shape[0]))
+        #x = x.view(x.shape[0], x.shape[1], 1)
         return self.decoder(x)
 
     def decode(self, embedding):
@@ -44,10 +43,6 @@ class ResnetDecoder(nn.Module):
 
     def _decoder_layers(self):
 
-        layers = []
-
-        res_input_shape = (1, self.hparams.latent_dim)
-
         # insert an FC layer to get the shapes matching
         if self.hparams.latent_dim != self.match_shape[0]:
             self.match_layer = nn.Sequential(nn.Linear(in_features = self.hparams.latent_dim,
@@ -56,7 +51,11 @@ class ResnetDecoder(nn.Module):
         else:
             self.match_layer = nn.Identity()
 
+        # we do a sneaky transposition here
+        res_input_shape = (self.match_shape[1], self.match_shape[0])
+
         # construct decoder
+        layers = []
         for lidx in range(self.hparams.dec_reslayers):
 
             filters = self.hparams.dec_filters * self.hparams.dec_filter_growth_rate**lidx
