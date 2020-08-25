@@ -101,9 +101,9 @@ class ResnetVAEHyperparams(Hyperparams):
         # Assert that num_residues is a multiple of hidden_dim.
         # This is prevent the need for zero-padding.  We will
         # just use Upsampling.
-        if self.downsample_dim < max_len:
-            err_msg = 'max_len must be a multiple of downsample_dim'
-            assert max_len % self.downsample_dim == 0, err_msg
+        #if self.downsample_dim < max_len:
+        #    err_msg = 'max_len must be a multiple of downsample_dim'
+        #    assert max_len % self.downsample_dim == 0, err_msg
         # determine the number of upsample layers we need
         rec_size = self.downsample_dim
         for i in itertools.count():

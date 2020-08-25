@@ -36,8 +36,6 @@ class ResnetEncoder(nn.Module):
     def forward(self, x):
         # encode
         x = self.encoder(x)
-
-        print(x.shape)
         xf = torch.mean(x, dim = 2)
         return self.mu(xf), self.logvar(xf)
 

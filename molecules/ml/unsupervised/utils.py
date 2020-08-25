@@ -95,7 +95,7 @@ def _same_padding(input_dim, kernel_size, stride):
             # TODO: see symmetric decoder
             # adjustment = int(input_dim % 2 == 0)
             return input_dim - alpha # + adjustment
-
+        
     raise Exception('No padding found')
 
 def same_padding(input_dim, kernel_size, stride):
