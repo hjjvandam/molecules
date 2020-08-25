@@ -23,7 +23,7 @@ python ./example_vae.py \
        -f sparse-concat \
        -t resnet \
        -e 150 \
-       -b 4 \
+       -b 16 \
        -E ${enc_gpu} -D ${dec_gpu} \
-       -S 5 \
-       -h 3768 -w 3768 -d 471
+       -S 3 \
+       -h 3768 -w 3768 -d 256
