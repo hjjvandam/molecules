@@ -89,18 +89,18 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
     scalar_kwargs = {'fletcher32': True, 'dtype': 'float16', 'chunks':(1,)}
 
     with open_h5(save_file, 'w', swmr=False) as h5_file:
-    # Save rmsd
+        # Save rmsd
         if rmsd is not None:
             h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
-    # Save fraction of native contacts
+        # Save fraction of native contacts
         if fnc is not None:
             h5_file.create_dataset('fnc', data=fnc, **scalar_kwargs)
-    # Save point cloud
+        # Save point cloud
         if point_cloud is not None:
             h5_file.create_dataset('point_cloud', data=point_cloud,
                                    chunks=(1,) + point_cloud.shape[1:],
                                    dtype='float32', **kwargs)
-    # Save contact maps
+        # Save contact maps
         if contact_maps is not None:
             _save_sparse_contact_maps(h5_file, contact_maps, cm_format=cm_format, **kwargs)
 def fraction_of_contacts(cm, ref_cm):
