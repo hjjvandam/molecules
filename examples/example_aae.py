@@ -170,7 +170,7 @@ def main(input_path, dataset_name, rmsd_name,
                                       num_features,
                                       split = 'train',
                                       normalize = 'box',
-                                      cms_transform = True)
+                                      cms_transform = False)
 
     # split across nodes
     if comm_size > 1:
@@ -188,7 +188,7 @@ def main(input_path, dataset_name, rmsd_name,
                                       num_features,
                                       split = 'valid',
                                       normalize = 'box',
-                                      cms_transform = True)
+                                      cms_transform = False)
 
     # split across nodes
     if comm_size > 1:

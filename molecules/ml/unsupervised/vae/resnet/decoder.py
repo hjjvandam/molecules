@@ -26,7 +26,8 @@ class ResnetDecoder(nn.Module):
 
     def forward(self, x):
         x = self.match_layer(x)
-        x = x.reshape((x.shape[0], self.match_shape[1], self.match_shape[0]))
+        #x = x.reshape((x.shape[0], self.match_shape[1], self.match_shape[0]))
+        x = torch.transpose(x, 1, 2)
         #x = x.view(x.shape[0], x.shape[1], 1)
         return self.decoder(x)
 
