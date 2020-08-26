@@ -88,31 +88,21 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
     kwargs = {'fletcher32': True}
     scalar_kwargs = {'fletcher32': True, 'dtype': 'float16', 'chunks':(1,)}
 
-    # Open h5 file in swmr mode
-    h5_file = open_h5(save_file, 'w')
-
+    with open_h5(save_file, 'w', swmr=False) as h5_file:
     # Save rmsd
-    if rmsd is not None:
-        h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
-
+        if rmsd is not None:
+            h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
     # Save fraction of native contacts
-    if fnc is not None:
-        h5_file.create_dataset('fnc', data=fnc, **scalar_kwargs)
-
+        if fnc is not None:
+            h5_file.create_dataset('fnc', data=fnc, **scalar_kwargs)
     # Save point cloud
-    if point_cloud is not None:
-        h5_file.create_dataset('point_cloud', data=point_cloud,
-                               chunks=(1,) + point_cloud.shape[1:],
-                               dtype='float32', **kwargs)
-
+        if point_cloud is not None:
+            h5_file.create_dataset('point_cloud', data=point_cloud,
+                                   chunks=(1,) + point_cloud.shape[1:],
+                                   dtype='float32', **kwargs)
     # Save contact maps
-    if contact_maps is not None:
-        _save_sparse_contact_maps(h5_file, contact_maps, cm_format=cm_format, **kwargs)
-
-    # Flush data to file and close
-    h5_file.flush()
-    h5_file.close()
-
+        if contact_maps is not None:
+            _save_sparse_contact_maps(h5_file, contact_maps, cm_format=cm_format, **kwargs)
 def fraction_of_contacts(cm, ref_cm):
     """
     Given two contact matices of equal dimensions, computes
@@ -178,7 +168,7 @@ def _traj_to_dset(topology, ref_topology, traj_file,
         selections in general, are within `cutoff` angstroms,
         otherwise a 0 is entered.
 
-    cm_format : str
+        cm_format : str
         Format to save contact maps with.
         sparse-concat: new format with single dataset
         sparse-rowcol: old format with group containing row,col datasets
@@ -209,8 +199,8 @@ def _traj_to_dset(topology, ref_topology, traj_file,
 
     if rmsd or point_cloud:
         # Align trajectory to compute accurate RMSD or point cloud
-        align.AlignTraj(sim, ref, in_memory=True).run()
-
+        align.AlignTraj(sim, ref, select=sel, in_memory=True).run()
+    
     # Initialize buffers. Only turn into containers if user specifies to.
     rmsd_data, fnc_data, pc_data, contact_map_data = None, None, None, None
 
@@ -270,8 +260,8 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                 print(str_)
 
     if point_cloud:
-        pc_data = np.reshape(pc_data, (len(sim.trajectory), 3, -1))
-
+        #pc_data = np.reshape(pc_data, (len(sim.trajectory), 3, -1))
+        pc_data = np.transpose(pc_data, [0,2,1])
     if save_file:
         # Write data to HDF5 file
         _save(save_file, rmsd=rmsd_data, fnc=fnc_data,
