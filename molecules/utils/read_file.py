@@ -2,9 +2,7 @@ import h5py
 
 def open_h5(h5_file, mode = 'r', libver = 'latest', swmr = False, **kwargs):
     """
-    Opens file in single write multiple reader mode
-    libver specifies newest available version,
-    may not be backwards compatable
+    Helper function for opening h5 file in context manager
 
     Parameters
     ----------
@@ -14,17 +12,9 @@ def open_h5(h5_file, mode = 'r', libver = 'latest', swmr = False, **kwargs):
     mode : str
         mode to open the file in 'r' or 'w'
 
-    libver : str
-        version argument for h5py
-
-    swmr : bool
-        single writer multiple reader option for h5py
-
     Returns
     -------
     open h5py file to be used in a context manager
-
     """
-    # TODO: bug in sparse_contact_map_from_matrices when libver and swmr
-    # specified
-    return h5py.File(h5_file, mode, **kwargs) #libver=libver, swmr=swmr, **kwargs)
+    # TODO: bug in scripts/traj_to_dset.py when swmr, libver='latest' is used
+    return h5py.File(h5_file, mode, **kwargs)
