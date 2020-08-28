@@ -18,10 +18,9 @@ source activate /ccs/home/tkurth/project/pytorch/pytorch-1.6.0_cudnn-8.0.2.39_nc
 wandb_token=6c8b9db0b520487f05d32ebc76fcea156bd85d58
 run_tag="cmaps-spike-summit-1"
 
-# get number of nodes
-hostlist=$(cat ${LSB_DJOB_HOSTFILE} | uniq | grep -v batch)
-export MASTER_ADDR=${hostlist[0]}
+# we need that here too
+nnodes=$(cat ${LSB_DJOB_HOSTFILE} | sort | uniq | grep -v login | grep -v batch | wc -l)
 
 # launch job
-jsrun -n $(echo ${hostlist} | wc -l) -r 1 -g 6 -a 3 -c 42 -d packed  --smpiargs="-disable_gpu_hooks --tag-output" \
+jsrun -n ${nnodes} -r 1 -g 6 -a 3 -c 42 -d packed  --smpiargs="-disable_gpu_hooks --tag-output" \
     ./run_vae_dist_summit.sh ${wandb_token} ${run_tag}
