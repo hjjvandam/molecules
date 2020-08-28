@@ -177,7 +177,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
 
     # split across nodes
     if comm_size > 1:
-        chunksize = 48 #len(train_dataset) // comm_size
+        chunksize = len(train_dataset) // comm_size
         train_dataset = Subset(train_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
