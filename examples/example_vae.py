@@ -149,16 +149,19 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     vae = VAE(input_shape, hparams, optimizer_hparams,
               gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
 
-    enc_devid = torch.device(f'cuda:{encoder_gpu}')
-    dec_devid = torch.device(f'cuda:{decoder_gpu}')
+    enc_device = torch.device(f'cuda:{encoder_gpu}')
+    dec_device = torch.device(f'cuda:{decoder_gpu}')
     if comm_size > 1:
         if (encoder_gpu == decoder_gpu):
-            vae.model = DDP(vae.model, device_ids = [enc_devid], output_device = enc_devid)
+            vae.model = DDP(vae.model, device_ids = [enc_device], output_device = enc_device)
         else:
             vae.model = DDP(vae.model, device_ids = None, output_device = None)
 
+    # set global default device
+    torch.cuda.set_device(enc_device.index)
+
+    # Diplay model
     if comm_rank == 0:
-        # Diplay model
         print(vae)
         # Only print summary when encoder_gpu is None or 0
         #summary(vae.model, input_shape)
@@ -174,17 +177,16 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
 
     # split across nodes
     if comm_size > 1:
-        chunksize = len(train_dataset) // comm_size
+        chunksize = 48 #len(train_dataset) // comm_size
         train_dataset = Subset(train_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
-    with torch.device(enc_devid):
-        train_loader = DataLoader(train_dataset,
-                                  batch_size = batch_size,
-                                  drop_last = True,
-                                  shuffle = True,
-                                  pin_memory = True,
-                                  num_workers = 1)
+    train_loader = DataLoader(train_dataset,
+                              batch_size = batch_size,
+                              drop_last = True,
+                              shuffle = True,
+                              pin_memory = True,
+                              num_workers = 1)
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
@@ -200,13 +202,17 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         valid_dataset = Subset(valid_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
-    with torch.device(enc_devid):
-        valid_loader = DataLoader(valid_dataset,
-                                  batch_size = batch_size,
-                                  drop_last = True,
-                                  shuffle = True,
-                                  pin_memory = True,
-                                  num_workers = 1)
+    valid_loader = DataLoader(valid_dataset,
+                              batch_size = batch_size,
+                              drop_last = True,
+                              shuffle = True,
+                              pin_memory = True,
+                              num_workers = 1)
+
+    ## we call next once here to make sure the data is pinned to the right GPU
+    #with torch.cuda.device(enc_device.index):
+    #    _ = next(train_loader)
+    #    _ = valid_loader.next()
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
