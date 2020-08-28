@@ -186,7 +186,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                               drop_last = True,
                               shuffle = True,
                               pin_memory = True,
-                              num_workers = 1)
+                              num_workers = 0)
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
@@ -207,7 +207,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                               drop_last = True,
                               shuffle = True,
                               pin_memory = True,
-                              num_workers = 1)
+                              num_workers = 0)
 
     ## we call next once here to make sure the data is pinned to the right GPU
     #with torch.cuda.device(enc_device.index):
