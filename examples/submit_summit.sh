@@ -22,5 +22,5 @@ run_tag="cmaps-spike-summit-1"
 nnodes=$(cat ${LSB_DJOB_HOSTFILE} | sort | uniq | grep -v login | grep -v batch | wc -l)
 
 # launch job
-jsrun -n ${nnodes} -r 1 -g 6 -a 3 -c 42 -d packed  --smpiargs="-disable_gpu_hooks --tag-output" \
+jsrun -n ${nnodes} -r 1 -g 6 -a 3 -c 42 -d packed \
     ./run_vae_dist_summit.sh ${wandb_token} ${run_tag}
