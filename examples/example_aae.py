@@ -134,6 +134,7 @@ def main(input_path, dataset_name, rmsd_name,
     aae_hparams = {
         "num_features": num_features,
         "latent_dim": latent_dim,
+        "encoder_kernel_sizes": [5, 5, 3, 1, 1],
         "noise_std": 0.2,
         "lambda_rec": float(loss_weights["lambda_rec"]),
         "lambda_gp": float(loss_weights["lambda_gp"]),

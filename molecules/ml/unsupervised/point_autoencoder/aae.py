@@ -182,7 +182,7 @@ class Encoder(nn.Module):
         # first layer
         layers = OrderedDict([('enc_conv1', nn.Conv1d(in_channels = (3 + self.num_features),
                                                       out_channels = hparams.encoder_filters[0],
-                                                      kernel_size = 1,
+                                                      kernel_size = hparams.encoder_kernel_sizes[0],
                                                       bias = self.use_bias)),
                               ('enc_relu1', self.activation(**self.activ_args))])
 
@@ -190,14 +190,14 @@ class Encoder(nn.Module):
         for idx in range(1, len(hparams.encoder_filters)-1):
             layers.update({'enc_conv{}'.format(idx+1) : nn.Conv1d(in_channels = hparams.encoder_filters[idx - 1],
                                                                   out_channels = hparams.encoder_filters[idx],
-                                                                  kernel_size = 1,
+                                                                  kernel_size = hparams.encoder_kernel_sizes[idx],
                                                                   bias = self.use_bias)})
             layers.update({'enc_relu{}'.format(idx+1) : self.activation(**self.activ_args)})
             
         # final layer
         layers.update({'enc_conv{}'.format(idx+2) : nn.Conv1d(in_channels = hparams.encoder_filters[-2],
                                                               out_channels = hparams.encoder_filters[-1],
-                                                              kernel_size = 1,
+                                                              kernel_size = hparams.encoder_kernel_sizes[-1],
                                                               bias = self.use_bias)})
 
         # construct model

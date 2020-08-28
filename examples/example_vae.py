@@ -149,10 +149,11 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     vae = VAE(input_shape, hparams, optimizer_hparams,
               gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
 
+    enc_devid = torch.device(f'cuda:{encoder_gpu}')
+    dec_devid = torch.device(f'cuda:{decoder_gpu}')
     if comm_size > 1:
         if (encoder_gpu == decoder_gpu):
-            devid = torch.device(f'cuda:{encoder_gpu}')
-            vae.model = DDP(vae.model, device_ids = [devid], output_device = devid)
+            vae.model = DDP(vae.model, device_ids = [enc_devid], output_device = enc_devid)
         else:
             vae.model = DDP(vae.model, device_ids = None, output_device = None)
 
@@ -177,12 +178,13 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         train_dataset = Subset(train_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
-    train_loader = DataLoader(train_dataset,
-                              batch_size = batch_size,
-                              drop_last = True,
-                              shuffle = True,
-                              pin_memory = True,
-                              num_workers = 1)
+    with torch.device(enc_devid):
+        train_loader = DataLoader(train_dataset,
+                                  batch_size = batch_size,
+                                  drop_last = True,
+                                  shuffle = True,
+                                  pin_memory = True,
+                                  num_workers = 1)
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
@@ -198,12 +200,13 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         valid_dataset = Subset(valid_dataset,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
-    valid_loader = DataLoader(valid_dataset,
-                              batch_size = batch_size,
-                              drop_last = True,
-                              shuffle = True,
-                              pin_memory = True,
-                              num_workers = 1)
+    with torch.device(enc_devid):
+        valid_loader = DataLoader(valid_dataset,
+                                  batch_size = batch_size,
+                                  drop_last = True,
+                                  shuffle = True,
+                                  pin_memory = True,
+                                  num_workers = 1)
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
