@@ -708,12 +708,23 @@ class AAE3d(object):
         Epoch of training corresponding to the saved checkpoint.
         """
 
+        # load checkpoint
         cp = torch.load(path)
-        self.model.encoder.load_state_dict(cp['encoder_state_dict'])
-        self.model.generator.load_state_dict(cp['generator_state_dict'])
-        self.model.discriminator.load_state_dict(cp['discriminator_state_dict'])
+
+        # get model handle
+        handle = self.model
+        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+
+        # load model
+        handle.encoder.load_state_dict(cp['encoder_state_dict'])
+        handle.generator.load_state_dict(cp['generator_state_dict'])
+        handle.discriminator.load_state_dict(cp['discriminator_state_dict'])
+
+        # optimizers
         self.optimizer_eg.load_state_dict(cp['optimizer_eg_state_dict'])
         self.optimizer_d.load_state_dict(cp['optimizer_d_state_dict'])
+        
         return cp['epoch']
         
     def encode(self, x):
