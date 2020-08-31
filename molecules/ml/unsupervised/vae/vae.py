@@ -427,9 +427,17 @@ class VAE:
         Epoch of training corresponding to the saved checkpoint.
         """
 
+        # checkpoint
         cp = torch.load(path)
-        self.model.encoder.load_state_dict(cp['encoder_state_dict'])
-        self.model.decoder.load_state_dict(cp['decoder_state_dict'])
+
+        # model
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.encoder.load_state_dict(cp['encoder_state_dict'])
+        handle.decoder.load_state_dict(cp['decoder_state_dict'])
+        
+        # optimizer
         self.optimizer.load_state_dict(cp['optimizer_state_dict'])
         return cp['epoch']
 

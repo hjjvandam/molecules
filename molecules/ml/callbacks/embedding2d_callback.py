@@ -13,6 +13,8 @@ import numba
 import wandb
 from molecules.utils import open_h5
 
+#concurrent futures
+import concurrent.futures as cf
 
 class Embedding2dCallback(Callback):
 
@@ -34,6 +36,8 @@ class Embedding2dCallback(Callback):
                  path, rmsd_name,
                  projection_type = "2d",
                  sample_interval = 20,
+                 compute_tsne = True,
+                 save_embeddings = False,
                  writer = None,
                  wandb_config = None,
                  mpi_comm = None):
@@ -66,8 +70,15 @@ class Embedding2dCallback(Callback):
         self.out_dir = out_dir
         self.sample_interval = sample_interval
         self.projection_type = projection_type.lower()
+        self.compute_tsne = compute_tsne
+        self.save_embeddings = save_embeddings
         self.writer = writer
         self.wandb_config = wandb_config
+
+        # we need that for async processing
+        self.executor = cf.ThreadPoolExecutor(max_workers = 3)
+        self.future_tsne = None
+        self.future_io = None
 
         # needed for init plot
         if self.is_eval_node:
@@ -139,11 +150,30 @@ class Embedding2dCallback(Callback):
         
         # t-sne plots
         if self.is_eval_node and (self.sample_interval > 0):
-            self.tsne_plot(epoch, embeddings, rmsd, logs)
+            # wait for the old stuff to finish
+            if self.future_tsne is not None:
+                self.future_tsne.result()
+            if self.future_io is not None:
+                self.future_io.result()
+
+            # submit into process pool
+            if self.compute_tsne:
+                self.future_tsne = self.executor.submit(self.tsne_plot, epoch, embeddings, rmsd, logs)
+                #self.tsne_plot(epoch, embeddings, rmsd, logs)
+
+            if self.save_embeddings:
+                self.future_io = self.executor.submit(self.embeddings_save, epoch, embeddings, rmsd, logs)
+                
 
         # we need to wait for it
         if (self.comm is not None):
             self.comm.barrier()
+
+    def embeddings_save(self, epoch, embeddings, rmsd, logs):
+        time_stamp = time.strftime(f'embeddings-raw-step-{logs["global_step"]}-%Y%m%d-%H%M%S.h5')
+        with open_h5(os.path.join(self.out_dir, time_stamp), 'w', swmr = False) as f:
+            f["embeddings"] = embeddings[...]
+            f["rmsd"] = rmsd[...]
 
         
     def tsne_plot(self, epoch, embeddings, rmsd, logs):

@@ -266,6 +266,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                                                rmsd_name = 'rmsd',
                                                projection_type = '3d_project',
                                                sample_interval = sample_interval,
+                                               compute_tsne = True,
+                                               save_embeddings = True,
                                                writer = writer,
                                                wandb_config = wandb_config,
                                                mpi_comm = comm)
