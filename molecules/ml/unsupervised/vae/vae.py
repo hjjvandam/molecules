@@ -433,7 +433,7 @@ class VAE:
         """
 
         # checkpoint
-        cp = torch.load(path)
+        cp = torch.load(path, map_location='cpu')
         
         # model
         handle = self.model
