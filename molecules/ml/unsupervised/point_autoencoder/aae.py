@@ -512,7 +512,12 @@ class AAE3d(object):
         """
         
         if callbacks:
-            logs = {'model': self.model, 'optimizer_d': self.optimizer_d, 'optimizer_eg': self.optimizer_eg}
+            handle = self.model
+            if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+                handle = handle.module
+            logs = {'model': handle, 'optimizer_d': self.optimizer_d, 'optimizer_eg': self.optimizer_eg}
+            if dist.is_initialized():
+                logs["comm_size"] = self.comm_size
         else:
             logs = {}
 
@@ -709,7 +714,7 @@ class AAE3d(object):
         """
 
         # load checkpoint
-        cp = torch.load(path)
+        cp = torch.load(path, map_location='cpu')
 
         # get model handle
         handle = self.model
@@ -741,7 +746,10 @@ class AAE3d(object):
         -------
         torch.Tensor of embeddings of shape (batch-size, latent_dim)
         """
-        return self.model.encode(x)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.encode(x)
 
     def decode(self, embedding):
         """
@@ -757,8 +765,10 @@ class AAE3d(object):
         -------
         torch.Tensor of generated matrices of shape (batch-size, num_points, 3)
         """
-
-        return self.model.generate(embedding)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.generate(embedding)
         
     def save_weights(self, enc_path, gen_path, disc_path):
         """
@@ -775,8 +785,10 @@ class AAE3d(object):
         disc_path: str
             Path to save the discriminator weights to.
         """
-
-        self.model.save_weights(enc_path, gen_path, disc_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.save_weights(enc_path, gen_path, disc_path)
 
     def load_weights(self, enc_path, gen_path, disc_path):
         """
@@ -793,4 +805,7 @@ class AAE3d(object):
         disc_path: str
             Path to load the discriminator weights from.
         """
-        self.model.load_weights(enc_path, gen_path, disc_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.load_weights(enc_path, gen_path, disc_path)
