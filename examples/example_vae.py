@@ -302,6 +302,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     # │   ├── loss.json
     # │   ├── model-hparams.json
     # │   └── optimizer-hparams.json
+    # |   |__ wandb_cache/
 
 if __name__ == '__main__':
     main()

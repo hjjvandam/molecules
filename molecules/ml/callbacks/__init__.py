@@ -1,6 +1,6 @@
 from .loss_callback import LossCallback
 from .checkpoint_callback import CheckpointCallback
 from .embedding2d_callback import Embedding2dCallback
-from .embedding3d_callback import Embedding3dCallback
+from .embedding_callback import EmbeddingCallback
 from .pointcloud_callback import PointCloud3dCallback
 from .latspace_statistics_callback import LatspaceStatisticsCallback
