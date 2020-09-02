@@ -4,7 +4,7 @@ from molecules.plot import plot_tsne
 import concurrent.futures as cf
 
 
-class EmbeddingCallback(Callback):
+class TSNEPlotCallback(Callback):
     """
     Saves t-SNE embedding plots.
     """
@@ -26,15 +26,11 @@ class EmbeddingCallback(Callback):
         wandb_config : wandb configuration file
         mpi_comm: mpi communicator
         """
-        if interval < 1:
-            raise ValueError('Plot interval must be int greater than 0')
-
-        super().__init__(mpi_comm)
+        super().__init__(interval, mpi_comm)
 
         if self.is_eval_node:
             os.makedirs(self.out_dir, exist_ok=True)
 
-            self.interval = interval
             self.tsne_kwargs = {
                 'out_dir': out_dir,
                 'wandb_config': wandb_config, 
@@ -58,9 +54,8 @@ class EmbeddingCallback(Callback):
                 #       and raise an exception if it fails
                 cf.wait(self.future_tsne, timeout=None)
 
-            # TODO: get embeddings_path from logs
             self.future_tsne = self.executor.submit(plot_tsne,
-                                                    embedding_path=embedding_path,
+                                                    embeddings_path=logs['embeddings_path'],
                                                     global_step=logs['global_step'],
                                                     epoch=epoch,
                                                     **self.tsne_kwargs)

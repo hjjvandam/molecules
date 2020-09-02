@@ -18,7 +18,7 @@ from mpi4py import MPI
 from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
 from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
-                                    Embedding2dCallback, Embedding3dCallback)
+                                    SaveEmbeddingsCallback, TSNEPlotCallback)
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
 
 @click.command()
@@ -66,6 +66,10 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
+@click.option('-I', '--interval', default=1, type=int,
+              help='Saves model checkpoints, embedddings, tsne plots every ' \
+                   "interval'th point")
+
 @click.option('-S', '--sample_interval', default=20, type=int,
               help="For embedding plots. Plots every sample_interval'th point")
 
@@ -82,7 +86,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
               help='Enable distributed training')
 
 def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
-         decoder_gpu, epochs, batch_size, model_type, latent_dim,
+         decoder_gpu, epochs, batch_size, model_type, latent_dim, interval,
          sample_interval, wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
@@ -241,38 +245,27 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         wandb.watch(vae.model)
     
     # Optional callbacks
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter() if (comm_rank == 0) else None
     loss_callback = LossCallback(join(model_path, 'loss.json'),
-                                 writer = writer,
-                                 wandb_config = wandb_config,
-                                 mpi_comm = comm)
+                                 wandb_config=wandb_config,
+                                 mpi_comm=comm)
     
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
-                                             mpi_comm = comm)
-    
-   # embedding3d_callback = Embedding3dCallback(input_path,
-   #                                            join(model_path, 'embedddings'),
-   #                                            input_shape,
-   #                                            cm_format = cm_format,
-   #                                            writer = writer,
-   #                                            sample_interval = sample_interval,
-   #                                            batch_size = batch_size,
-   #                                            mpi_comm = comm,
-   #                                            device = torch.device(f'cuda:{encoder_gpu}'))
+                                             mpi_comm=comm)
 
-    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
-                                               path = input_path,
-                                               rmsd_name = 'rmsd',
-                                               projection_type = '3d_project',
-                                               sample_interval = sample_interval,
-                                               writer = writer,
-                                               wandb_config = wandb_config,
-                                               mpi_comm = comm)
+    save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
+                                           interval=interval,
+                                           sample_interval=sample_interval,
+                                           mpi_comm=comm)
+
+    # TSNEPlotCallback requires SaveEmbeddingsCallback to run first
+    embedding_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
+                                          projection_type='3d',
+                                          interval=interval,
+                                          wandb_config=wandb_config,
+                                          mpi_comm=comm)
 
     # Train model with callbacks
-    callbacks = [loss_callback, checkpoint_callback,
-                 embedding2d_callback] #, embedding3d_callback]
+    callbacks = [loss_callback, checkpoint_callback, save_callback, tsne_callback]
 
     # create model
     vae.train(train_loader, valid_loader, epochs,

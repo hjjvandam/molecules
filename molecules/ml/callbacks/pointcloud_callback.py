@@ -50,7 +50,6 @@ class PointCloud3dCallback(Callback):
     """
     def __init__(self, out_dir,
                  sample_interval = 20,
-                 writer = None,
                  wandb_config = None):
         """
         Parameters
@@ -60,18 +59,13 @@ class PointCloud3dCallback(Callback):
 
         sample_interval : int
             Plots every sample_interval'th point in the data set
-
-        writer : torch.utils.tensorboard.SummaryWriter
         """
         super(PointCloud3dCallback).__init__()
 
         os.makedirs(out_dir, exist_ok=True)
 
-        # Open h5 file. Python's garbage collector closes the
-        # file when class is destructed.
         self.out_dir = out_dir
         self.sample_interval = sample_interval
-        self.writer = writer
         self.wandb_config = wandb_config
 
     def on_epoch_end(self, epoch, logs):

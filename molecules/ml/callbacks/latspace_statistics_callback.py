@@ -13,24 +13,11 @@ import wandb
 
 
 class LatspaceStatisticsCallback(Callback):
-
-    # Helper function. Returns tuple of min and max of 1d np.ndarray.
-    @staticmethod
-    @numba.jit
-    def minmax(x):
-        max_, min_ = x[0], x[0]
-        for i in x[1:]:
-            if i > max_:
-                max_ = i
-            elif i < min_:
-                min_ = i
-        return min_, max_
     """
     Saves AE projections for mu and std of random samples.
     """
     def __init__(self, out_dir,
                  sample_interval = 20,
-                 writer = None,
                  wandb_config = None,
                  mpi_comm = None):
         """
@@ -40,20 +27,15 @@ class LatspaceStatisticsCallback(Callback):
             Directory to store output plots.
         sample_interval : int
             Plots every sample_interval'th point in the data set
-        writer : torch.utils.tensorboard.SummaryWriter
         wandb_config : wandb configuration file
         """
-        self.comm = mpi_comm
-        self.is_eval_node = True
-        if (self.comm is not None) and (self.comm.Get_rank() != 0):
-            self.is_eval_node = False
+        super().__init__(mpi_comm=mpi_comm)
             
         if self.is_eval_node:
             os.makedirs(out_dir, exist_ok=True)
 
         self.out_dir = out_dir
         self.sample_interval = sample_interval
-        self.writer = writer
         self.wandb_config = wandb_config
         
     def on_validation_begin(self, epoch, logs):
@@ -152,10 +134,6 @@ class LatspaceStatisticsCallback(Callback):
         # save figure
         time_stamp = time.strftime(f'latspace-step-{logs["global_step"]}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(self.out_dir, time_stamp), dpi=300)
-
-        # summary writer
-        if self.writer is not None:
-            self.writer.add_figure('epoch latent space distributions', fig, epoch)
 
         # wandb logging
         if self.wandb_config is not None:

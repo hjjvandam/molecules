@@ -18,9 +18,9 @@ def pca(embeddings, dim=50):
         #       https://pytorch.org/docs/master/generated/torch.pca_lowrank.html
     return embeddings
 
-def _load_data(embedding_path, colors, embeddings_dset='embeddings'):
+def _load_data(embeddings_path, colors, embeddings_dset='embeddings'):
     color_arrays = {}
-    with open_h5(embedding_path) as f:
+    with open_h5(embeddings_path) as f:
         # Load embeddings from h5 file
         embeddings = f[embeddings_dset][...]
         # May contain rmsd, fnc
@@ -29,7 +29,7 @@ def _load_data(embedding_path, colors, embeddings_dset='embeddings'):
 
     return embeddings, color_arrays
 
-def plot_tsne(embedding_path, out_dir='./', colors=['rmsd'],
+def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
               pca=True, projection_type='2d',
               target_perplexity=30,
               perplexities=[5, 30, 50, 100, 200],
@@ -37,7 +37,7 @@ def plot_tsne(embedding_path, out_dir='./', colors=['rmsd'],
               wandb_config=None,
               global_step=0, epoch=1):
     
-    embeddings, color_arrays = _load_data(embedding_path, colors)
+    embeddings, color_arrays = _load_data(embeddings_path, colors)
 
     if pca and embeddings.shape[1] > pca_dim:
         embeddings = pca(embeddings, pca_dim)
@@ -150,13 +150,13 @@ def plot_tsne(embedding_path, out_dir='./', colors=['rmsd'],
         plt.close(fig)
 
 
-def plot_tsne_publication(embedding_path, out_dir='./', colors=['rmsd'],
+def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
                           pca=False, wandb_config=None,
                           tensorboard_writer=None,
                           global_step=0, epoch=1):
     """Generate publication quality 3d t-SNE plot."""
 
-    embeddings, color_arrays = _load_data(embedding_path, colors)
+    embeddings, color_arrays = _load_data(embeddings_path, colors)
 
     if pca and embeddings.shape[1] > 50:
         embeddings = pca(embeddings)

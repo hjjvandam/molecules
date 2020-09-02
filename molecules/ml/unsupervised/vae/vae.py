@@ -266,7 +266,7 @@ class VAE:
         """
 
         if callbacks:
-            logs = {'model': self.model, 'optimizer': self.optimizer}
+            logs = {'model': self.model, 'optimizer': self.optimizer}                    
         else:
             logs = {}
 
@@ -396,8 +396,7 @@ class VAE:
                                                 mu, logvar, self.lambda_rec).item() / len(data)
 
                 for callback in callbacks:
-                    callback.on_validation_batch_end(logs,
-                                                     input = data.detach(),
+                    callback.on_validation_batch_end(epoch, batch_idx, logs,
                                                      rmsd = rmsd.detach(),
                                                      mu = mu.detach())
                 
