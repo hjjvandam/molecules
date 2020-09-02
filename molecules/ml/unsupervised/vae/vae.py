@@ -266,7 +266,7 @@ class VAE:
         """
 
         if callbacks:
-            logs = {'model': self.model, 'optimizer': self.optimizer}                    
+            logs = {'model': self.model, 'optimizer': self.optimizer}
         else:
             logs = {}
 
