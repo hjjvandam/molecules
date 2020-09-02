@@ -266,7 +266,12 @@ class VAE:
         """
 
         if callbacks:
-            logs = {'model': self.model, 'optimizer': self.optimizer}
+            handle = self.model
+            if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+                handle = handle.module
+            logs = {'model': handle, 'optimizer': self.optimizer}
+            if dist.is_initialized():
+                logs["comm_size"] = self.comm_size
         else:
             logs = {}
 
@@ -426,9 +431,17 @@ class VAE:
         Epoch of training corresponding to the saved checkpoint.
         """
 
-        cp = torch.load(path)
-        self.model.encoder.load_state_dict(cp['encoder_state_dict'])
-        self.model.decoder.load_state_dict(cp['decoder_state_dict'])
+        # checkpoint
+        cp = torch.load(path, map_location='cpu')
+        
+        # model
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.encoder.load_state_dict(cp['encoder_state_dict'])
+        handle.decoder.load_state_dict(cp['decoder_state_dict'])
+        
+        # optimizer
         self.optimizer.load_state_dict(cp['optimizer_state_dict'])
         return cp['epoch']
 
@@ -447,8 +460,10 @@ class VAE:
         torch.Tensor of embeddings of shape (batch-size, latent_dim)
 
         """
-
-        return self.model.encode(x)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.encode(x)
 
     def decode(self, embedding):
         """
@@ -464,8 +479,10 @@ class VAE:
         -------
         torch.Tensor of generated matrices of shape (batch-size, input_shape)
         """
-
-        return self.model.decode(embedding)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.decode(embedding)
 
     def save_weights(self, enc_path, dec_path):
         """
@@ -479,8 +496,10 @@ class VAE:
         dec_path : str
             Path to save the decoder weights.
         """
-
-        self.model.save_weights(enc_path, dec_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.save_weights(enc_path, dec_path)
 
     def load_weights(self, enc_path, dec_path):
         """
@@ -494,5 +513,7 @@ class VAE:
         dec_path : str
             Path to save the decoder weights.
         """
-
-        self.model.load_weights(enc_path, dec_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.load_weights(enc_path, dec_path)

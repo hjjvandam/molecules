@@ -512,7 +512,12 @@ class AAE3d(object):
         """
         
         if callbacks:
-            logs = {'model': self.model, 'optimizer_d': self.optimizer_d, 'optimizer_eg': self.optimizer_eg}
+            handle = self.model
+            if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+                handle = handle.module
+            logs = {'model': handle, 'optimizer_d': self.optimizer_d, 'optimizer_eg': self.optimizer_eg}
+            if dist.is_initialized():
+                logs["comm_size"] = self.comm_size
         else:
             logs = {}
 
@@ -708,12 +713,23 @@ class AAE3d(object):
         Epoch of training corresponding to the saved checkpoint.
         """
 
-        cp = torch.load(path)
-        self.model.encoder.load_state_dict(cp['encoder_state_dict'])
-        self.model.generator.load_state_dict(cp['generator_state_dict'])
-        self.model.discriminator.load_state_dict(cp['discriminator_state_dict'])
+        # load checkpoint
+        cp = torch.load(path, map_location='cpu')
+
+        # get model handle
+        handle = self.model
+        if isinstance(self.model, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+
+        # load model
+        handle.encoder.load_state_dict(cp['encoder_state_dict'])
+        handle.generator.load_state_dict(cp['generator_state_dict'])
+        handle.discriminator.load_state_dict(cp['discriminator_state_dict'])
+
+        # optimizers
         self.optimizer_eg.load_state_dict(cp['optimizer_eg_state_dict'])
         self.optimizer_d.load_state_dict(cp['optimizer_d_state_dict'])
+        
         return cp['epoch']
         
     def encode(self, x):
@@ -730,7 +746,10 @@ class AAE3d(object):
         -------
         torch.Tensor of embeddings of shape (batch-size, latent_dim)
         """
-        return self.model.encode(x)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.encode(x)
 
     def decode(self, embedding):
         """
@@ -746,8 +765,10 @@ class AAE3d(object):
         -------
         torch.Tensor of generated matrices of shape (batch-size, num_points, 3)
         """
-
-        return self.model.generate(embedding)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.generate(embedding)
         
     def save_weights(self, enc_path, gen_path, disc_path):
         """
@@ -764,8 +785,10 @@ class AAE3d(object):
         disc_path: str
             Path to save the discriminator weights to.
         """
-
-        self.model.save_weights(enc_path, gen_path, disc_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.save_weights(enc_path, gen_path, disc_path)
 
     def load_weights(self, enc_path, gen_path, disc_path):
         """
@@ -782,4 +805,7 @@ class AAE3d(object):
         disc_path: str
             Path to load the discriminator weights from.
         """
-        self.model.load_weights(enc_path, gen_path, disc_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.load_weights(enc_path, gen_path, disc_path)
