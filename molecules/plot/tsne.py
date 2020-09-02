@@ -151,15 +151,14 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
 
 
 def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
-                          pca=False, wandb_config=None,
-                          tensorboard_writer=None,
+                          pca=False, pca_dim=50, wandb_config=None,
                           global_step=0, epoch=1):
     """Generate publication quality 3d t-SNE plot."""
 
     embeddings, color_arrays = _load_data(embeddings_path, colors)
 
     if pca and embeddings.shape[1] > 50:
-        embeddings = pca(embeddings)
+        embeddings = pca(embeddings, pca_dim)
 
     # Outputs 3D embeddings using all available processors
     tsne = TSNE(n_components=3, n_jobs=-1)
@@ -201,9 +200,6 @@ def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
         time_stamp = time.strftime(f'3d-embeddings-{color_name}-step-{global_step}-%Y%m%d-%H%M%S.png')
         plt.savefig(os.path.join(out_dir, time_stamp), dpi=300)
 
-        if tensorboard_writer is not None:
-            tensorboard_writer.add_figure('epoch 3D t-SNE embeddings', fig, global_step)
-
         if wandb_config is not None:
             img = Image.open(os.path.join(out_dir, time_stamp))
             wandb.log({'step 3D t-SNE embeddings': [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
@@ -226,5 +222,5 @@ if __name__ == '__main__':
     #     h5_file.create_dataset('fnc', data=fnc, **scaler_kwargs)
 
 
-    plot_tsne('test_embed.h5', './tmpdir', '3d', pca=False, colors=['fnc'])
+    #plot_tsne('test_embed.h5', './tmpdir', '3d', pca=False, colors=['fnc'])
     #plot_tsne('test_embed.h5', './tmpdir', '2d', pca=False, colors=['rmsd', 'fnc'], projection_type='3d_project')

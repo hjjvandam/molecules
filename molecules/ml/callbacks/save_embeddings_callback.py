@@ -1,4 +1,5 @@
 import os
+import time
 import numpy as np
 from .callback import Callback
 from molecules.utils import open_h5

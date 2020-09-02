@@ -29,7 +29,7 @@ class TSNEPlotCallback(Callback):
         super().__init__(interval, mpi_comm)
 
         if self.is_eval_node:
-            os.makedirs(self.out_dir, exist_ok=True)
+            os.makedirs(out_dir, exist_ok=True)
 
             self.tsne_kwargs = {
                 'out_dir': out_dir,
@@ -50,9 +50,7 @@ class TSNEPlotCallback(Callback):
 
             # Wait for the old stuff to finish
             if self.future_tsne is not None:
-                # TODO: may need to add timeout if there are errors
-                #       and raise an exception if it fails
-                cf.wait(self.future_tsne, timeout=None)
+                self.future_tsne.result()
 
             self.future_tsne = self.executor.submit(plot_tsne,
                                                     embeddings_path=logs['embeddings_path'],

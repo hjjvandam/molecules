@@ -66,6 +66,9 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
+@click.option('-sf', '--scale_factor', default=2, type=int,
+              help='Scale factor hparam for resnet VAE')
+
 @click.option('-I', '--interval', default=1, type=int,
               help='Saves model checkpoints, embedddings, tsne plots every ' \
                    "interval'th point")
@@ -86,7 +89,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
               help='Enable distributed training')
 
 def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
-         decoder_gpu, epochs, batch_size, model_type, latent_dim, interval,
+         decoder_gpu, epochs, batch_size, model_type, latent_dim, scale_factor, interval,
          sample_interval, wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
@@ -142,7 +145,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                           'nchars': dim2,
                           'latent_dim': latent_dim,
                           'dec_filters': dim1,
-                          'scale_factor': 4,
+                          'scale_factor': scale_factor,
                           'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
@@ -258,11 +261,12 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                                            mpi_comm=comm)
 
     # TSNEPlotCallback requires SaveEmbeddingsCallback to run first
-    embedding_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
-                                          projection_type='3d',
-                                          interval=interval,
-                                          wandb_config=wandb_config,
-                                          mpi_comm=comm)
+    tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
+                                     projection_type='3d',
+                                     target_perplexity=100,
+                                     interval=interval,
+                                     wandb_config=wandb_config,
+                                     mpi_comm=comm)
 
     # Train model with callbacks
     callbacks = [loss_callback, checkpoint_callback, save_callback, tsne_callback]
