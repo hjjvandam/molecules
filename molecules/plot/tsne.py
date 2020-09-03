@@ -50,7 +50,7 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
     tsne_embeddings = []
     for perplexity in perplexities:
         # Outputs 3D embeddings using all available processors
-        tsne = TSNE(n_components=int(projection_type[0]), n_jobs=-1, perplexity=perplexity)
+        tsne = TSNE(n_components=int(projection_type[0]), n_jobs=4, perplexity=perplexity)
         tsne_embeddings.append(tsne.fit_transform(embeddings))
 
     for color_name, color_arr in color_arrays.items():
@@ -166,7 +166,7 @@ def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
         embeddings = pca(embeddings, pca_dim)
 
     # Outputs 3D embeddings using all available processors
-    tsne = TSNE(n_components=3, n_jobs=-1)
+    tsne = TSNE(n_components=3, n_jobs=4)
 
     embeddings = tsne.fit_transform(embeddings)
 
