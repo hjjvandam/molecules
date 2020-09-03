@@ -17,7 +17,9 @@ from mpi4py import MPI
 # molecules stuff
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import LossCallback, CheckpointCallback, Embedding2dCallback, LatspaceStatisticsCallback
+from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
+                                    SaveEmbeddingsCallback, TSNEPlotCallback,
+                                    LatspaceStatisticsCallback)
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 def parse_dict(ctx, param, value):
@@ -37,7 +39,10 @@ def parse_dict(ctx, param, value):
 @click.option('-dn', '--dataset_name', required=True, type=str,
               help='Name of the dataset in the HDF5 file.')
 
-@click.option('-rn', '--rmsd_name', required=True, type=str,
+@click.option('-rn', '--rmsd_name', default='rmsd', type=str,
+              help='Name of the RMSD data in the HDF5 file.')
+
+@click.option('-fn', '--fnc_name', default='fnc', type=str,
               help='Name of the RMSD data in the HDF5 file.')
 
 @click.option('-o', '--out', 'out_path', required=True,
@@ -82,6 +87,10 @@ def parse_dict(ctx, param, value):
 @click.option('-lw', '--loss_weights', callback=parse_dict,
               help='Loss parameters')
 
+@click.option('-I', '--interval', default=1, type=int,
+              help='Saves model checkpoints, embedddings, tsne plots every ' \
+                   "interval'th point")
+
 @click.option('-S', '--sample_interval', default=20, type=int,
               help="For embedding plots. Plots every sample_interval'th point")
 
@@ -94,12 +103,12 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, dataset_name, rmsd_name,
+def main(input_path, dataset_name, rmsd_name, fnc_name,
          out_path, checkpoint, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
-         loss_weights, sample_interval, local_rank,
+         loss_weights, interval, sample_interval, local_rank,
          wandb_project_name, distributed):
     """Example for training Fs-peptide with AAE3d."""
 
@@ -166,6 +175,7 @@ def main(input_path, dataset_name, rmsd_name,
     train_dataset = PointCloudDataset(input_path,
                                       dataset_name,
                                       rmsd_name,
+                                      fnc_name,
                                       num_points,
                                       num_features,
                                       split = 'train',
@@ -184,6 +194,7 @@ def main(input_path, dataset_name, rmsd_name,
     valid_dataset = PointCloudDataset(input_path,
                                       dataset_name,
                                       rmsd_name,
+                                      fnc_name,
                                       num_points,
                                       num_features,
                                       split = 'valid',
@@ -211,7 +222,7 @@ def main(input_path, dataset_name, rmsd_name,
         wandb.init(project = wandb_project_name,
                    name = model_id,
                    id = model_id,
-                   dir = join(out_path, "wandb_cache"),
+                   dir = model_path,
                    resume = False)
         wandb_config = wandb.config
 
@@ -233,24 +244,26 @@ def main(input_path, dataset_name, rmsd_name,
         wandb.watch(aae.model)
     
     # Optional callbacks
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter() if comm_rank == 0 else None
     loss_callback = LossCallback(join(model_path, 'loss.json'),
-                                 writer = writer,
-                                 wandb_config = wandb_config,
-                                 mpi_comm = comm)
+                                 wandb_config=wandb_config,
+                                 mpi_comm=comm)
     
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
-                                             mpi_comm = comm)
-    
-    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
-                                               path = input_path,
-                                               rmsd_name = rmsd_name,
-                                               projection_type = "3d_project",
-                                               sample_interval = sample_interval,
-                                               writer = writer,
-                                               wandb_config = wandb_config,
-                                               mpi_comm = comm)
+                                             mpi_comm=comm)
+
+    save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
+                                           interval=interval,
+                                           sample_interval=sample_interval,
+                                           mpi_comm=comm)
+
+    # TSNEPlotCallback requires SaveEmbeddingsCallback to run first
+    tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
+                                     projection_type='3d',
+                                     target_perplexity=100,
+                                     interval=interval,
+                                     wandb_config=wandb_config,
+                                     mpi_comm=comm)
+
     
     latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
                                                    sample_interval = sample_interval,
@@ -259,7 +272,8 @@ def main(input_path, dataset_name, rmsd_name,
                                                    mpi_comm = comm)
 
     # Train model with callbacks
-    callbacks = [loss_callback, checkpoint_callback, embedding2d_callback] #, latspace_callback]
+    callbacks = [loss_callback, checkpoint_callback, save_callback,
+                 tsne_callback] #, latspace_callback]
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,

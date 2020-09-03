@@ -1,31 +1,26 @@
 import json
-from .callback import Callback
 import wandb
 import numpy as np
+from .callback import Callback
 
 class LossCallback(Callback):
     
     def __init__(self, path,
-                 writer = None,
-                 wandb_config = None,
-                 mpi_comm = None):
+                 interval=1,
+                 wandb_config=None,
+                 mpi_comm=None):
         """
         Parameters
         ----------
         path : str
             path to save loss history to
-
-        device: torch.Device
-            device needed for reductions
-
-        writer : torch.utils.tensorboard.SummaryWriter
+        interval : int
+            Plots every interval epochs, default is once per epoch.
+        wandb_config : wandb configuration file
+        mpi_comm : mpi communicator for distributed training
         """
-        self.comm = mpi_comm
-        self.is_eval_node = True
-        if (self.comm is not None) and (self.comm.Get_rank() != 0):
-            self.is_eval_node = False
-        
-        self.writer = writer
+        super().__init__(interval, mpi_comm)
+
         self.path = path
         self.wandb_config = wandb_config
         
@@ -36,6 +31,9 @@ class LossCallback(Callback):
 
         
     def on_epoch_end(self, epoch, logs):
+        # Only store loss every self.interval epochs
+        if epoch % self.interval != 0:
+            return
 
         # epochs
         self.epochs.append(epoch)
@@ -54,12 +52,6 @@ class LossCallback(Callback):
                 self.train_losses[lossname].append(logs[lossname])
             else:
                 self.train_losses[lossname] = [logs[lossname]]
-
-            # summary writer
-            if self.writer is not None:
-                self.writer.add_scalar('epoch ' + lossname,
-                                       logs[lossname],
-                                       logs['global_step'])
 
             # wandb
             if self.wandb_config is not None:
@@ -80,12 +72,6 @@ class LossCallback(Callback):
                 self.valid_losses[lossname].append(logs[lossname])
             else:
                 self.valid_losses[lossname] = [logs[lossname]]
-
-            # summary writer
-            if self.writer is not None:
-                self.writer.add_scalar('epoch ' + lossname,
-                                       logs[lossname],
-                                       logs['global_step'])
 
             # wandb
             if self.wandb_config is not None:

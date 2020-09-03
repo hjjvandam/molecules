@@ -5,9 +5,9 @@ from .callback import Callback
 import torch.distributed as dist
 
 class CheckpointCallback(Callback):
-    def __init__(self, interval=0,
+    def __init__(self, interval=1,
                  out_dir=os.path.join('.', 'checkpoints'),
-                 mpi_comm = None):
+                 mpi_comm=None):
         """
         Checkpoint interface for saving dictionary objects to disk
         during training. Typically used to save model state_dict
@@ -19,40 +19,25 @@ class CheckpointCallback(Callback):
         out_dir : str
             Directory to store checkpoint files.
             Files are named 'epoch-{e}-%Y%m%d-%H%M%S.pt'
-
         interval : int
-            Checkpoints model every interval batches, default is once per epoch.
+            Plots every interval epochs, default is once per epoch.
         """
-
-        if interval < 0:
-            raise ValueError('Checkpoint interval must be non-negative')
-
-        self.comm = mpi_comm
-        self.is_eval_node = True
-        if (self.comm is not None) and (self.comm.Get_rank() != 0):
-            self.is_eval_node = False
+        super().__init__(interval, mpi_comm)
 
         if self.is_eval_node:
             os.makedirs(out_dir, exist_ok=True)
 
-        self.interval = interval
         self.out_dir = out_dir
 
-    def on_batch_end(self, batch, epoch, logs):
-        if self.is_eval_node and self.interval and (batch % self.interval == 0):
-            self._save(epoch, logs)
-
     def on_epoch_end(self, epoch, logs):
-        if self.is_eval_node and not self.interval:
+        if self.is_eval_node and epoch % self.interval == 0:
             self._save(epoch, logs)
 
     def _save(self, epoch, logs):
         """Saves optimizer state and encoder/decoder weights."""
 
         # create new dictionary
-        checkpoint = {
-            'epoch': epoch
-            }
+        checkpoint = {'epoch': epoch}
 
         # optimizer
         if "optimizer" in logs:

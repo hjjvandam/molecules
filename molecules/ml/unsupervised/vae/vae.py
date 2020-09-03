@@ -321,7 +321,7 @@ class VAE:
         train_loss = 0.
         for batch_idx, token in enumerate(train_loader):
 
-            data, rmsd, index = token
+            data, rmsd, fnc, index = token
             data = data.to(self.device[0])
             
             if self.verbose:
@@ -392,7 +392,7 @@ class VAE:
 
         with torch.no_grad():
             for batch_idx, token in enumerate(valid_loader):
-                data, rmsd, index = token
+                data, rmsd, fnc, index = token
                 data = data.to(self.device[0])
                 
                 with amp.autocast(self.enable_amp):
@@ -401,10 +401,10 @@ class VAE:
                                                 mu, logvar, self.lambda_rec).item() / len(data)
 
                 for callback in callbacks:
-                    callback.on_validation_batch_end(logs,
-                                                     input = data.detach(),
-                                                     rmsd = rmsd.detach(),
-                                                     mu = mu.detach())
+                    callback.on_validation_batch_end(epoch, batch_idx, logs,
+                                                     rmsd=rmsd.detach(),
+                                                     fnc=fnc.detach(),
+                                                     mu=mu.detach())
                 
         valid_loss /= float(batch_idx + 1)
 

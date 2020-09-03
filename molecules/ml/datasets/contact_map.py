@@ -2,14 +2,13 @@ import torch
 import numpy as np
 from torch.utils.data import Dataset
 from molecules.utils import open_h5
-import time
 
 class ContactMapDataset(Dataset):
     """
     PyTorch Dataset class to load contact matrix data. Uses HDF5
     files and only reads into memory what is necessary for one batch.
     """
-    def __init__(self, path, dataset_name, rmsd_name,
+    def __init__(self, path, dataset_name, rmsd_name, fnc_name,
                  shape, split_ptc=0.8, split='train', seed=333,
                  cm_format='sparse-concat'):
         """
@@ -23,6 +22,9 @@ class ContactMapDataset(Dataset):
 
         rmsd_name : str
             Path to rmsd data in HDF5 file.
+
+        fnc_name : str
+            Path to fraction of native contact data in HDF5 file.
 
         shape : tuple
             Shape of contact matrices (H, W), may be (1, H, W).
@@ -56,6 +58,7 @@ class ContactMapDataset(Dataset):
         self.file_path = path
         self.dataset_name = dataset_name
         self.rmsd_name = rmsd_name
+        self.fnc_name = fnc_name
         self.cm_format = cm_format
         self.shape = shape
         
@@ -85,6 +88,7 @@ class ContactMapDataset(Dataset):
     def _init_file(self):
         self.h5_file = open_h5(self.file_path, 'r', libver = 'latest', swmr = False)
 
+
     def __len__(self):
         return len(self.indices)
 
@@ -101,7 +105,9 @@ class ContactMapDataset(Dataset):
                 self.dset = self.h5_file[self.dataset_name]
             else:
                 self.dset = self.h5_file[self.dataset_name]
+            # Load scalar dsets
             self.rmsd_dset = self.h5_file[self.rmsd_name]
+            self.fnc_dset = self.h5_file[self.fnc_name]
             self.initialized = True
 
         # get real index
@@ -127,6 +133,7 @@ class ContactMapDataset(Dataset):
                                             self.shape[-2:]).to_dense()
         
         # these are not dependent on the data format
-        rmsd = self.rmsd_dset[index]
+        rmsd = torch.tensor(self.rmsd_dset[index], requires_grad=False)
+        fnc = torch.tensor(self.fnc_dset[index], requires_grad=False)
 
-        return data, torch.tensor(rmsd, requires_grad=False), index
+        return data, rmsd, fnc, index

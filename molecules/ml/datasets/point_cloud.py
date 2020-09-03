@@ -10,7 +10,7 @@ class PointCloudDataset(Dataset):
     files and only reads into memory what is necessary for one batch.
     """
     def __init__(self, path, dataset_name, rmsd_name,
-                 num_points, num_features,
+                 fnc_name, num_points, num_features,
                  split_ptc=0.8, split = 'train', seed = 333,
                  normalize = 'box', cms_transform = False):
         """
@@ -24,6 +24,9 @@ class PointCloudDataset(Dataset):
 
         rmsd_name : str
             Name of the RMSD in the HDF5 file.  
+
+        fnc_name : str
+            Name of the fraction of native contact dset in the HDF5 file.
 
         num_points : int
             Number of points per sample. Should be smaller or equal than the total number of points.
@@ -49,6 +52,7 @@ class PointCloudDataset(Dataset):
         self.file_path = path
         self.dataset_name = dataset_name
         self.rmsd_name = rmsd_name
+        self.fnc_name = fnc_name
         self.num_points = num_points
         self.num_features = num_features
         self.normalize = normalize
@@ -110,6 +114,7 @@ class PointCloudDataset(Dataset):
             self.h5_file = open_h5(self.file_path, swmr = False)
             self.dset = self.h5_file[self.dataset_name]
             self.rmsd = self.h5_file[self.rmsd_name]
+            self.fnc = self.h5_file[self.fnc_name]
             self.init = True
 
         # translate index
@@ -137,7 +142,7 @@ class PointCloudDataset(Dataset):
             
         # normalize
         result = (self.token[0, ...] - self.bias) * self.scale
-        rmsd = self.rmsd[index]
-
-        return torch.tensor(result, requires_grad = False), torch.tensor(rmsd, requires_grad = False), index
+        rmsd = torch.tensor(self.rmsd[index], requires_grad=False)
+        fnc = torch.tensor(self.fnc[index], requires_grad=False)
+        return torch.tensor(result, requires_grad = False), rmsd, fnc, index
 
