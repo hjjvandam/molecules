@@ -223,6 +223,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
         wandb.init(project = wandb_project_name,
                    name = model_id,
                    id = model_id,
+                   dir = model_path,
                    resume = False)
         wandb_config = wandb.config
 

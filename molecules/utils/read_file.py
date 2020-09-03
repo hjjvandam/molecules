@@ -1,6 +1,6 @@
 import h5py
 
-def open_h5(h5_file, mode = 'r', libver = 'latest', swmr = False, **kwargs):
+def open_h5(h5_file, mode = 'r', libver='latest', swmr=False, **kwargs):
     """
     Helper function for opening h5 file in context manager
 

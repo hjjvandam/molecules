@@ -105,7 +105,7 @@ class SaveEmbeddingsCallback(Callback):
         logs['embeddings_path'] = embeddings_path
 
         # Write embedding data to disk
-        with open_h5(embeddings_path, 'w', swmr=False) as f:
+        with open_h5(embeddings_path, 'w', libver='latest', swmr=False) as f:
             f['embeddings'] = embeddings[...]
             f['rmsd'] = rmsd[...]
             f['fnc'] = fnc[...]

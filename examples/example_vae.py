@@ -223,6 +223,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
 
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
+    os.makedirs(model_path, exist_ok=True)
 
     # do we want wandb
     wandb_config = None
@@ -231,6 +232,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         wandb.init(project = wandb_project_name,
                    name = model_id,
                    id = model_id,
+                   dir = model_path,
                    resume = False)
         wandb_config = wandb.config
         

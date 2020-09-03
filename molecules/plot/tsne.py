@@ -20,7 +20,7 @@ def pca(embeddings, dim=50):
 
 def _load_data(embeddings_path, colors, embeddings_dset='embeddings'):
     color_arrays = {}
-    with open_h5(embeddings_path) as f:
+    with open_h5(embeddings_path, libver='latest', swmr=False) as f:
         # Load embeddings from h5 file
         embeddings = f[embeddings_dset][...]
         # May contain rmsd, fnc
@@ -207,7 +207,7 @@ def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
 
         if wandb_config is not None:
             img = Image.open(os.path.join(out_dir, time_stamp))
-            wandb.log({f'3D t-SNE embeddings {color_name} paint':
+            wandb.log({f'3D xyz t-SNE embeddings {color_name} paint':
                 [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
 
         ax.clear()
