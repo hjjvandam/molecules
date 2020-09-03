@@ -215,6 +215,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     
     # For ease of training multiple models
     model_path = join(out_path, f'model-{model_id}')
+    os.makedirs(model_path, exist_ok=True)
 
     # do we want wandb
     wandb_config = None
