@@ -9,7 +9,7 @@ class TSNEPlotCallback(Callback):
     Saves t-SNE embedding plots.
     """
     def __init__(self, out_dir,
-                 interval=1, colors=['rmsd'],
+                 interval=1, colors=['rmsd', 'fnc'],
                  projection_type='2d',
                  target_perplexity=30,
                  perplexities=[5, 30, 50, 100, 200],
@@ -33,7 +33,8 @@ class TSNEPlotCallback(Callback):
 
             self.tsne_kwargs = {
                 'out_dir': out_dir,
-                'wandb_config': wandb_config, 
+                'wandb_config': wandb_config,
+                'colors': colors,
                 'projection_type': projection_type,
                 'target_perplexity': target_perplexity,
                 'perplexities': perplexities,

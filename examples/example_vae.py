@@ -176,8 +176,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      'contact_map',
-                                      'rmsd',
+                                      'contact_maps',
+                                      'rmsd', 'fnc',
                                       input_shape,
                                       split='train',
                                       cm_format=cm_format)
@@ -197,8 +197,8 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      'contact_map',
-                                      'rmsd',
+                                      'contact_maps',
+                                      'rmsd', 'fnc',
                                       input_shape,
                                       split='valid',
                                       cm_format=cm_format)
@@ -264,6 +264,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
                                      projection_type='3d',
                                      target_perplexity=100,
+                                     colors=['rmsd', 'fnc'],
                                      interval=interval,
                                      wandb_config=wandb_config,
                                      mpi_comm=comm)

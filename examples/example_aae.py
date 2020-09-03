@@ -39,7 +39,10 @@ def parse_dict(ctx, param, value):
 @click.option('-dn', '--dataset_name', required=True, type=str,
               help='Name of the dataset in the HDF5 file.')
 
-@click.option('-rn', '--rmsd_name', required=True, type=str,
+@click.option('-rn', '--rmsd_name', default='rmsd', type=str,
+              help='Name of the RMSD data in the HDF5 file.')
+
+@click.option('-fn', '--fnc_name', default='fnc', type=str,
               help='Name of the RMSD data in the HDF5 file.')
 
 @click.option('-o', '--out', 'out_path', required=True,
@@ -100,7 +103,7 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, dataset_name, rmsd_name,
+def main(input_path, dataset_name, rmsd_name, fnc_name,
          out_path, checkpoint, model_id,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
@@ -173,6 +176,7 @@ def main(input_path, dataset_name, rmsd_name,
     train_dataset = PointCloudDataset(input_path,
                                       dataset_name,
                                       rmsd_name,
+                                      fnc_name,
                                       num_points,
                                       num_features,
                                       split = 'train',
@@ -191,6 +195,7 @@ def main(input_path, dataset_name, rmsd_name,
     valid_dataset = PointCloudDataset(input_path,
                                       dataset_name,
                                       rmsd_name,
+                                      fnc_name,
                                       num_points,
                                       num_features,
                                       split = 'valid',

@@ -38,14 +38,16 @@ class SaveEmbeddingsCallback(Callback):
         self.sample_counter = 0
         self.embeddings = []
         self.rmsd = []
+        self.fnc = []
         
         
-    def on_validation_batch_end(self, batch, epoch, logs, mu=None, rmsd=None, **kwargs):
+    def on_validation_batch_end(self, batch, epoch, logs, mu=None,
+                                rmsd=None, fnc=None, **kwargs):
         if epoch % self.interval != 0:
             return
         if self.sample_interval == 0:
             return
-        if (mu is None) or (rmsd is None):
+        if (mu is None) or (rmsd is None) or (fnc is None):
             return
         
         # decide what to store
@@ -54,6 +56,7 @@ class SaveEmbeddingsCallback(Callback):
                 # use a singleton slice to keep dimensions intact
                 self.embeddings.append(mu[idx:idx+1].detach().cpu().numpy())
                 self.rmsd.append(rmsd[idx:idx+1].detach().cpu().numpy())
+                self.fnc.append(fnc[idx:idx+1].detach().cpu().numpy())
 
         # increase sample counter
         self.sample_counter += len(mu)
@@ -63,36 +66,39 @@ class SaveEmbeddingsCallback(Callback):
         if epoch % self.interval != 0:
             return
         # if the sample interval was too large, we should warn here and return
-        if not self.embeddings or not self.rmsd:
+        if not self.embeddings or not self.rmsd or not self.fnc:
             print('Warning, not enough samples collected for tSNE, \
                   try to reduce sampling interval')
             return
 
-        # prepare plot data 
+        # prepare plot data
         embeddings = np.concatenate(self.embeddings, axis=0).astype(np.float32)
         rmsd = np.concatenate(self.rmsd, axis=0).astype(np.float32)
+        fnc = np.concatenate(self.fnc, axis=0).astype(np.float32)
 
         # communicate if necessary
         if self.comm is not None:
             # gather data
             embeddings_gather = self.comm.gather(embeddings, root=0)
             rmsd_gather = self.comm.gather(rmsd, root=0)
+            fnc_gather = self.comm.gather(fnc, root=0)
 
             # concat
             if self.is_eval_node:
                 embeddings = np.concatenate(embeddings_gather, axis=0)
                 rmsd = np.concatenate(rmsd_gather, axis=0)
+                fnc = np.concatenate(fnc_gather, axis=0)
         
         # Save embeddings to disk
         if self.is_eval_node and (self.sample_interval > 0):
-            self.save_embeddings(epoch, embeddings, rmsd, logs)
+            self.save_embeddings(epoch, embeddings, rmsd, fnc, logs)
 
         # All other nodes wait for node 0 to save
         if self.comm is not None:
             self.comm.barrier()
 
 
-    def save_embeddings(self, epoch, embeddings, rmsd, logs):
+    def save_embeddings(self, epoch, embeddings, rmsd, fnc, logs):
         # Create embedding file path and store in logs for downstream callbacks
         time_stamp = time.strftime(f'embeddings-raw-step-{logs["global_step"]}-%Y%m%d-%H%M%S.h5')
         embeddings_path = os.path.join(self.out_dir, time_stamp)
@@ -102,3 +108,4 @@ class SaveEmbeddingsCallback(Callback):
         with open_h5(embeddings_path, 'w', swmr=False) as f:
             f['embeddings'] = embeddings[...]
             f['rmsd'] = rmsd[...]
+            f['fnc'] = fnc[...]

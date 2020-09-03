@@ -46,6 +46,13 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
     nrows = len(perplexities)
     ncols = 3 if projection_type == '3d' else 1
 
+    # Precompute tsne embeddings for each perplexity
+    tsne_embeddings = []
+    for perplexity in perplexities:
+        # Outputs 3D embeddings using all available processors
+        tsne = TSNE(n_components=int(projection_type[0]), n_jobs=-1, perplexity=perplexity)
+        tsne_embeddings.append(tsne.fit_transform(embeddings))
+
     for color_name, color_arr in color_arrays.items():
 
         # create colormaps
@@ -66,13 +73,8 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
         elif color_name == 'fnc':
             titlestring = f'Fraction of contacts to reference state after epoch {epoch}'
 
-        for idr, perplexity in enumerate(perplexities):
+        for idr, (perplexity, emb_trans) in enumerate(zip(perplexities, tsne_embeddings)):
         
-            # Outputs 3D embeddings using all available processors
-            tsne = TSNE(n_components=int(projection_type[0]), n_jobs=-1, perplexity=perplexity)
-
-            emb_trans = tsne.fit_transform(embeddings)
-
             # plot            
             if projection_type == '3d':
                 z1, z2, z3 = emb_trans[:, 0], emb_trans[:, 1], emb_trans[:, 2]
@@ -132,7 +134,9 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
             # plot as 3D object on wandb
             if (wandb_config is not None) and (perplexity == target_perplexity):
                 point_data = np.concatenate([emb_trans, color[:,:3] * 255.], axis=1)
-                wandb.log({'step t-SNE embeddings 3D': wandb.Object3D(point_data, caption=f'perplexity {perplexity}')}, step=global_step)
+                caption = f'perplexity {perplexity} color {color_name}'
+                wandb.log({f'3D t-SNE embeddings {color_name} paint':
+                    wandb.Object3D(point_data, caption=caption)}, step=global_step)
 
         # tight layout
         plt.tight_layout()
@@ -144,7 +148,8 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
         # wandb logging
         if wandb_config is not None:
             img = Image.open(os.path.join(out_dir, time_stamp))
-            wandb.log({'step 2D t-SNE embeddings': [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
+            wandb.log({f'2D t-SNE embeddings {color_name} paint':
+                [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
 
         # close plot
         plt.close(fig)
@@ -202,7 +207,8 @@ def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
 
         if wandb_config is not None:
             img = Image.open(os.path.join(out_dir, time_stamp))
-            wandb.log({'step 3D t-SNE embeddings': [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
+            wandb.log({f'3D t-SNE embeddings {color_name} paint':
+                [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
 
         ax.clear()
         plt.close(fig)
