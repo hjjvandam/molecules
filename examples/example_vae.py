@@ -21,6 +21,15 @@ from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
                                     Embedding2dCallback, Embedding3dCallback)
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
 
+def parse_dict(ctx, param, value):
+    if value is not None:
+        token = value.split(",")
+        result = {}
+        for item in token:
+            k, v = item.split("=")
+            result[k] = v
+            return result
+
 @click.command()
 @click.option('-i', '--input', 'input_path', required=True,
               type=click.Path(exists=True),
@@ -60,6 +69,9 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
 @click.option('-b', '--batch_size', default=128, type=int,
               help='Batch size for training')
 
+@click.option('-opt', '--optimizer', callback=parse_dict,
+              help='Optimizer parameters')
+
 @click.option('-t', '--model_type', default='resnet',
               help='Model architecture option: [resnet, symmetric]')
 
@@ -82,7 +94,7 @@ from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVA
               help='Enable distributed training')
 
 def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
-         decoder_gpu, epochs, batch_size, model_type, latent_dim,
+         decoder_gpu, epochs, batch_size, optimizer, model_type, latent_dim,
          sample_interval, wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
@@ -144,7 +156,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         input_shape = (dim1, dim1)
         hparams = ResnetVAEHyperparams(**resnet_hparams)
 
-    optimizer_hparams = OptimizerHyperparams(name='RMSprop', hparams={'lr':0.00001})
+    optimizer_hparams = OptimizerHyperparams(name=optimizer["name"], hparams={'lr': float(optimizer["lr"])})
 
     vae = VAE(input_shape, hparams, optimizer_hparams,
               gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)

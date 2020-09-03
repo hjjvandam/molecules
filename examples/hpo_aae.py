@@ -1,4 +1,5 @@
 import os
+import time
 import click
 from os.path import join
 
@@ -17,9 +18,18 @@ from mpi4py import MPI
 # molecules stuff
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import LossCallback, CheckpointCallback, Embedding2dCallback, LatspaceStatisticsCallback
+from molecules.ml.callbacks import LossCallback, Embedding2dCallback, LatspaceStatisticsCallback
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
+# hpo stuff
+import ray
+from ray import tune
+from hyperopt import hp
+from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.integration.wandb import wandb_mixin
+from ray.tune.integration.wandb import WandbLogger
+
+# parser
 def parse_dict(ctx, param, value):
     if value is not None:
         token = value.split(",")
@@ -44,13 +54,8 @@ def parse_dict(ctx, param, value):
               type=click.Path(exists=True),
               help='Output directory for model data')
 
-@click.option('-c', '--checkpoint',
-              type=click.Path(exists=True),
-              help='Model checkpoint file to resume training. ' \
-              'Checkpoint files saved as .pt by CheckpointCallback.')
-
-@click.option('-m', '--model_id', required=True, type=str,
-              help='Model ID in for file naming')
+@click.option('-m', '--model_prefix', required=True, type=str,
+              help='Model Prefix in for file naming. The current time will be appended')
 
 @click.option('-np', '--num_points', required=True, type=int,
               help='number of input points')
@@ -70,15 +75,6 @@ def parse_dict(ctx, param, value):
 @click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
 
-@click.option('-b', '--batch_size', default=128, type=int,
-              help='Batch size for training')
-
-@click.option('-opt', '--optimizer', callback=parse_dict,
-              help='Optimizer parameters')
-
-@click.option('-d', '--latent_dim', default=256, type=int,
-              help='Number of dimensions in latent space')
-
 @click.option('-lw', '--loss_weights', callback=parse_dict,
               help='Loss parameters')
 
@@ -91,17 +87,110 @@ def parse_dict(ctx, param, value):
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
+@click.option('-wp', '--wandb_api_key', default=None, type=str,
+              help='API key for wandb logging')
+
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
 def main(input_path, dataset_name, rmsd_name,
-         out_path, checkpoint, model_id,
+         out_path, model_prefix,
          num_points, num_features,
          encoder_gpu, generator_gpu, discriminator_gpu,
-         epochs, batch_size, optimizer, latent_dim,
-         loss_weights, sample_interval, local_rank,
-         wandb_project_name, distributed):
+         epochs, loss_weights, sample_interval, local_rank,
+         wandb_api_key, wandb_project_name, distributed):
+         """Example for training Fs-peptide with AAE3d."""
+         
+         # init raytune
+         ray.init()
+         
+         tune_config = {
+             "input_path": input_path,
+             "dataset_name": dataset_name,
+             "rmsd_name": rmsd_name,
+             "out_path": out_path,
+             "checkpoint": None,
+             "model_prefix": model_prefix,
+             "num_points": num_points,
+             "num_features": num_features,
+             "encoder_gpu": encoder_gpu,
+             "generator_gpu": generator_gpu,
+             "discriminator_gpu": discriminator_gpu,
+             "epochs": epochs,
+             "batch_size": hp.choice("batch_size", [4, 8, 16, 32]),
+             "optimizer": {
+                 "name": "Adam", 
+                 "lr": hp.loguniform("lr", 1e-5, 1e-1)
+             },
+             "latent_dim": hp.choice("latent_dim", [64, 128, 256]),
+             "loss_weights": {key: float(loss_weights[key]) for key in loss_weights},
+             "encoder_kernel_sizes": hp.choice("encoder_kernel_sizes", 
+                 [[3, 3, 1, 1, 1], 
+                 [5, 3, 3, 1, 1],
+                 [5, 5, 3, 1, 1],
+                 [5, 5, 3, 3, 1]]),
+             "noise_std": hp.choice("noise_std", [0.2, 0.5, 1.0]),
+             "sample_interval": sample_interval,
+             "distributed": distributed,
+             "local_rank": local_rank,
+             "wandb": {
+                 "project": wandb_project_name,
+                 "api_key": wandb_api_key
+             }
+         }
+         
+         tune_config_good = tune_config.copy()
+         # we need to feed the indices here for choice args
+         tune_config_good["batch_size"] = 3
+         tune_config_good["optimizer"]["lr"] = 1e-4
+         tune_config_good["latent_dim"] = 2
+         tune_config_good["encoder_kernel_sizes"] = 2
+         tune_config_good["noise_std"] = 0
+         
+         hyperopt_search = HyperOptSearch(tune_config, points_to_evaluate = [tune_config_good],
+             max_concurrent=1, metric="loss_eg", mode="min")
+
+         analysis = tune.run(run_config, 
+                         loggers=[WandbLogger], 
+                         resources_per_trial={'gpu': 1}, 
+                         num_samples=20, 
+                         search_alg=hyperopt_search)
+         
+         # goodbye
+         ray.shutdown()
+
+# main function, called by raytune
+@wandb_mixin
+def run_config(config):
     """Example for training Fs-peptide with AAE3d."""
+
+    # get parameters from config
+    input_path = config["input_path"]
+    dataset_name = config["dataset_name"]
+    rmsd_name = config["rmsd_name"]
+    out_path = config["out_path"]
+    checkpoint = config["checkpoint"]
+    model_prefix = config["model_prefix"]
+    num_points = config["num_points"]
+    num_features = config["num_features"]
+    encoder_gpu = config["encoder_gpu"]
+    generator_gpu = config["generator_gpu"]
+    discriminator_gpu = config["discriminator_gpu"]
+    epochs = config["epochs"]
+    batch_size = config["batch_size"]
+    optimizer = config["optimizer"]
+    latent_dim = config["latent_dim"]
+    loss_weights = config["loss_weights"]
+    sample_interval = config["sample_interval"]
+    wandb_project_name = config["wandb"]["project"]
+    wandb_api_key = config["wandb"]["api_key"]
+    distributed = config["distributed"]
+    local_rank = config["local_rank"]
+    encoder_kernel_sizes = config["encoder_kernel_sizes"]
+    noise_std = config["noise_std"]
+    
+    # use this as unique identifier
+    model_id = time.strftime(f"{model_prefix}-%Y%m%d-%H%M%S")
 
     # do some scaffolding for DDP
     comm_rank = 0
@@ -134,8 +223,8 @@ def main(input_path, dataset_name, rmsd_name,
     aae_hparams = {
         "num_features": num_features,
         "latent_dim": latent_dim,
-        "encoder_kernel_sizes": [5, 5, 3, 1, 1],
-        "noise_std": 0.2,
+        "encoder_kernel_sizes": encoder_kernel_sizes,
+        "noise_std": noise_std,
         "lambda_rec": float(loss_weights["lambda_rec"]),
         "lambda_gp": float(loss_weights["lambda_gp"])
         }
@@ -208,26 +297,14 @@ def main(input_path, dataset_name, rmsd_name,
     wandb_config = None
     if (comm_rank == 0) and (wandb_project_name is not None):
         import wandb
+        wandb.login(key = wandb_api_key)
         wandb.init(project = wandb_project_name,
                    name = model_id,
                    id = model_id,
                    dir = join(out_path, "wandb_cache"),
-                   resume = False)
+                   resume = False,
+                   config=config)
         wandb_config = wandb.config
-
-        # log HP
-        wandb_config.num_points = num_points
-        wandb_config.num_features = num_features
-        wandb_config.latent_dim = latent_dim
-        wandb_config.lambda_rec = hparams.lambda_rec
-        wandb_config.lambda_gp = hparams.lambda_gp
-        # noise
-        wandb_config.noise_std = hparams.noise_std
-
-        # optimizer
-        wandb_config.optimizer_name = optimizer_hparams.name
-        for param in optimizer_hparams.hparams:
-            wandb_config["optimizer_" + param] = optimizer_hparams.hparams[param]
         
         # watch model
         wandb.watch(aae.model)
@@ -239,9 +316,6 @@ def main(input_path, dataset_name, rmsd_name,
                                  writer = writer,
                                  wandb_config = wandb_config,
                                  mpi_comm = comm)
-    
-    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
-                                             mpi_comm = comm)
     
     embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
                                                path = input_path,
@@ -259,7 +333,7 @@ def main(input_path, dataset_name, rmsd_name,
                                                    mpi_comm = comm)
 
     # Train model with callbacks
-    callbacks = [loss_callback, checkpoint_callback, embedding2d_callback] #, latspace_callback]
+    callbacks = [loss_callback, embedding2d_callback]
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
@@ -279,6 +353,11 @@ def main(input_path, dataset_name, rmsd_name,
                          join(model_path, 'generator-weights.pt'),
                          join(model_path, 'discriminator-weights.pt'))
 
+    # prepare return dict
+    final_losses = {key: loss_callback.valid_losses[key][-1] for key in loss_callback.valid_losses}
+
+    return final_losses
+
     # Output directory structure
     #  out_path
     # ├── model_path
@@ -290,6 +369,6 @@ def main(input_path, dataset_name, rmsd_name,
     # │   ├── loss.json
     # │   ├── model-hparams.pkl
     # │   └── optimizer-hparams.pkl
-
+    
 if __name__ == '__main__':
     main()

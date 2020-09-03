@@ -415,7 +415,6 @@ class AAE3d(object):
         # loss parameters
         self.lambda_gp = hparams.lambda_gp
         self.lambda_rec = hparams.lambda_rec
-        self.lambda_adv = hparams.lambda_adv
         self.rec_loss = cl.ChamferLoss()
     
     def _configure_device(self, gpu):
