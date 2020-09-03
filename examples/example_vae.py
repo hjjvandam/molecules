@@ -176,7 +176,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      'contact_maps',
+                                      'contact_map',
                                       'rmsd', 'fnc',
                                       input_shape,
                                       split='train',
@@ -197,7 +197,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      'contact_maps',
+                                      'contact_map',
                                       'rmsd', 'fnc',
                                       input_shape,
                                       split='valid',

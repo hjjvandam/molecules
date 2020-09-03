@@ -11,7 +11,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 from molecules.utils import open_h5
 
-def pca(embeddings, dim=50):
+def compute_pca(embeddings, dim=50):
     # TODO: use pca to drop embeddings to dim 50
     # TODO: run PCA in pytorch and reduce dimension down to 50 (maybe even lower)
         #       then run tSNE on outputs of PCA. This works for sparse matrices
@@ -40,7 +40,7 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
     embeddings, color_arrays = _load_data(embeddings_path, colors)
 
     if pca and embeddings.shape[1] > pca_dim:
-        embeddings = pca(embeddings, pca_dim)
+        embeddings = compute_pca(embeddings, pca_dim)
 
     # create plot grid
     nrows = len(perplexities)
