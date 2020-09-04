@@ -30,7 +30,7 @@ python ./example_vae.py \
        -t resnet \
        -e 150 \
        -b 12 \
-       -opt "name=RMSProp,lr=1e-3" \
+       -opt "name=Adam,lr=1e-4" \
        -E ${enc_gpu} -D ${dec_gpu} \
        -S 3 \
        -h 3768 -w 3768 -d 256

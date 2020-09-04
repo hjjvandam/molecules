@@ -28,7 +28,7 @@ def parse_dict(ctx, param, value):
         for item in token:
             k, v = item.split("=")
             result[k] = v
-            return result
+        return result
 
 @click.command()
 @click.option('-i', '--input', 'input_path', required=True,
@@ -101,11 +101,11 @@ def parse_dict(ctx, param, value):
               help='Enable distributed training')
 
 def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
-         decoder_gpu, epochs, batch_size, model_type, latent_dim, scale_factor, interval,
+         decoder_gpu, epochs, batch_size, optimizer, model_type, latent_dim, scale_factor, interval,
          sample_interval, wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
-
+    
     # do some scaffolding for DDP
     comm_rank = 0
     comm_size = 1
@@ -152,7 +152,6 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
         hparams = SymmetricVAEHyperparams(**fs_peptide_hparams)
 
     elif model_type == 'resnet':
-
         resnet_hparams = {'max_len': dim1,
                           'nchars': dim2,
                           'latent_dim': latent_dim,
