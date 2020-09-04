@@ -275,8 +275,8 @@ class VAE:
         else:
             logs = {}
 
-        start_epoch = 1
-
+        start_epoch = 1            
+        
         if checkpoint:
             start_epoch += self._load_checkpoint(checkpoint)
 

@@ -1,4 +1,5 @@
 import os
+import re
 import click
 from os.path import join
 
@@ -53,6 +54,9 @@ def parse_dict(ctx, param, value):
              help='Model checkpoint file to resume training. ' \
                   'Checkpoint files saved as .pt by CheckpointCallback.')
 
+@click.option('-r', '--resume',is_flag=True,
+              help='Resume from latest checkpoint')
+
 @click.option('-f', '--cm_format', default='sparse-concat',
               help='Format of contact map files. Options ' \
                    '[full, sparse-concat, sparse-rowcol]')
@@ -100,7 +104,7 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, encoder_gpu,
+def main(input_path, out_path, checkpoint, resume, model_id, dim1, dim2, cm_format, encoder_gpu,
          decoder_gpu, epochs, batch_size, optimizer, model_type, latent_dim, scale_factor, interval,
          sample_interval, wandb_project_name, local_rank, amp, distributed):
 
@@ -285,10 +289,23 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
     # Train model with callbacks
     callbacks = [loss_callback, checkpoint_callback, save_callback, tsne_callback]
 
+    # see if resume is set
+    if resume and (checkpoint is None):
+        clist = [x for x in os.path.listdir(join(model_path, 'checkpoint')) if x.endswith(".pt")]
+        checkpoints = sorted(clist, key=lambda x: re.match("epoch-\d*?-(\d*?-\d*?).pt", x).groups()[0])
+        if checkpoints:
+            checkpoint = join(model_path, 'checkpoint', checkpoints[-1])
+            if comm_rank == 0:
+                print(f"Resuming from checkpoint {checkpoint}.")
+        else:
+            if comm_rank == 0:
+                print(f"No checkpoint files in directory {join(model_path, 'checkpoint')}, \
+                       cannot resume training, will start from scratch.")
+    
     # create model
     vae.train(train_loader, valid_loader, epochs,
               checkpoint=checkpoint if checkpoint is not None else '',
-              callbacks=callbacks)
+              callbacks = callbacks)
 
     if comm_rank == 0:
         # Save loss history to disk.
