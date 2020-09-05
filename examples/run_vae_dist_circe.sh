@@ -6,7 +6,9 @@ output_dir="/runs/${run_tag}"
 checkpoint=${3}
 
 cflag=""
-if [ ! -z "${checkpoint}" ]; then
+if [ "${checkpoint}" == "resume" ]; then
+    cflag="--resume"
+elif [ -f "${checkpoint}" ]; then
     cflag="-c ${checkpoint}"
 fi
 
