@@ -291,7 +291,7 @@ def main(input_path, out_path, checkpoint, resume, model_id, dim1, dim2, cm_form
 
     # see if resume is set
     if resume and (checkpoint is None):
-        clist = [x for x in os.path.listdir(join(model_path, 'checkpoint')) if x.endswith(".pt")]
+        clist = [x for x in os.listdir(join(model_path, 'checkpoint')) if x.endswith(".pt")]
         checkpoints = sorted(clist, key=lambda x: re.match("epoch-\d*?-(\d*?-\d*?).pt", x).groups()[0])
         if checkpoints:
             checkpoint = join(model_path, 'checkpoint', checkpoints[-1])
