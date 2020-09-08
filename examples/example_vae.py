@@ -40,8 +40,8 @@ def parse_dict(ctx, param, value):
               type=click.Path(exists=True),
               help='Output directory for model data')
 
-@click.option('-m', '--model_id', required=True,
-              help='Model ID in for file naming')
+@click.option('-m', '--model_prefix', required=True,
+              help='Model prefix for file naming.')
 
 @click.option('-h', '--dim1', required=True, type=int,
               help='H of (H,W) shaped contact matrix')
@@ -104,7 +104,7 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, out_path, checkpoint, resume, model_id, dim1, dim2, cm_format, encoder_gpu,
+def main(input_path, out_path, checkpoint, resume, model_prefix, dim1, dim2, cm_format, encoder_gpu,
          decoder_gpu, epochs, batch_size, optimizer, model_type, latent_dim, scale_factor, interval,
          sample_interval, wandb_project_name, local_rank, amp, distributed):
 
@@ -237,7 +237,7 @@ def main(input_path, out_path, checkpoint, resume, model_id, dim1, dim2, cm_form
     #    _ = valid_loader.next()
 
     # For ease of training multiple models
-    model_path = join(out_path, f'model-{model_id}')
+    model_path = join(out_path, f'model-{model_prefix}')
     os.makedirs(model_path, exist_ok=True)
 
     # do we want wandb
@@ -245,8 +245,8 @@ def main(input_path, out_path, checkpoint, resume, model_id, dim1, dim2, cm_form
     if (comm_rank == 0) and (wandb_project_name is not None):
         import wandb
         wandb.init(project = wandb_project_name,
-                   name = model_id,
-                   id = model_id,
+                   name = model_prefix,
+                   id = model_prefix,
                    dir = model_path,
                    resume = False)
         wandb_config = wandb.config

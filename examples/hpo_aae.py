@@ -337,7 +337,7 @@ def run_config(config):
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              checkpoint = checkpoint if checkpoint is not None else '',
+              checkpoint = checkpoint,
               callbacks = callbacks)
 
     # Save loss history to disk.
