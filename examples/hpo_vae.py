@@ -154,7 +154,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name out_path, checkpoint, res
         'wandb': {
             'project': wandb_project_name,
             'api_key': wandb_api_key
-     }
+        }
     }
 
     tune_config_good = tune_config.copy()
