@@ -283,7 +283,7 @@ def main(input_path, out_path, checkpoint, model_id, dim1, dim2, cm_format, enco
                                      mpi_comm=comm)
 
     # Train model with callbacks
-    callbacks = [loss_callback, checkpoint_callback, save_callback, tsne_callback]
+    callbacks = [loss_callback, checkpoint_callback] #save_callback, tsne_callback]
 
     # create model
     vae.train(train_loader, valid_loader, epochs,

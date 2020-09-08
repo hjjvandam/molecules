@@ -70,7 +70,7 @@ class VAEModel(nn.Module):
         self.decoder.load_weights(dec_path)
 
 
-def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1.):
+def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
     """
     Effects
     -------
@@ -81,7 +81,7 @@ def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1.):
     https://arxiv.org/abs/1312.6114
     """
 
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='mean')
+    BCE = F.binary_cross_entropy(recon_x, x, reduction=reduction)
 
     # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
@@ -89,17 +89,28 @@ def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1.):
     return lambda_rec * BCE + KLD
 
 
-def vae_logit_loss(logit_recon_x, x, mu, logvar, lambda_rec = 1.):
+def vae_logit_loss(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
     """
     As above, but works directly on logits
     """
-    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction='mean')
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x,
+                                             reduction=reduction)
     
     # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
     return lambda_rec * BCE + KLD
                     
+def vae_logit_loss_outlier_helper(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
+    """
+    As above, but works directly on logits
+    """
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x,
+                                             reduction=reduction)
+    # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+
+    return lambda_rec * BCE, KLD
 
 
 # TODO: set weight initialization hparams
@@ -416,6 +427,27 @@ class VAE:
         
         if self.verbose and (self.comm_rank == 0):
             print('====> Validation loss: {:.4f}'.format(valid_loss))
+
+    def compute_losses(self, data_loader, checkpoint):
+        self._load_checkpoint(checkpoint)
+        self.model.eval()
+        bce_losses, kld_losses, indices = [], [], []
+        with torch.no_grad():
+            for batch_idx, token in enumerate(data_loader):
+                data, rmsd, fnc, index = token
+                data = data.to(self.device[0])
+
+                with amp.autocast(self.enable_amp):
+                    logit_recon_batch, codes, mu, logvar = self.model(data)
+                    bce_loss, kld_loss = vae_logit_loss_outlier_helper(logit_recon_batch, data,
+                                                         mu, logvar,
+                                                         self.lambda_rec)
+
+                bce_losses.append(bce_loss.item())
+                kld_losses.append(kld_loss.item())
+                indices.append(index)
+
+        return bce_losses, kld_losses, indices
 
     def _load_checkpoint(self, path):
         """
