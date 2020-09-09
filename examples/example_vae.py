@@ -36,6 +36,15 @@ def parse_dict(ctx, param, value):
               type=click.Path(exists=True),
               help='Path to file containing preprocessed contact matrix data')
 
+@click.option('-dn', '--dataset_name', default='contact_map',
+              help='Name of the dataset in the HDF5 file.')
+
+@click.option('-rn', '--rmsd_name', default='rmsd',
+              help='Name of the RMSD data in the HDF5 file.')
+
+@click.option('-fn', '--fnc_name', default='fnc',
+              help='Name of the fraction of contacts data in the HDF5 file.')
+
 @click.option('-o', '--out', 'out_path', required=True,
               type=click.Path(exists=True),
               help='Output directory for model data')
@@ -104,9 +113,9 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, out_path, checkpoint, resume, model_prefix, dim1, dim2, cm_format, encoder_gpu,
-         decoder_gpu, epochs, batch_size, optimizer, model_type, latent_dim, scale_factor, interval,
-         sample_interval, wandb_project_name, local_rank, amp, distributed):
+def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
+         dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, model_type,
+         latent_dim, scale_factor, interval, sample_interval, wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
     
@@ -131,6 +140,7 @@ def main(input_path, out_path, checkpoint, resume, model_prefix, dim1, dim2, cm_
                                 init_method='env://')
         comm_rank = dist.get_rank()
         comm_size = dist.get_world_size()
+
         if local_rank is not None:
             comm_local_rank = local_rank
         else:
@@ -191,8 +201,9 @@ def main(input_path, out_path, checkpoint, resume, model_prefix, dim1, dim2, cm_
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      'contact_map',
-                                      'rmsd', 'fnc',
+                                      dataset_name,
+                                      rmsd_name,
+                                      fnc_name,
                                       input_shape,
                                       split='train',
                                       cm_format=cm_format)
@@ -212,8 +223,9 @@ def main(input_path, out_path, checkpoint, resume, model_prefix, dim1, dim2, cm_
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      'contact_map',
-                                      'rmsd', 'fnc',
+                                      dataset_name,
+                                      rmsd_name,
+                                      fnc_name,
                                       input_shape,
                                       split='valid',
                                       cm_format=cm_format)
