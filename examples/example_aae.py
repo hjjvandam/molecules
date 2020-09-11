@@ -268,7 +268,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     
     latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
                                                    sample_interval = sample_interval,
-                                                   writer = writer,
                                                    wandb_config = wandb_config,
                                                    mpi_comm = comm)
 
