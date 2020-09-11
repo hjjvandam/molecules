@@ -1,6 +1,7 @@
 import os
 import re
 import click
+import warnings
 from os.path import join
 
 # torch stuff
@@ -94,7 +95,10 @@ def parse_dict(ctx, param, value):
 @click.option('-sf', '--scale_factor', default=2, type=int,
               help='Scale factor hparam for resnet VAE')
 
-@click.option('-I', '--interval', default=1, type=int,
+@click.option('-ei', '--embed_interval', default=1, type=int,
+              help="Saves embedddings every interval'th point")
+
+@click.option('-ti', '--tsne_interval', default=1, type=int,
               help='Saves model checkpoints, embedddings, tsne plots every ' \
                    "interval'th point")
 
@@ -115,10 +119,16 @@ def parse_dict(ctx, param, value):
 
 def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
          dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, model_type,
-         latent_dim, scale_factor, interval, sample_interval, wandb_project_name, local_rank, amp, distributed):
+         latent_dim, scale_factor, embed_interval, tsne_interval, sample_interval, wandb_project_name,
+         local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
     
+    if tsne_interval < embed_interval:
+        warnings.warn('Found tsne_interval < embed_interval. Will result in ' \
+                      'duplicated t-SNE plots.')
+
+
     # do some scaffolding for DDP
     comm_rank = 0
     comm_size = 1
@@ -285,7 +295,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                                              mpi_comm=comm)
 
     save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
-                                           interval=interval,
+                                           interval=embed_interval,
                                            sample_interval=sample_interval,
                                            mpi_comm=comm)
 
@@ -294,7 +304,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                                      projection_type='3d',
                                      target_perplexity=100,
                                      colors=['rmsd', 'fnc'],
-                                     interval=interval,
+                                     interval=tsne_interval,
                                      wandb_config=wandb_config,
                                      mpi_comm=comm)
 
@@ -314,10 +324,10 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                 print(f"No checkpoint files in directory {join(model_path, 'checkpoint')}, \
                        cannot resume training, will start from scratch.")
     
+
     # create model
     vae.train(train_loader, valid_loader, epochs,
-              checkpoint=checkpoint if checkpoint is not None else '',
-              callbacks = callbacks)
+              checkpoint=checkpoint, callbacks=callbacks)
 
     if comm_rank == 0:
         # Save loss history to disk.

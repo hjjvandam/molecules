@@ -36,7 +36,7 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
               pca_dim=50,
               wandb_config=None,
               global_step=0, epoch=1):
-    
+
     embeddings, color_arrays = _load_data(embeddings_path, colors)
 
     if pca and embeddings.shape[1] > pca_dim:
@@ -51,7 +51,8 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
     for perplexity in perplexities:
         # Outputs 3D embeddings using all available processors
         tsne = TSNE(n_components=int(projection_type[0]), n_jobs=4, perplexity=perplexity)
-        tsne_embeddings.append(tsne.fit_transform(embeddings))
+        tsne_embed = tsne.fit_transform(embeddings)
+        tsne_embeddings.append(tsne_embed)
 
     for color_name, color_arr in color_arrays.items():
 
@@ -149,7 +150,8 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
         if wandb_config is not None:
             img = Image.open(os.path.join(out_dir, time_stamp))
             wandb.log({f'2D t-SNE embeddings {color_name} paint':
-                [wandb.Image(img, caption='Latent Space Visualizations')]}, step=global_step)
+                [wandb.Image(img, caption='Latent Space Visualizations')]},
+                step=global_step)
 
         # close plot
         plt.close(fig)

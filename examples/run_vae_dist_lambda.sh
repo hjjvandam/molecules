@@ -1,4 +1,5 @@
 #!/bin/bash
+#set -Eeuo pipefail
 set -x
 # run tag
 run_tag=${2}
@@ -21,10 +22,13 @@ mkdir -p ${output_dir}
 # SLURM settings
 export WORLD_SIZE=$(( ${SLURM_TASKS_PER_NODE} * ${SLURM_NNODES} ))
 export RANK=${SLURM_PROCID}
-export LOCAL_RANK=$(( ${SLURM_PROCID} % ${SLURM_TASKS_PER_NODE} ))
+#export LOCAL_RANK=$(( ${SLURM_PROCID} % ${SLURM_TASKS_PER_NODE} ))
+export LOCAL_RANK=$(( ${SLURM_PROCID} % $(echo ${SLURM_TASKS_PER_NODE} |awk '{split($1,a,"("); print a[1]}') ))
 export MASTER_PORT=29500
 export MASTER_ADDR=${SLURM_LAUNCH_NODE_IPADDR}
 export WANDB_MODE=dryrun
+
+echo ${SLURM_PROCID} ${SLURM_TASKS_PER_NODE} ${LOCAL_RANK}
 
 # determine gpu
 enc_gpu=$(( 2 * ${LOCAL_RANK} ))
@@ -40,7 +44,8 @@ python molecules/examples/example_vae.py \
        -opt "name=Adam,lr=1e-4" \
        -f sparse-rowcol \
        -t resnet \
-       -e 2 \
+       -e 10 \
+       -ti 2 \
        -b 128 \
        -E ${enc_gpu} -D ${dec_gpu} \
        -S 8 \
