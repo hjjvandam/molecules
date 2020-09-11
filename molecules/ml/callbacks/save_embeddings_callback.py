@@ -43,9 +43,9 @@ class SaveEmbeddingsCallback(Callback):
         
     def on_validation_batch_end(self, batch, epoch, logs, mu=None,
                                 rmsd=None, fnc=None, **kwargs):
-        if epoch % self.interval != 0:
-            return
         if self.sample_interval == 0:
+            return
+        if epoch % self.interval != 0:
             return
         if (mu is None) or (rmsd is None) or (fnc is None):
             return
@@ -88,7 +88,7 @@ class SaveEmbeddingsCallback(Callback):
                 embeddings = np.concatenate(embeddings_gather, axis=0)
                 rmsd = np.concatenate(rmsd_gather, axis=0)
                 fnc = np.concatenate(fnc_gather, axis=0)
-        
+
         # Save embeddings to disk
         if self.is_eval_node and (self.sample_interval > 0):
             self.save_embeddings(epoch, embeddings, rmsd, fnc, logs)
