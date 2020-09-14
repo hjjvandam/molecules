@@ -12,6 +12,10 @@ from molecules.ml.unsupervised import (VAE, EncoderConvolution2D,
                                        EncoderHyperparams,
                                        DecoderHyperparams)
 
+def parse_list(ctx, param, value):
+    """Parse click CLI list "item1,item2,item3..."."""
+    if value is not None:
+        return value.split(',')
 
 def model_selection(model_paths, num_select=1):
     """
@@ -39,7 +43,7 @@ def model_selection(model_paths, num_select=1):
 
     # Best model checkpoint file for each HPO run and
     # associated validation loss 
-    best_checkpoints, best_valid_losses, hparams, opt_hparams = [], [], [], []
+    best_checkpoints, best_valid_losses, hparams = [], [], []
 
     # Loop over all model paths in hyperparameter optimization search.
     for model_path in model_paths:
@@ -63,25 +67,33 @@ def model_selection(model_paths, num_select=1):
         best_checkpoints.append(best_checkpoint)
         best_valid_losses.append(best_valid_loss)
         hparams.append(join(model_path, 'model-hparams.json'))
-        opt_hparams.append(join(model_path, 'optimizer-hparams.json'))
 
     best_model = np.argmax(best_valid_losses)
     best_checkpoint = best_checkpoints[best_model]
     best_hparams = hparams[best_model]
-    best_opt_hparams = opt_hparams[best_model]
 
-    return best_hparams, best_opt_hparams, best_checkpoint
+    return best_hparams, best_checkpoint
 
 
-def generate_embeddings(hparams_path, opt_hparams_path, checkpoint_path, input_shape,
-                        encoder_gpu, decoder_gpu, input_path, cm_format, batch_size):
+def generate_embeddings(hparams_path, checkpoint_path, input_shape,
+                        device, input_path, cm_format, batch_size):
+
     hparams = ResnetVAEHyperparams.load(hparams_path)
-    optimizer_hparams = OptimizerHyperparams.load(opt_hparams_path)
 
-    vae = VAE(input_shape, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, decoder_gpu), enable_amp=False)
+    # TODO: make model_type str and handle variable to correct encoder
 
-    vae._load_checkpoint(checkpoint_path)
+    # Initialize encoder model
+    encoder = ResnetEncoder(input_shape, hparams)
+
+    # Put encoder on specified CPU/GPU
+    encoder.to(device)
+
+    # Load encoder checkpoint
+    checkpoint = torch.load(checkpoint_path, map_location='cpu')
+    encoder.load_state_dict(checkpoint['encoder_state_dict'])
+    # Clean checkpoint up since it contains encoder, decoder and optimizer weights
+    del checkpoint; import gc; gc.collect()
+
 
     dataset = ContactMapDataset(input_path,
                                 'contact_map',
@@ -98,9 +110,10 @@ def generate_embeddings(hparams_path, opt_hparams_path, checkpoint_path, input_s
                              pin_memory=True,
                              num_workers=0)
 
+    # Collect embeddings and associated index into simulation trajectory
     embeddings, indices = [], []
     for data, rmsd, fnc, index in data_loader:
-        embeddings.append(vae.encode(data).cpu().numpy())
+        embeddings.append(encoder.encode(data).cpu().numpy())
         indices.append(index)
 
     embeddings = np.concatenate(embeddings)
@@ -175,24 +188,22 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, shared_path):
               type=click.Path(exists=True),
               help='Preprocessed cvae-input h5 file path')
 
-@click.option('-c', '--cvae_path', required=True,
-              type=click.Path(exists=True),
-              help='CVAE model directory path')
+@click.option('-c', '--model_paths', required=True,
+              callback=parse_list,
+              help='List of model paths "path1,path2,...".')
 
 @click.option('-m', '--min_samples', default=10, type=int,
-              callback=validate_positive,
               help='Value of min_samples in the DBSCAN algorithm')
 
 @click.option('-g', '--gpu', default=0, type=int,
-              callback=validate_positive,
               help='GPU id')
 
 def main(sim_path, shared_path, cm_path, cvae_path, min_samples, gpu):
     
-    best_hparams, best_opt_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
+    best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
 
     # Generate embeddings for all contact matrices produced during MD stage
-    embeddings, indices = generate_embeddings(best_hparams, best_opt_hparams, best_checkpoint, ...)
+    embeddings, indices = generate_embeddings(best_hparams, best_checkpoint, ...)
 
     # Performs DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, encoder_weight_path,
