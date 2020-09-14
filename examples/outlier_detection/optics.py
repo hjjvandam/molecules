@@ -78,12 +78,11 @@ def model_selection(model_paths, num_select=1):
 def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
                         device, input_path, cm_format, batch_size):
 
-    hparams = ResnetVAEHyperparams.load(hparams_path)
-
     # TODO: make model_type str and handle variable to correct encoder and Dataset
 
     # Initialize encoder model
     input_shape = (dim1, dim1)
+    hparams = ResnetVAEHyperparams.load(hparams_path)
     encoder = ResnetEncoder(input_shape, hparams)
 
     # Put encoder on specified CPU/GPU
