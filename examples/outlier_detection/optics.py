@@ -1,16 +1,12 @@
-import os
-from os.path import join
 import json
 import click
 import numpy as np
 from glob import glob
+from os.path import join
 import MDAnalysis as mda
-from MDAnalysis.analysis import distances
+from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.unsupervised.cluster import optics_clustering
-from molecules.ml.unsupervised import (VAE, EncoderConvolution2D, 
-                                       DecoderConvolution2D,
-                                       EncoderHyperparams,
-                                       DecoderHyperparams)
+from molecules.ml.unsupervised.resnet import ResnetVAEHyperparams, ResnetEncoder
 
 def parse_list(ctx, param, value):
     """Parse click CLI list "item1,item2,item3..."."""
@@ -151,10 +147,10 @@ def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples
 
 def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
     # Get list of simulation trajectory files (Assume all are equal length (ns))
-    traj_fnames = sorted(glob(os.path.join(sim_path, 'output-*.dcd')))
+    traj_fnames = sorted(glob(join(sim_path, 'output-*.dcd')))
 
     # Get list of simulation PDB files
-    pdb_fnames = sorted(glob(os.path.join(sim_path, 'input-*.pdb')))
+    pdb_fnames = sorted(glob(join(sim_path, 'input-*.pdb')))
 
     # Get total number of simulations
     sim_count = len(traj_fnames)
@@ -167,7 +163,7 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
     #   https://www.mdanalysis.org/mdanalysis/_modules/MDAnalysis/coordinates/PDB.html#PDBWriter._update_frame
 
     for frame, sim_id in reward_locs:
-        pdb_fname = os.path.join(pdb_out_path, f'outlier-sim-{sim_id}-frame-{frame}.pdb')
+        pdb_fname = join(pdb_out_path, f'outlier-sim-{sim_id}-frame-{frame}.pdb')
         u = mda.Universe(pdb_fnames[sim_id], traj_fnames[sim_id])
         with mda.Writer(pdb_fname) as writer:
             # Write a single coordinate set to a PDB file
