@@ -3,7 +3,7 @@ from math import ceil, log, sqrt
 from molecules.ml.hyperparams import Hyperparams
 
 class ResnetVAEHyperparams(Hyperparams):
-    def __init__(self, max_len, nchars, enc_kernel_size=5,
+    def __init__(self, max_len=1200, nchars=1200, enc_kernel_size=5,
                  latent_dim=150, activation='ReLU',
                  output_activation='Sigmoid',
                  lambda_rec=1.,

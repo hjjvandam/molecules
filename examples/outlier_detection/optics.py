@@ -1,12 +1,15 @@
+import os
 import json
 import click
+import torch
 import numpy as np
 from glob import glob
 from os.path import join
 import MDAnalysis as mda
+from torch.utils.data import DataLoader
 from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.unsupervised.cluster import optics_clustering
-from molecules.ml.unsupervised.resnet import ResnetVAEHyperparams, ResnetEncoder
+from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams, ResnetEncoder
 
 def parse_list(ctx, param, value):
     """Parse click CLI list "item1,item2,item3..."."""
@@ -51,16 +54,17 @@ def model_selection(model_paths, num_select=1):
         # a checkpoint, meaning that epochs does not start at 1.
         best_ind = np.argmin(valid_loss)
         best_valid_loss = valid_loss[best_ind]
-        best_epoch = epochs[best_ind]
-
+        best_epoch = str(epochs[best_ind])
+        
+        checkpoint_dir = join(model_path, 'checkpoint')
         # Format: epoch-1-20200606-125334.pt
-        for checkpoint in glob(join(model_path, 'checkpoint')):
+        for checkpoint in os.listdir(checkpoint_dir):
             if checkpoint.split('-')[1] == best_epoch:
                 best_checkpoint = checkpoint
                 break
 
         # Colect model checkpoints associated with minimal validation loss
-        best_checkpoints.append(best_checkpoint)
+        best_checkpoints.append(join(checkpoint_dir, best_checkpoint))
         best_valid_losses.append(best_valid_loss)
         hparams.append(join(model_path, 'model-hparams.json'))
 
@@ -78,7 +82,7 @@ def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
 
     # Initialize encoder model
     input_shape = (dim1, dim1)
-    hparams = ResnetVAEHyperparams.load(hparams_path)
+    hparams = ResnetVAEHyperparams().load(hparams_path)
     encoder = ResnetEncoder(input_shape, hparams)
 
     # Put encoder on specified CPU/GPU
@@ -108,9 +112,12 @@ def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
 
     # Collect embeddings and associated index into simulation trajectory
     embeddings, indices = [], []
-    for data, rmsd, fnc, index in data_loader:
+    for i, (data, rmsd, fnc, index) in enumerate(data_loader):
+        data = data.to(device)
         embeddings.append(encoder.encode(data).cpu().numpy())
         indices.append(index)
+        if i % 100 == 0:
+            print(f'Batch {i}/{len(data_loader)}')
 
     embeddings = np.concatenate(embeddings)
     indices = np.concatenate(indices)
@@ -204,7 +211,7 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
               help='Format of contact map files. Options ' \
                    '[full, sparse-concat, sparse-rowcol]')
 
-@click.option('-b', '--batch_size', default=128, type=int,
+@click.option('-b', '--batch_size', default=256, type=int,
               help='Batch size for forward pass. Limited by available ' \
                    ' memory and size of input example. Does not affect output.' \
                    ' The larger the batch size, the faster the computation.')
@@ -213,6 +220,9 @@ def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
          device, dim1, dim2, cm_format, batch_size):
     
     best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
+
+    print(best_hparams)
+    print(best_checkpoint)
 
     # Generate embeddings for all contact matrices produced during MD stage
     embeddings, indices = generate_embeddings(best_hparams, best_checkpoint, dim1, dim2,
@@ -227,6 +237,9 @@ def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
 
     # Map shuffled indices back to in-order MD frames
     simulation_inds = indices[outlier_inds]
+
+    print(simulation_inds)
+    exit()
 
     # Write rewarded PDB files to shared path
     write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path)
