@@ -251,7 +251,7 @@ class VAE:
     def __repr__(self):
         return str(self.model)
 
-    def train(self, train_loader, valid_loader, epochs=1, checkpoint='',
+    def train(self, train_loader, valid_loader, epochs=1, checkpoint=None,
               callbacks=[]):
         """
         Train model
@@ -267,7 +267,7 @@ class VAE:
         epochs : int
             Number of epochs to train for
 
-        checkpoint : str
+        checkpoint : str, None
             Path to checkpoint file to load and resume training
             from the epoch when the checkpoint was saved.
 
@@ -286,8 +286,8 @@ class VAE:
         else:
             logs = {}
 
-        start_epoch = 1
-
+        start_epoch = 1            
+        
         if checkpoint:
             start_epoch += self._load_checkpoint(checkpoint)
 

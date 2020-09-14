@@ -268,7 +268,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     
     latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
                                                    sample_interval = sample_interval,
-                                                   writer = writer,
                                                    wandb_config = wandb_config,
                                                    mpi_comm = comm)
 
@@ -278,7 +277,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              checkpoint = checkpoint if checkpoint is not None else '',
+              checkpoint = checkpoint,
               callbacks = callbacks)
 
     # Save loss history to disk.

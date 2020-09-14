@@ -43,7 +43,7 @@ class TSNEPlotCallback(Callback):
             }
 
             # Need for async plotting
-            self.executor = cf.ThreadPoolExecutor(max_workers=1)
+            self.executor = cf.ThreadPoolExecutor(max_workers=2)
             self.future_tsne = None
 
     def on_epoch_end(self, epoch, logs):
@@ -51,10 +51,26 @@ class TSNEPlotCallback(Callback):
 
             # Wait for the old stuff to finish
             if self.future_tsne is not None:
-                self.future_tsne.result()
+                try:
+                    self.future_tsne.result()
+                except Exception as exc:
+                    print(f'TSNE plot callback generated an exception: {exc}')
 
             self.future_tsne = self.executor.submit(plot_tsne,
                                                     embeddings_path=logs['embeddings_path'],
                                                     global_step=logs['global_step'],
                                                     epoch=epoch,
                                                     **self.tsne_kwargs)
+
+        # All other nodes wait for node 0 to save
+        if self.comm is not None:
+            self.comm.barrier()
+
+    def on_train_end(self, logs):
+        if self.is_eval_node:
+            # Wait for the old stuff to finish
+            if self.future_tsne is not None:
+                self.future_tsne.result()
+        if self.comm is not None:
+            self.comm.barrier()
+

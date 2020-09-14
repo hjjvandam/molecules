@@ -18,7 +18,8 @@ from mpi4py import MPI
 # molecules stuff
 from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
-from molecules.ml.callbacks import LossCallback, Embedding2dCallback, LatspaceStatisticsCallback
+from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
+                                    SaveEmbeddingsCallback, TSNEPlotCallback)
 from molecules.ml.unsupervised.point_autoencoder import AAE3d, AAE3dHyperparams
 
 # hpo stuff
@@ -310,34 +311,34 @@ def run_config(config):
         wandb.watch(aae.model)
     
     # Optional callbacks
-    from torch.utils.tensorboard import SummaryWriter
-    writer = SummaryWriter() if comm_rank == 0 else None
     loss_callback = LossCallback(join(model_path, 'loss.json'),
-                                 writer = writer,
-                                 wandb_config = wandb_config,
-                                 mpi_comm = comm)
+                                 wandb_config=wandb_config,
+                                 mpi_comm=comm)
     
-    embedding2d_callback = Embedding2dCallback(out_dir = join(model_path, 'embedddings'),
-                                               path = input_path,
-                                               rmsd_name = rmsd_name,
-                                               projection_type = "3d_project",
-                                               sample_interval = sample_interval,
-                                               writer = writer,
-                                               wandb_config = wandb_config,
-                                               mpi_comm = comm)
-    
-    latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
-                                                   sample_interval = sample_interval,
-                                                   writer = writer,
-                                                   wandb_config = wandb_config,
-                                                   mpi_comm = comm)
+    checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
+                                             mpi_comm=comm)
+
+    save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
+                                           interval=embed_interval,
+                                           sample_interval=sample_interval,
+                                           mpi_comm=comm)
+
+    # TSNEPlotCallback requires SaveEmbeddingsCallback to run first
+    tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
+                                     projection_type='3d',
+                                     target_perplexity=100,
+                                     colors=['rmsd', 'fnc'],
+                                     interval=tsne_interval,
+                                     wandb_config=wandb_config,
+                                     mpi_comm=comm)
 
     # Train model with callbacks
-    callbacks = [loss_callback, embedding2d_callback]
+    callbacks = [loss_callback, checkpoint_callback, save_callback, tsne_callback]
+
 
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
-              checkpoint = checkpoint if checkpoint is not None else '',
+              checkpoint = checkpoint,
               callbacks = callbacks)
 
     # Save loss history to disk.

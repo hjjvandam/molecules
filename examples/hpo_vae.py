@@ -1,7 +1,6 @@
 import os
 import re
 import click
-import warnings
 from os.path import join
 
 # torch stuff
@@ -22,6 +21,14 @@ from molecules.ml.hyperparams import OptimizerHyperparams
 from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
                                     SaveEmbeddingsCallback, TSNEPlotCallback)
 from molecules.ml.unsupervised.vae import VAE, SymmetricVAEHyperparams, ResnetVAEHyperparams
+
+# hpo stuff
+import ray
+from ray import tune
+from hyperopt import hp
+from ray.tune.suggest.hyperopt import HyperOptSearch
+from ray.tune.integration.wandb import wandb_mixin
+from ray.tune.integration.wandb import WandbLogger
 
 def parse_dict(ctx, param, value):
     if value is not None:
@@ -59,12 +66,12 @@ def parse_dict(ctx, param, value):
 @click.option('-w', '--dim2', required=True, type=int,
               help='W of (H,W) shaped contact matrix')
 
-@click.option('-c', '--checkpoint',
+@click.option('-c', '--checkpoint', default=None,
              type=click.Path(exists=True),
              help='Model checkpoint file to resume training. ' \
                   'Checkpoint files saved as .pt by CheckpointCallback.')
 
-@click.option('-r', '--resume',is_flag=True,
+@click.option('-r', '--resume', is_flag=True,
               help='Resume from latest checkpoint')
 
 @click.option('-f', '--cm_format', default='sparse-concat',
@@ -80,36 +87,18 @@ def parse_dict(ctx, param, value):
 @click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
 
-@click.option('-b', '--batch_size', default=128, type=int,
-              help='Batch size for training')
-
-@click.option('-opt', '--optimizer', callback=parse_dict,
-              help='Optimizer parameters')
+@click.option('-lw', '--loss_weights', callback=parse_dict,
+              help='Loss parameters')
 
 @click.option('-t', '--model_type', default='resnet',
               help='Model architecture option: [resnet, symmetric]')
 
-@click.option('-d', '--latent_dim', default=10, type=int,
-              help='Number of dimensions in latent space')
-
-@click.option('-sf', '--scale_factor', default=2, type=int,
-              help='Scale factor hparam for resnet VAE')
-
-@click.option('-ei', '--embed_interval', default=1, type=int,
-              help="Saves embedddings every interval'th point")
-
-@click.option('-ti', '--tsne_interval', default=1, type=int,
+@click.option('-I', '--interval', default=1, type=int,
               help='Saves model checkpoints, embedddings, tsne plots every ' \
                    "interval'th point")
 
 @click.option('-S', '--sample_interval', default=20, type=int,
               help="For embedding plots. Plots every sample_interval'th point")
-
-@click.option('-wp', '--wandb_project_name', default=None, type=str,
-              help='Project name for wandb logging')
-
-@click.option('--local_rank', default=None, type=int,
-              help='Local rank on the machine, required for DDP')
 
 @click.option('-a', '--amp', is_flag=True,
               help='Specify if we want to enable automatic mixed precision (AMP)')
@@ -117,18 +106,110 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
-def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
-         dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, model_type,
-         latent_dim, scale_factor, embed_interval, tsne_interval, sample_interval, wandb_project_name,
-         local_rank, amp, distributed):
+@click.option('--local_rank', default=None, type=int,
+              help='Local rank on the machine, required for DDP')
 
-    """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
+@click.option('-wp', '--wandb_project_name', default=None,
+              help='Project name for wandb logging')
+
+@click.option('-wp', '--wandb_api_key', default=None,
+              help='API key for wandb logging')
+
+def main(input_path, dataset_name, rmsd_name, fnc_name out_path, checkpoint, resume, model_prefix, dim1, dim2,
+         cm_format, encoder_gpu, decoder_gpu, epochs, loss_weights, model_type,
+         interval, sample_interval, amp, distributed, local_rank, wandb_project_name, wandb_api_key):
     
-    if tsne_interval < embed_interval:
-        warnings.warn('Found tsne_interval < embed_interval. Will result in ' \
-                      'duplicated t-SNE plots.')
+    # init raytune
+    ray.init()
+
+    tune_config = {
+        'input_path': input_path,
+        'dataset_name': dataset_name,
+        'rmsd_name': rmsd_name,
+        'fnc_name': fnc_name,
+        'out_path': out_path,
+        'checkpoint': checkpoint,
+        'resume': resume,
+        'model_prefix': model_prefix,
+        'dim1': dim1,
+        'dim2': dim2,
+        'cm_format': cm_format,
+        'encoder_gpu': encoder_gpu,
+        'decoder_gpu': encoder_gpu,
+        'epochs': epochs,
+        'batch_size': hp.choice('batch_size', [4, 8, 16, 32]),
+        'optimizer': {
+            'name': 'Adam', 
+            'lr': hp.loguniform('lr', 1e-5, 1e-1)
+        },
+        'latent_dim': hp.choice('latent_dim', [64, 128, 256]),
+        'scale_factor': hp.choice('latent_dim', [2, 4])
+        'loss_weights': {key: float(val) for key, val in loss_weights.items()},
+        'model_type': model_type,
+        'interval': interval,
+        'sample_interval': sample_interval,
+        'amp': amp,
+        'distributed': distributed,
+        'local_rank': local_rank,
+        'wandb': {
+            'project': wandb_project_name,
+            'api_key': wandb_api_key
+        }
+    }
+
+    tune_config_good = tune_config.copy()
+    # we need to feed the indices here for choice args
+    tune_config_good['batch_size'] = 3
+    tune_config_good['optimizer']['lr'] = 1e-4
+    tune_config_good['latent_dim'] = 2
+    tune_config_good['scale_factor'] = 0
+
+    hyperopt_search = HyperOptSearch(tune_config, points_to_evaluate = [tune_config_good],
+                                     max_concurrent=1, metric='loss_eg', mode='min')
+
+    analysis = tune.run(run_config, 
+                        loggers=[WandbLogger], 
+                        resources_per_trial={'gpu': len(set(encoder_gpu, decoder_gpu))}, 
+                        num_samples=20, 
+                        search_alg=hyperopt_search)
+
+    # goodbye
+    ray.shutdown()
 
 
+# main function, called by raytune
+@wandb_mixin
+def run_config(config):
+    """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
+
+    # get parameters from config
+    input_path = config['input_path']
+    dataset_name = config['dataset_name']
+    rmsd_name = config['rmsd_name']
+    fnc_name = config['fnc_name']
+    out_path = config['out_path']
+    checkpoint = config['checkpoint']
+    resume = config['resume']
+    model_prefix = config['model_prefix']
+    dim1 = config['dim1']
+    dim2 = config['dim2']
+    cm_format = config['cm_format']
+    encoder_gpu = config['encoder_gpu']
+    decoder_gpu = config['decoder_gpu']
+    epochs = config['epochs']
+    batch_size = config['batch_size']
+    optimizer = config['optimizer']
+    latent_dim = config['latent_dim']
+    loss_weights = config['loss_weights']
+    model_type = config['model_type']
+    interval = config['interval']
+    sample_interval = config['sample_interval']
+    amp = config['amp']
+    distributed = config['distributed']
+    local_rank = config['local_rank']
+    wandb_project_name = config['wandb']['project']
+    wandb_api_key = config['wandb']['api_key']
+    
     # do some scaffolding for DDP
     comm_rank = 0
     comm_size = 1
@@ -150,7 +231,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                                 init_method='env://')
         comm_rank = dist.get_rank()
         comm_size = dist.get_world_size()
-
         if local_rank is not None:
             comm_local_rank = local_rank
         else:
@@ -181,15 +261,16 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                           'latent_dim': latent_dim,
                           'dec_filters': dim1,
                           'scale_factor': scale_factor,
+                          'lambda_rec': loss_weights['lambda_rec']
                           'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
         hparams = ResnetVAEHyperparams(**resnet_hparams)
 
-    optimizer_hparams = OptimizerHyperparams(name=optimizer["name"], hparams={'lr': float(optimizer["lr"])})
+    optimizer_hparams = OptimizerHyperparams(name=optimizer['name'], hparams={'lr': float(optimizer["lr"])})
 
     vae = VAE(input_shape, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
+              gpu=(encoder_gpu, decoder_gpu), enable_amp=amp)
 
     enc_device = torch.device(f'cuda:{encoder_gpu}')
     dec_device = torch.device(f'cuda:{decoder_gpu}')
@@ -211,9 +292,8 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      dataset_name,
-                                      rmsd_name,
-                                      fnc_name,
+                                      'contact_map',
+                                      'rmsd', 'fnc',
                                       input_shape,
                                       split='train',
                                       cm_format=cm_format)
@@ -233,9 +313,8 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      dataset_name,
-                                      rmsd_name,
-                                      fnc_name,
+                                      'contact_map',
+                                      'rmsd', 'fnc',
                                       input_shape,
                                       split='valid',
                                       cm_format=cm_format)
@@ -295,7 +374,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                                              mpi_comm=comm)
 
     save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
-                                           interval=embed_interval,
+                                           interval=interval,
                                            sample_interval=sample_interval,
                                            mpi_comm=comm)
 
@@ -304,7 +383,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                                      projection_type='3d',
                                      target_perplexity=100,
                                      colors=['rmsd', 'fnc'],
-                                     interval=tsne_interval,
+                                     interval=interval,
                                      wandb_config=wandb_config,
                                      mpi_comm=comm)
 
@@ -324,7 +403,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                 print(f"No checkpoint files in directory {join(model_path, 'checkpoint')}, \
                        cannot resume training, will start from scratch.")
     
-
     # create model
     vae.train(train_loader, valid_loader, epochs,
               checkpoint=checkpoint, callbacks=callbacks)

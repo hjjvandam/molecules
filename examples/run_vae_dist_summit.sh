@@ -47,5 +47,6 @@ python -u ./example_vae.py \
        -e 150 \
        -b 2 \
        -E ${enc_gpu} -D ${dec_gpu} \
+       -opt "name=Adam,lr=1e-4" \
        -S 3 \
        -h 3768 -w 3768 -d 256
