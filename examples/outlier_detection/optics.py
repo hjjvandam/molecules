@@ -75,14 +75,15 @@ def model_selection(model_paths, num_select=1):
     return best_hparams, best_checkpoint
 
 
-def generate_embeddings(hparams_path, checkpoint_path, input_shape,
+def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
                         device, input_path, cm_format, batch_size):
 
     hparams = ResnetVAEHyperparams.load(hparams_path)
 
-    # TODO: make model_type str and handle variable to correct encoder
+    # TODO: make model_type str and handle variable to correct encoder and Dataset
 
     # Initialize encoder model
+    input_shape = (dim1, dim1)
     encoder = ResnetEncoder(input_shape, hparams)
 
     # Put encoder on specified CPU/GPU
@@ -149,7 +150,7 @@ def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples
 
     return outlier_inds, labels
 
-def write_rewarded_pdbs(rewarded_inds, sim_path, shared_path):
+def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
     # Get list of simulation trajectory files (Assume all are equal length (ns))
     traj_fnames = sorted(glob(os.path.join(sim_path, 'output-*.dcd')))
 
@@ -167,7 +168,7 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, shared_path):
     #   https://www.mdanalysis.org/mdanalysis/_modules/MDAnalysis/coordinates/PDB.html#PDBWriter._update_frame
 
     for frame, sim_id in reward_locs:
-        pdb_fname = os.path.join(shared_path, f'outlier-{sim_id}-{frame}.pdb')
+        pdb_fname = os.path.join(pdb_out_path, f'outlier-sim-{sim_id}-frame-{frame}.pdb')
         u = mda.Universe(pdb_fnames[sim_id], traj_fnames[sim_id])
         with mda.Writer(pdb_fname) as writer:
             # Write a single coordinate set to a PDB file
@@ -176,47 +177,64 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, shared_path):
 
 
 @click.command()
-@click.option('-i', '--sim_path', required=True,
+@click.option('-s', '--sim_path', required=True,
               type=click.Path(exists=True),
               help='OpenMM simulation path containing *.dcd and *.pdb files')
 
-@click.option('-s', '--shared_path', required=True,
+@click.option('-p', '--pdb_out_path', required=True,
               type=click.Path(exists=True),
-              help='Path to folder shared between outlier and MD stages.')
+              help='Path to folder to write output PDB files to.')
 
-@click.option('-d', '--cm_path', required=True,
+@click.option('-d', '--data_path', required=True,
               type=click.Path(exists=True),
-              help='Preprocessed cvae-input h5 file path')
+              help='Preprocessed data h5 file path')
 
-@click.option('-c', '--model_paths', required=True,
+@click.option('-m', '--model_paths', required=True,
               callback=parse_list,
-              help='List of model paths "path1,path2,...".')
+              help='List of trained model paths "path1,path2,...".')
 
-@click.option('-m', '--min_samples', default=10, type=int,
-              help='Value of min_samples in the DBSCAN algorithm')
+@click.option('-M', '--min_samples', default=10, type=int,
+              help='Value of min_samples in the OPTICS algorithm')
 
-@click.option('-g', '--gpu', default=0, type=int,
-              help='GPU id')
+@click.option('-D', '--device', default='cpu',
+              help='PyTorch formatted device str. cpu, cuda, cuda:0, etc')
 
-def main(sim_path, shared_path, cm_path, cvae_path, min_samples, gpu):
+@click.option('-h', '--dim1', required=True, type=int,
+              help='H of (H,W) shaped contact matrix')
+
+@click.option('-w', '--dim2', required=True, type=int,
+              help='W of (H,W) shaped contact matrix')
+
+@click.option('-f', '--cm_format', default='sparse-concat',
+              help='Format of contact map files. Options ' \
+                   '[full, sparse-concat, sparse-rowcol]')
+
+@click.option('-b', '--batch_size', default=128, type=int,
+              help='Batch size for forward pass. Limited by available ' \
+                   ' memory and size of input example. Does not affect output.' \
+                   ' The larger the batch size, the faster the computation.')
+
+def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
+         device, dim1, dim2, cm_format, batch_size):
     
     best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
 
     # Generate embeddings for all contact matrices produced during MD stage
-    embeddings, indices = generate_embeddings(best_hparams, best_checkpoint, ...)
+    embeddings, indices = generate_embeddings(best_hparams, best_checkpoint, dim1, dim2,
+                                              device, data_path, cm_format, batch_size)
 
     # Performs DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, encoder_weight_path,
     #                                          cm_embeddings, min_samples, eps)
 
     # Performs OPTICS clustering on embeddings
-    outlier_inds, labels = optics_clustering(embeddings, min_samples)
+    outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
 
     # Map shuffled indices back to in-order MD frames
     simulation_inds = indices[outlier_inds]
 
     # Write rewarded PDB files to shared path
-    write_rewarded_pdbs(simulation_inds, sim_path, shared_path)
+    write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path)
 
 if __name__ == '__main__':
     main()
