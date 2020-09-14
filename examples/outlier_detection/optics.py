@@ -89,7 +89,6 @@ def generate_embeddings(hparams_path, opt_hparams_path, checkpoint_path, input_s
                                 input_shape,
                                 split='train',
                                 split_ptc=1.,
-                                shuffle=False,
                                 cm_format=cm_format)
     
     data_loader = DataLoader(dataset,
@@ -99,13 +98,15 @@ def generate_embeddings(hparams_path, opt_hparams_path, checkpoint_path, input_s
                              pin_memory=True,
                              num_workers=0)
 
-    embeddings = []
-    for data in data_loader:
+    embeddings, indices = [], []
+    for data, rmsd, fnc, index in data_loader:
         embeddings.append(vae.encode(data).cpu().numpy())
+        indices.append(index)
 
     embeddings = np.concatenate(embeddings)
+    indices = np.concatenate(indices)
 
-    return embeddings
+    return embeddings, indices
 
 def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples, eps):
     # TODO: if we decide on OPTICS clustering, then remove all eps code
@@ -191,18 +192,20 @@ def main(sim_path, shared_path, cm_path, cvae_path, min_samples, gpu):
     best_hparams, best_opt_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
 
     # Generate embeddings for all contact matrices produced during MD stage
-    cm_embeddings = generate_embeddings(best_hparams, best_opt_hparams, best_checkpoint, ...)
+    embeddings, indices = generate_embeddings(best_hparams, best_opt_hparams, best_checkpoint, ...)
 
     # Performs DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, encoder_weight_path,
     #                                          cm_embeddings, min_samples, eps)
 
     # Performs OPTICS clustering on embeddings
-    outlier_inds, labels = optics_clustering(cm_embeddings, min_samples)
+    outlier_inds, labels = optics_clustering(embeddings, min_samples)
 
+    # Map shuffled indices back to in-order MD frames
+    simulation_inds = indices[outlier_inds]
 
     # Write rewarded PDB files to shared path
-    write_rewarded_pdbs(outlier_inds, sim_path, shared_path)
+    write_rewarded_pdbs(simulation_inds, sim_path, shared_path)
 
 if __name__ == '__main__':
     main()
