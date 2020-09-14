@@ -224,8 +224,8 @@ def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
                                               device, data_path, cm_format, batch_size)
 
     # Performs DBSCAN clustering on embeddings
-    #outlier_inds, labels = perform_clustering(eps_path, encoder_weight_path,
-    #                                          cm_embeddings, min_samples, eps)
+    #outlier_inds, labels = perform_clustering(eps_path, best_checkpoint,
+    #                                          embeddings, min_samples, eps)
 
     # Performs OPTICS clustering on embeddings
     outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
