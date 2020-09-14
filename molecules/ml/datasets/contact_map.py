@@ -10,7 +10,7 @@ class ContactMapDataset(Dataset):
     """
     def __init__(self, path, dataset_name, rmsd_name, fnc_name,
                  shape, split_ptc=0.8, split='train', seed=333,
-                 cm_format='sparse-concat'):
+                 shuffle=True, cm_format='sparse-concat'):
         """
         Parameters
         ----------
@@ -35,6 +35,10 @@ class ContactMapDataset(Dataset):
         split : str
             Either 'train' or 'valid', specifies whether this
             dataset returns train or validation data.
+
+        shuffle: bool
+            Whether or not to shuffle the input data before the
+            train/valid split.
 
         cm_format : str
             If 'sparse-concat', process data as concatenated row,col indicies.
@@ -74,8 +78,12 @@ class ContactMapDataset(Dataset):
         # do splitting
         self.split_ind = int(split_ptc * self.len)
         self.split = split
-        split_rng = np.random.default_rng(seed)
-        self.indices = split_rng.permutation(list(range(self.len)))
+
+        self.indices = list(range(self.len))
+        if shuffle:
+            split_rng = np.random.default_rng(seed)
+            self.indices = split_rng.permutation(self.indices)
+
         if self.split == "train":
             self.indices = sorted(self.indices[:self.split_ind])
         else:

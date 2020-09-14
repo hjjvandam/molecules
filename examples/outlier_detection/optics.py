@@ -89,7 +89,7 @@ def generate_embeddings(hparams_path, opt_hparams_path, checkpoint_path, input_s
                                 input_shape,
                                 split='train',
                                 split_ptc=1.,
-                                shuffle=False, # TODO: add this functionality
+                                shuffle=False,
                                 cm_format=cm_format)
     
     data_loader = DataLoader(dataset,
