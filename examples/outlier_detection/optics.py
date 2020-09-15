@@ -83,7 +83,8 @@ def model_selection(model_paths, num_select=1):
         best_valid_losses.append(best_valid_loss)
         hparams.append(join(model_path, 'model-hparams.json'))
 
-    best_model = np.argmax(best_valid_losses)
+    # Select model 
+    best_model = np.argmin(best_valid_losses)
     best_checkpoint = best_checkpoints[best_model]
     best_hparams = hparams[best_model]
 

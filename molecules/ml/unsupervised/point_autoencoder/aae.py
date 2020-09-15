@@ -271,6 +271,11 @@ class Encoder(nn.Module):
         z = self.reparameterize(mu, logvar)
         return z, mu, logvar
 
+     def encode(self, x):
+        self.eval()
+        with torch.no_grad():
+            return self(x)[0]
+
 
 class AAE3dModel(nn.Module):
     def __init__(self, num_points, num_features, hparams, devices):
