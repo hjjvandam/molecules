@@ -5,7 +5,7 @@ import torch
 import numpy as np
 from glob import glob
 from os.path import join
-import MDAnalysis as mda
+#import MDAnalysis as mda
 from torch.utils.data import DataLoader
 from sklearn.neighbors import LocalOutlierFactor
 from molecules.ml.unsupervised.cluster import optics_clustering
@@ -115,10 +115,10 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
        from molecules.ml.unsupervised.point_autoencoder.aae import Encoder
 
        hparams = AAE3dHyperparams().load(hparams_path)
-       encoder = Encoder(dim1, hparmas.num_features, hparams)
+       encoder = Encoder(dim1, hparams.num_features, hparams)
 
        dataset = PointCloudDataset(input_path,
-                                   'contact_map',
+                                   'point_cloud',
                                    'rmsd',
                                    'fnc',
                                    dim1,
@@ -143,7 +143,7 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
                              drop_last=False,
                              shuffle=False,
                              pin_memory=True,
-                             num_workers=0)
+                             num_workers=4)
 
     # Collect embeddings and associated index into simulation trajectory
     embeddings, indices = [], []
