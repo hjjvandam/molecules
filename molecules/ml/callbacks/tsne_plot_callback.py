@@ -13,6 +13,7 @@ class TSNEPlotCallback(Callback):
                  projection_type='2d',
                  target_perplexity=30,
                  perplexities=[5, 30, 50, 100, 200],
+                 tsne_is_blocking=False,
                  pca=True, pca_dim=50,
                  wandb_config=None,
                  mpi_comm=None):
@@ -41,6 +42,8 @@ class TSNEPlotCallback(Callback):
                 'pca': pca,
                 'pca_dim': pca_dim
             }
+            
+            self.tnse_is_blocking = tsne_is_blocking
 
             # Need for async plotting
             self.executor = cf.ThreadPoolExecutor(max_workers=2)
@@ -61,6 +64,13 @@ class TSNEPlotCallback(Callback):
                                                     global_step=logs['global_step'],
                                                     epoch=epoch,
                                                     **self.tsne_kwargs)
+            if self.tnse_is_blocking:
+                if self.future_tsne is not None:
+                    try:
+                        self.future_tsne.result()
+                    except Exception as exc:
+                        print(f'TSNE plot callback generated an exception: {exc}')
+                    self.future_tsne = None
 
         # All other nodes wait for node 0 to save
         if self.comm is not None:

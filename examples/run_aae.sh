@@ -21,11 +21,13 @@ mpirun -np 1 --allow-run-as-root \
        python example_aae.py -i ${spike_data} \
        -dn "point_cloud" \
        -rn "rmsd" \
-       -o /data/runs/ -m spike-closed-correct-1-seq --wandb_project_name covid_dl \
+       --resume \
+       -o /data/runs/ -m spike-closed-correct-1-seq-embedding --wandb_project_name covid_dl \
+       --encoder_kernel_sizes 5 3 3 1 1 \
        -np 3768 -nf 0 \
        -E 0 -G 0 -D 0 \
-       -e 200 -b 32 \
-       -opt "name=Adam,lr=1e-4" \
+       -e 200 -b 16 \
+       -opt "name=Adam,lr=0.0001" \
        -d 256 \
        -lw "lambda_rec=0.5,lambda_gp=10." \
        -S 3

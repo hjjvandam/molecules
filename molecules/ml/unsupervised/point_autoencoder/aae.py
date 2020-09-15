@@ -680,7 +680,9 @@ class AAE3d(object):
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
 
                 for callback in callbacks:
-                    callback.on_validation_batch_end(logs,
+                    callback.on_validation_batch_end(epoch,
+                                                     batch_idx,
+                                                     logs,
                                                      input = data.detach(),
                                                      rmsd = rmsd.detach(),
                                                      fnc = fnc.detach(),

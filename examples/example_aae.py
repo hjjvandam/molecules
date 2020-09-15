@@ -1,4 +1,5 @@
 import os
+import re
 import click
 from os.path import join
 
@@ -54,6 +55,9 @@ def parse_dict(ctx, param, value):
               help='Model checkpoint file to resume training. ' \
               'Checkpoint files saved as .pt by CheckpointCallback.')
 
+@click.option('-r', '--resume',is_flag=True,
+              help='Resume from latest checkpoint')
+
 @click.option('-m', '--model_id', required=True, type=str,
               help='Model ID in for file naming')
 
@@ -62,6 +66,9 @@ def parse_dict(ctx, param, value):
 
 @click.option('-nf', '--num_features', default=1, type=int,
               help='number of features per point in addition to 3D coordinates')
+
+@click.option('-eks', '--encoder_kernel_sizes', default=[5, 5, 3, 1, 1], type=int,
+              nargs=5, help='list of encoder kernel sizes')
 
 @click.option('-E', '--encoder_gpu', default=None, type=int,
               help='Encoder GPU id')
@@ -104,8 +111,8 @@ def parse_dict(ctx, param, value):
               help='Enable distributed training')
 
 def main(input_path, dataset_name, rmsd_name, fnc_name,
-         out_path, checkpoint, model_id,
-         num_points, num_features,
+         out_path, checkpoint, resume, model_id,
+         num_points, num_features, encoder_kernel_sizes,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
          loss_weights, interval, sample_interval, local_rank,
@@ -143,7 +150,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     aae_hparams = {
         "num_features": num_features,
         "latent_dim": latent_dim,
-        "encoder_kernel_sizes": [5, 5, 3, 1, 1],
+        "encoder_kernel_sizes": encoder_kernel_sizes,
         "noise_std": 0.2,
         "lambda_rec": float(loss_weights["lambda_rec"]),
         "lambda_gp": float(loss_weights["lambda_gp"])
@@ -262,6 +269,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
                                      projection_type='3d',
                                      target_perplexity=100,
                                      interval=interval,
+                                     tsne_is_blocking=True,
                                      wandb_config=wandb_config,
                                      mpi_comm=comm)
 
@@ -274,7 +282,20 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     # Train model with callbacks
     callbacks = [loss_callback, checkpoint_callback, save_callback,
                  tsne_callback] #, latspace_callback]
-
+    
+    # see if resume is set
+    if resume and (checkpoint is None):
+        clist = [x for x in os.listdir(join(model_path, 'checkpoint')) if x.endswith(".pt")]
+        checkpoints = sorted(clist, key=lambda x: re.match("epoch-\d*?-(\d*?-\d*?).pt", x).groups()[0])
+        if checkpoints:
+            checkpoint = join(model_path, 'checkpoint', checkpoints[-1])
+            if comm_rank == 0:
+                print(f"Resuming from checkpoint {checkpoint}.")
+        else:
+            if comm_rank == 0:
+                print(f"No checkpoint files in directory {join(model_path, 'checkpoint')}, \
+                       cannot resume training, will start from scratch.")
+    
     # train model with callbacks
     aae.train(train_loader, valid_loader, epochs,
               checkpoint = checkpoint,
