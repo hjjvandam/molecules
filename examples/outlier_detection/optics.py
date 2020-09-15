@@ -7,9 +7,26 @@ from glob import glob
 from os.path import join
 import MDAnalysis as mda
 from torch.utils.data import DataLoader
+from sklearn.neighbors import LocalOutlierFactor
 from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.unsupervised.cluster import optics_clustering
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams, ResnetEncoder
+
+# Helper function for LocalOutlierFactor
+def topk(a, k):
+    """
+    Parameters
+    ----------
+    a : np.ndarray
+        array of dim (N,)
+    k : int
+        specifies which element to partition upon
+    Returns
+    -------
+    np.ndarray of length k containing indices of input array a
+    coresponding to the k smallest values in a.
+    """
+    return np.argpartition(a, k)[:k]
 
 def parse_list(ctx, param, value):
     """Parse click CLI list "item1,item2,item3..."."""
@@ -96,7 +113,7 @@ def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
 
 
     dataset = ContactMapDataset(input_path,
-                                'contact_map',
+                                'contact_maps',
                                 'rmsd', 'fnc',
                                 input_shape,
                                 split='train',
@@ -152,6 +169,27 @@ def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples
 
     return outlier_inds, labels
 
+
+def local_outlier_factor(embeddings, n_outliers=500, **kwargs): 
+    clf = LocalOutlierFactor(**kwargs)
+    # Array with 1 if inlier, -1 if outlier
+    clf.fit_predict(embeddings)
+
+    # Only sorts 1 element of negative_outlier_factors_, namely the element
+    # that is position k in the sorted array. The elements above and below
+    # the kth position are partitioned but not sorted. Returns the indices
+    # of the elements of left hand side of the parition i.e. the top k.
+    outlier_inds = topk(clf.negative_outlier_factor_, k=n_outliers)
+    
+    outlier_scores = clf.negative_outlier_factor_[outlier_inds]
+
+    # Only sorts an array of size n_outliers
+    sort_inds = np.argsort(outlier_scores)
+
+    # Returns n_outlier best outliers sorted from best to worst
+    return outlier_inds[sort_inds], outlier_scores[sort_inds]
+
+
 def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
     # Get list of simulation trajectory files (Assume all are equal length (ns))
     traj_fnames = sorted(glob(join(sim_path, 'output-*.dcd')))
@@ -169,13 +207,17 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
     #   https://www.mdanalysis.org/mdanalysis/documentation_pages/coordinates/PDB.html
     #   https://www.mdanalysis.org/mdanalysis/_modules/MDAnalysis/coordinates/PDB.html#PDBWriter._update_frame
 
+    outlier_pdbs = []
     for frame, sim_id in reward_locs:
-        pdb_fname = join(pdb_out_path, f'outlier-sim-{sim_id}-frame-{frame}.pdb')
+        pdb_fname = join(pdb_out_path, f'{sim_id}_{frame:06}.pdb')
         u = mda.Universe(pdb_fnames[sim_id], traj_fnames[sim_id])
         with mda.Writer(pdb_fname) as writer:
             # Write a single coordinate set to a PDB file
             writer._update_frame(u)
             writer._write_timestep(u.trajectory[frame])
+        outlier_pdbs.append(pdb_fname)
+
+    return outlier_pdbs
 
 
 @click.command()
@@ -183,8 +225,7 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
               type=click.Path(exists=True),
               help='OpenMM simulation path containing *.dcd and *.pdb files')
 
-@click.option('-p', '--pdb_out_path', required=True,
-              type=click.Path(exists=True),
+@click.option('-p', '--pdb_out_path', default=join('.', 'outlier_pdbs'),
               help='Path to folder to write output PDB files to.')
 
 @click.option('-d', '--data_path', required=True,
@@ -218,7 +259,10 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
 
 def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
          device, dim1, dim2, cm_format, batch_size):
-    
+
+    # Make directory to store output PDB files
+    os.makedirs(pdb_out_path, exist_ok=True)
+
     best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
 
     print(best_hparams)
@@ -228,16 +272,26 @@ def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
     embeddings, indices = generate_embeddings(best_hparams, best_checkpoint, dim1, dim2,
                                               device, data_path, cm_format, batch_size)
 
-    # Performs DBSCAN clustering on embeddings
+
+    print('embeddings shape: ', embeddings.shape)
+    # Perform DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, best_checkpoint,
     #                                          embeddings, min_samples, eps)
 
-    # Performs OPTICS clustering on embeddings
-    outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
+    # Perform OPTICS clustering on embeddings
+    #outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
+
+    # Perform LocalOutlierFactor outlier detection on embeddings
+    outlier_inds, scores = local_outlier_factor(embeddings)
+
+    print(outlier_inds.shape)
+    for ind, score in zip(outlier_inds, scores):
+        print(f'ind, score: {ind}, {score}')
 
     # Map shuffled indices back to in-order MD frames
     simulation_inds = indices[outlier_inds]
 
+    print(len(simulation_inds))
     print(simulation_inds)
     exit()
 
