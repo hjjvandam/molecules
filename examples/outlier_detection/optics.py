@@ -8,9 +8,7 @@ from os.path import join
 import MDAnalysis as mda
 from torch.utils.data import DataLoader
 from sklearn.neighbors import LocalOutlierFactor
-from molecules.ml.datasets import ContactMapDataset
 from molecules.ml.unsupervised.cluster import optics_clustering
-from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams, ResnetEncoder
 
 # Helper function for LocalOutlierFactor
 def topk(a, k):
@@ -92,15 +90,43 @@ def model_selection(model_paths, num_select=1):
     return best_hparams, best_checkpoint
 
 
-def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
+def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
                         device, input_path, cm_format, batch_size):
 
-    # TODO: make model_type str and handle variable to correct encoder and Dataset
+    if model_type == 'vae-resnet':
+        from molecules.ml.datasets import ContactMapDataset
+        from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams, ResnetEncoder
+        # Initialize encoder model
+        input_shape = (dim1, dim1)
+        hparams = ResnetVAEHyperparams().load(hparams_path)
+        encoder = ResnetEncoder(input_shape, hparams)
 
-    # Initialize encoder model
-    input_shape = (dim1, dim1)
-    hparams = ResnetVAEHyperparams().load(hparams_path)
-    encoder = ResnetEncoder(input_shape, hparams)
+        dataset = ContactMapDataset(input_path,
+                                    'contact_map',
+                                    'rmsd', 'fnc',
+                                    input_shape,
+                                    split='train',
+                                    split_ptc=1.,
+                                    cm_format=cm_format)
+    elif model_type == 'aae':
+       from molecules.ml.datasets import PointCloudDataset
+       from molecules.ml.unsupervised.point_autoencoder import AAE3dHyperparams
+       from molecules.ml.unsupervised.point_autoencoder.aae import Encoder
+
+       hparams = AAE3dHyperparams().load(hparams_path)
+       encoder = Encoder(dim1, hparmas.num_features, hparams)
+
+       dataset = PointCloudDataset(input_path,
+                                   'contact_map',
+                                   'rmsd',
+                                   'fnc',
+                                   dim1,
+                                   hparams.num_features,
+                                   split='train',
+                                   split_ptc=1.,
+                                   normalize='box',
+                                   cms_transform=False)
+
 
     # Put encoder on specified CPU/GPU
     encoder.to(device)
@@ -111,15 +137,6 @@ def generate_embeddings(hparams_path, checkpoint_path, dim1, dim2,
     # Clean checkpoint up since it contains encoder, decoder and optimizer weights
     del checkpoint; import gc; gc.collect()
 
-
-    dataset = ContactMapDataset(input_path,
-                                'contact_maps',
-                                'rmsd', 'fnc',
-                                input_shape,
-                                split='train',
-                                split_ptc=1.,
-                                cm_format=cm_format)
-    
     data_loader = DataLoader(dataset,
                              batch_size=batch_size,
                              drop_last=False,
@@ -236,6 +253,9 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
               callback=parse_list,
               help='List of trained model paths "path1,path2,...".')
 
+@click.option('-t', '--model_type', default='vae-resnet',
+             help='Type of model. vae-resnet or aae.')
+
 @click.option('-M', '--min_samples', default=10, type=int,
               help='Value of min_samples in the OPTICS algorithm')
 
@@ -257,8 +277,8 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
                    ' memory and size of input example. Does not affect output.' \
                    ' The larger the batch size, the faster the computation.')
 
-def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
-         device, dim1, dim2, cm_format, batch_size):
+def main(sim_path, pdb_out_path, data_path, model_paths, model_type,
+         min_samples, device, dim1, dim2, cm_format, batch_size):
 
     # Make directory to store output PDB files
     os.makedirs(pdb_out_path, exist_ok=True)
@@ -269,7 +289,7 @@ def main(sim_path, pdb_out_path, data_path, model_paths, min_samples,
     print(best_checkpoint)
 
     # Generate embeddings for all contact matrices produced during MD stage
-    embeddings, indices = generate_embeddings(best_hparams, best_checkpoint, dim1, dim2,
+    embeddings, indices = generate_embeddings(model_type, best_hparams, best_checkpoint, dim1, dim2,
                                               device, data_path, cm_format, batch_size)
 
 
