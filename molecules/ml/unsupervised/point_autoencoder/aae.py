@@ -262,6 +262,11 @@ class Encoder(nn.Module):
         eps = torch.randn_like(std)
         return eps.mul(std).add_(mu)
 
+    def encode(self, x):
+        self.eval()
+        with torch.no_grad():
+            return self(x)[1]
+
     def forward(self, x):
         output = self.conv(x)
         output2 = output.max(dim = 2)[0]
