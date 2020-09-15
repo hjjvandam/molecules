@@ -10,6 +10,9 @@ from torch.utils.data import DataLoader
 from sklearn.neighbors import LocalOutlierFactor
 from molecules.ml.unsupervised.cluster import optics_clustering
 
+# plotting
+import matplotlib.pyplot as plt
+
 # Helper function for LocalOutlierFactor
 def topk(a, k):
     """
@@ -83,7 +86,7 @@ def model_selection(model_paths, num_select=1):
         best_valid_losses.append(best_valid_loss)
         hparams.append(join(model_path, 'model-hparams.json'))
 
-    best_model = np.argmax(best_valid_losses)
+    best_model = np.argmin(best_valid_losses)
     best_checkpoint = best_checkpoints[best_model]
     best_hparams = hparams[best_model]
 
@@ -187,11 +190,21 @@ def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples
     return outlier_inds, labels
 
 
-def local_outlier_factor(embeddings, n_outliers=500, **kwargs): 
+def local_outlier_factor(embeddings, n_outliers=500, plot_dir=None, **kwargs): 
     clf = LocalOutlierFactor(**kwargs)
     # Array with 1 if inlier, -1 if outlier
     clf.fit_predict(embeddings)
 
+    # print the results
+    if plot_dir is not None:
+        # create directory
+        os.makedirs(plot_dir, exist_ok=True)
+        # plot
+        fig, ax = plt.subplots(1, 1, tight_layout=True)
+        ax.hist(clf.negative_outlier_factor_, bins='fd')
+        plt.savefig(os.path.join(plot_dir, 'score_distribution.png'))
+        plt.close()
+    
     # Only sorts 1 element of negative_outlier_factors_, namely the element
     # that is position k in the sorted array. The elements above and below
     # the kth position are partitioned but not sorted. Returns the indices
@@ -292,8 +305,8 @@ def main(sim_path, pdb_out_path, data_path, model_paths, model_type,
     embeddings, indices = generate_embeddings(model_type, best_hparams, best_checkpoint, dim1, dim2,
                                               device, data_path, cm_format, batch_size)
 
-
     print('embeddings shape: ', embeddings.shape)
+    
     # Perform DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, best_checkpoint,
     #                                          embeddings, min_samples, eps)
@@ -302,8 +315,8 @@ def main(sim_path, pdb_out_path, data_path, model_paths, model_type,
     #outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
 
     # Perform LocalOutlierFactor outlier detection on embeddings
-    outlier_inds, scores = local_outlier_factor(embeddings)
-
+    outlier_inds, scores = local_outlier_factor(embeddings, plot_dir=os.path.join(pdb_out_path,"figures"))
+    
     print(outlier_inds.shape)
     for ind, score in zip(outlier_inds, scores):
         print(f'ind, score: {ind}, {score}')
