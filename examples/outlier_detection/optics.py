@@ -6,7 +6,7 @@ import torch
 import numpy as np
 from glob import glob
 from os.path import join
-#import MDAnalysis as mda
+import MDAnalysis as mda
 from torch.utils.data import DataLoader
 from sklearn.neighbors import LocalOutlierFactor
 from molecules.utils import open_h5
@@ -360,7 +360,7 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
     simulation_inds = indices[outlier_inds]
 
     # Write rewarded PDB files to shared path
-    outlier_pdbs = write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path)
+    outlier_pdbs = write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path, data_path)
     restart_checkpnts = md_checkpoints(sim_path, pdb_out_path, outlier_pdbs)
 
     restart_points = restart_checkpnts + outlier_pdbs
