@@ -300,6 +300,9 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
 @click.option('-M', '--min_samples', default=10, type=int,
               help='Value of min_samples in the OPTICS algorithm')
 
+@click.option('-n', '-n_-outliers', default=500, type=int,
+              help='Number of outlier PDBs to find and output.')
+
 @click.option('-D', '--device', default='cpu',
               help='PyTorch formatted device str. cpu, cuda, cuda:0, etc')
 
@@ -319,7 +322,7 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
                    ' The larger the batch size, the faster the computation.')
 
 def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, model_type,
-         min_samples, device, dim1, dim2, cm_format, batch_size):
+         n_outliers, min_samples, device, dim1, dim2, cm_format, batch_size):
 
     # Make directory to store output PDB files
     os.makedirs(pdb_out_path, exist_ok=True)
@@ -343,7 +346,10 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
     #outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
 
     # Perform LocalOutlierFactor outlier detection on embeddings
-    outlier_inds, scores = local_outlier_factor(embeddings, plot_dir=os.path.join(pdb_out_path,"figures"))
+    outlier_inds, scores = local_outlier_factor(embeddings,
+                                                n_outliers=n_outliers,
+                                                plot_dir=os.path.join(pdb_out_path, 'figures'),
+                                                n_jobs=-1)
     
     print(outlier_inds.shape)
     for ind, score in zip(outlier_inds, scores):
