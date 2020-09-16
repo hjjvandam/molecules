@@ -115,7 +115,7 @@ def parse_dict(ctx, param, value):
 @click.option('-wp', '--wandb_api_key', default=None,
               help='API key for wandb logging')
 
-def main(input_path, dataset_name, rmsd_name, fnc_name out_path, checkpoint, resume, model_prefix, dim1, dim2,
+def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix, dim1, dim2,
          cm_format, encoder_gpu, decoder_gpu, epochs, loss_weights, model_type,
          interval, sample_interval, amp, distributed, local_rank, wandb_project_name, wandb_api_key):
     
@@ -143,7 +143,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name out_path, checkpoint, res
             'lr': hp.loguniform('lr', 1e-5, 1e-1)
         },
         'latent_dim': hp.choice('latent_dim', [64, 128, 256]),
-        'scale_factor': hp.choice('latent_dim', [2, 4])
+        'scale_factor': hp.choice('scale_factor', [2, 4]),
         'loss_weights': {key: float(val) for key, val in loss_weights.items()},
         'model_type': model_type,
         'interval': interval,
@@ -261,7 +261,7 @@ def run_config(config):
                           'latent_dim': latent_dim,
                           'dec_filters': dim1,
                           'scale_factor': scale_factor,
-                          'lambda_rec': loss_weights['lambda_rec']
+                          'lambda_rec': loss_weights['lambda_rec'],
                           'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
