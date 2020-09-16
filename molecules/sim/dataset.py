@@ -87,8 +87,8 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
         sparse-rowcol: old format with group containing row,col datasets
     """
     kwargs = {'fletcher32': True}
-    int_kwargs = {'fletcher32': True, 'dtype': 'int32', 'chunks':(1,)}
-    string_kwargs = {'fletcher32': True, 'dtype': h5py.string_dtype(), 'chunks':(1,)}
+    int_kwargs = {'fletcher32': True, 'dtype': 'int32'}
+    string_kwargs = {'fletcher32': True, 'dtype': h5py.string_dtype('utf-8')}
     scalar_kwargs = {'fletcher32': True, 'dtype': 'float16', 'chunks':(1,)}
 
     with open_h5(save_file, 'w', swmr=False) as h5_file:
@@ -98,7 +98,9 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
             h5_file.create_dataset('sim_len', data=sim_lens, **int_kwargs)
         # Save simulation traj file names
         if traj_files is not None:
-            h5_file.create_dataset('traj_file', data=traj_files, **string_kwargs)
+            utf8_type = h5py.string_dtype('utf-8')
+            traj_files_data = np.array([np.array(t, dtype=utf8_type) for t in traj_files])
+            h5_file.create_dataset('traj_file', data=traj_files_data, **string_kwargs)
         # Save rmsd
         if rmsd is not None:
             h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
@@ -392,7 +394,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
               for i, traj_file in enumerate(traj_files)]
 
     # initialize buffers
-    ids, sim_lens = []
+    ids, sim_lens = [], []
     if rmsd:
         rmsds = []
     if fnc:

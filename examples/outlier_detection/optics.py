@@ -9,6 +9,7 @@ from os.path import join
 #import MDAnalysis as mda
 from torch.utils.data import DataLoader
 from sklearn.neighbors import LocalOutlierFactor
+from molecules.utils import open_h5
 from molecules.ml.unsupervised.cluster import optics_clustering
 
 # plotting
@@ -233,8 +234,8 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path, data_path):
     # Get list of simulation trajectory files (Assume all are equal length (ns))
 
     with open_h5(data_path) as h5_file:
-        traj_files = h5_file['traj_file'][...]
-        sim_lens = h5_file['sim_len'][...]
+        traj_files = np.array(h5_file['traj_file'])
+        sim_lens = np.array(h5_file['sim_len'])
 
     traj_dict = dict(zip(traj_files, sim_lens))
 
@@ -300,7 +301,7 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
 @click.option('-M', '--min_samples', default=10, type=int,
               help='Value of min_samples in the OPTICS algorithm')
 
-@click.option('-n', '--n_-outliers', default=500, type=int,
+@click.option('-n', '--n_outliers', default=500, type=int,
               help='Number of outlier PDBs to find and output.')
 
 @click.option('-D', '--device', default='cpu',
