@@ -93,7 +93,10 @@ def parse_dict(ctx, param, value):
 @click.option('-t', '--model_type', default='resnet',
               help='Model architecture option: [resnet, symmetric]')
 
-@click.option('-I', '--interval', default=1, type=int,
+@click.option('-ei', '--embed_interval', default=1, type=int,
+              help="Saves embedddings every interval'th point")
+
+@click.option('-ti', '--tsne_interval', default=1, type=int,
               help='Saves model checkpoints, embedddings, tsne plots every ' \
                    "interval'th point")
 
@@ -117,7 +120,7 @@ def parse_dict(ctx, param, value):
 
 def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix, dim1, dim2,
          cm_format, encoder_gpu, decoder_gpu, epochs, loss_weights, model_type,
-         interval, sample_interval, amp, distributed, local_rank, wandb_project_name, wandb_api_key):
+         embed_interval, tsne_interval, sample_interval, amp, distributed, local_rank, wandb_project_name, wandb_api_key):
     
     # init raytune
     ray.init()
@@ -146,7 +149,8 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
         'scale_factor': hp.choice('scale_factor', [2, 4]),
         'loss_weights': {key: float(val) for key, val in loss_weights.items()},
         'model_type': model_type,
-        'interval': interval,
+        'embed_interval': embed_interval,
+        'tsne_interval': tsne_interval,
         'sample_interval': sample_interval,
         'amp': amp,
         'distributed': distributed,
@@ -202,7 +206,8 @@ def run_config(config):
     latent_dim = config['latent_dim']
     loss_weights = config['loss_weights']
     model_type = config['model_type']
-    interval = config['interval']
+    embed_interval = config['embed_interval']
+    tsne_interval = config['tsne_interval']
     sample_interval = config['sample_interval']
     amp = config['amp']
     distributed = config['distributed']
@@ -292,8 +297,9 @@ def run_config(config):
     # Load training and validation data
     # training
     train_dataset = ContactMapDataset(input_path,
-                                      'contact_map',
-                                      'rmsd', 'fnc',
+                                      dataset_name,
+                                      rmsd_name, 
+                                      fnc_name,
                                       input_shape,
                                       split='train',
                                       cm_format=cm_format)
@@ -313,8 +319,9 @@ def run_config(config):
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
-                                      'contact_map',
-                                      'rmsd', 'fnc',
+                                      dataset_name,
+                                      rmsd_name,
+                                      fnc_name,
                                       input_shape,
                                       split='valid',
                                       cm_format=cm_format)
@@ -349,19 +356,10 @@ def run_config(config):
                    name = model_prefix,
                    id = model_prefix,
                    dir = model_path,
-                   resume = False)
+                   resume = False,
+                   config=config)
         wandb_config = wandb.config
         
-        # log HP
-        wandb_config.dim1 = dim1
-        wandb_config.dim2 = dim2
-        wandb_config.latent_dim = latent_dim
-        
-        # optimizer
-        wandb_config.optimizer_name = optimizer_hparams.name
-        for param in optimizer_hparams.hparams:
-            wandb_config['optimizer_' + param] = optimizer_hparams.hparams[param]
-            
         # watch model
         wandb.watch(vae.model)
     
@@ -374,7 +372,7 @@ def run_config(config):
                                              mpi_comm=comm)
 
     save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
-                                           interval=interval,
+                                           interval=embed_interval,
                                            sample_interval=sample_interval,
                                            mpi_comm=comm)
 
@@ -383,7 +381,7 @@ def run_config(config):
                                      projection_type='3d',
                                      target_perplexity=100,
                                      colors=['rmsd', 'fnc'],
-                                     interval=interval,
+                                     interval=tsne_interval,
                                      wandb_config=wandb_config,
                                      mpi_comm=comm)
 
