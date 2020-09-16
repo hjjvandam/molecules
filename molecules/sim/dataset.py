@@ -55,7 +55,8 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
         group.create_dataset('col', dtype=dt, data=ragged(cols), chunks=(1,), **kwargs)
 
 def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
-          contact_maps=None, cm_format='sparse-concat'):
+          contact_maps=None, cm_format='sparse-concat',
+          sim_lens=None, traj_files=None):
     """
     Saves data to h5 file. All data is optional, can save any
     combination of data input arrays.
@@ -86,9 +87,18 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
         sparse-rowcol: old format with group containing row,col datasets
     """
     kwargs = {'fletcher32': True}
+    int_kwargs = {'fletcher32': True, 'dtype': 'int32', 'chunks':(1,)}
+    string_kwargs = {'fletcher32': True, 'dtype': h5py.string_dtype(), 'chunks':(1,)}
     scalar_kwargs = {'fletcher32': True, 'dtype': 'float16', 'chunks':(1,)}
 
     with open_h5(save_file, 'w', swmr=False) as h5_file:
+
+        # Save simulation length
+        if sim_lens is not None:
+            h5_file.create_dataset('sim_len', data=sim_lens, **int_kwargs)
+        # Save simulation traj file names
+        if traj_files is not None:
+            h5_file.create_dataset('traj_file', data=traj_files, **string_kwargs)
         # Save rmsd
         if rmsd is not None:
             h5_file.create_dataset('rmsd', data=rmsd, **scalar_kwargs)
@@ -103,6 +113,7 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
         # Save contact maps
         if contact_maps is not None:
             _save_sparse_contact_maps(h5_file, contact_maps, cm_format=cm_format, **kwargs)
+
 def fraction_of_contacts(cm, ref_cm):
     """
     Given two contact matices of equal dimensions, computes
@@ -268,8 +279,10 @@ def _traj_to_dset(topology, ref_topology, traj_file,
               point_cloud=pc_data, contact_maps=contact_map_data,
               cm_format=cm_format)
 
+    sim_len = len(sim.trajectory)
+
     # Any of these could be None based on the user input
-    return rmsd_data, fnc_data, pc_data, contact_map_data
+    return rmsd_data, fnc_data, pc_data, contact_map_data, sim_len
 
 def _worker(kwargs):
     """Helper function for parallel data collection."""
@@ -379,7 +392,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
               for i, traj_file in enumerate(traj_files)]
 
     # initialize buffers
-    ids = []
+    ids, sim_lens = []
     if rmsd:
         rmsds = []
     if fnc:
@@ -390,7 +403,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         rows, cols = [], []
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        for (rmsd_data, fnc_data, pc_data, contact_map_data), id_ in executor.map(_worker, kwargs):
+        for (rmsd_data, fnc_data, pc_data, contact_map_data, sim_len), id_ in executor.map(_worker, kwargs):
             if rmsd:
                 rmsds.append(rmsd_data)
             if fnc:
@@ -403,6 +416,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
                 cols.append(col)
 
             ids.append(id_)
+            sim_lens.append(sim_len)
 
             if verbose:
                 print('finished id: ', id_)
@@ -442,8 +456,11 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         cols_ = list(itertools.chain.from_iterable(cols_))
         contact_maps_ = (rows_, cols_)
 
+    _traj_files = [os.path.abspath(traj_file) for traj_file in traj_files]
+
     _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
-          contact_maps=contact_maps_, cm_format=cm_format)
+          contact_maps=contact_maps_, cm_format=cm_format, sim_lens=sim_lens,
+          traj_files=_traj_files)
 
     return rmsds_, fncs_, point_clouds_, contact_maps_
 
