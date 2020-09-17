@@ -87,8 +87,12 @@ def parse_dict(ctx, param, value):
 @click.option('-e', '--epochs', default=10, type=int,
               help='Number of epochs to train for')
 
-@click.option('-lw', '--loss_weights', callback=parse_dict,
+@click.option('-lw', '--loss_weights', default="lambda_rec=1.0", 
+              callback=parse_dict,
               help='Loss parameters')
+
+@click.option('-opt', '--optimizer', callback=parse_dict,
+              help='Optimizer parameters')
 
 @click.option('-t', '--model_type', default='resnet',
               help='Model architecture option: [resnet, symmetric]')
@@ -118,20 +122,21 @@ def parse_dict(ctx, param, value):
 @click.option('-wp', '--wandb_api_key', default=None,
               help='API key for wandb logging')
 
-def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix, dim1, dim2,
-         cm_format, encoder_gpu, decoder_gpu, epochs, loss_weights, model_type,
+def main(input_path, dataset_name, rmsd_name, fnc_name, out_path,  model_prefix, dim1, dim2,
+         checkpoint, resume, cm_format, encoder_gpu, decoder_gpu, epochs,
+         loss_weights, optimizer, model_type,
          embed_interval, tsne_interval, sample_interval, amp, distributed, local_rank, wandb_project_name, wandb_api_key):
     
     # init raytune
     ray.init()
 
     tune_config = {
-        'input_path': input_path,
+        'input_path': os.path.abspath(input_path),
         'dataset_name': dataset_name,
         'rmsd_name': rmsd_name,
         'fnc_name': fnc_name,
-        'out_path': out_path,
-        'checkpoint': checkpoint,
+        'out_path': os.path.abspath(out_path),
+        'checkpoint': os.path.abspath(checkpoint) if checkpoint is not None else None,
         'resume': resume,
         'model_prefix': model_prefix,
         'dim1': dim1,
@@ -142,7 +147,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
         'epochs': epochs,
         'batch_size': hp.choice('batch_size', [4, 8, 16, 32]),
         'optimizer': {
-            'name': 'Adam', 
+            'name': optimizer['name'], 
             'lr': hp.loguniform('lr', 1e-5, 1e-1)
         },
         'latent_dim': hp.choice('latent_dim', [64, 128, 256]),
@@ -173,7 +178,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
 
     analysis = tune.run(run_config, 
                         loggers=[WandbLogger], 
-                        resources_per_trial={'gpu': len(set(encoder_gpu, decoder_gpu))}, 
+                        resources_per_trial={'gpu': len({encoder_gpu, decoder_gpu})}, 
                         num_samples=20, 
                         search_alg=hyperopt_search)
 
@@ -204,6 +209,7 @@ def run_config(config):
     batch_size = config['batch_size']
     optimizer = config['optimizer']
     latent_dim = config['latent_dim']
+    scale_factor = config['scale_factor']
     loss_weights = config['loss_weights']
     model_type = config['model_type']
     embed_interval = config['embed_interval']
