@@ -20,9 +20,10 @@ python example_vae.py -i /data/3clpro/3clpro-monomer.h5 \
        -a \
        -f sparse-concat \
        -t resnet \
-       -o /data/runs/ -m cmaps-3clpro \
+       -o /data/runs/ -m cmaps-3clpro-3 \
        --wandb_project_name covid_dl \
-       -opt "name=Adam,lr=1e-3" \
+       -opt "name=Adam,lr=5e-4" \
+       --loss_weights "lambda_rec=0.01" \
        -e 150 \
        -b 256 \
        -E 0 -D 0 \
