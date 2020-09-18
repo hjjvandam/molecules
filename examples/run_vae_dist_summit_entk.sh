@@ -23,8 +23,18 @@ else
 	distributed=''
 fi
 
+if [ "$amp" == "amp" ]
+then
+	amp="--amp"
+else
+	amp=""
+fi
+
 # create output dir
 #mkdir -p ${output_dir}
+
+conda_path='/gpfs/alpine/proj-shared/med110/atrifan/scripts/pytorch-1.6.0_cudnn-8.0.2.39_nccl-2.7.8-1_static_mlperf'
+script_path='/gpfs/alpine/proj-shared/med110/hrlee/git/braceal/molecules/examples/example_vae.py'
 
 # important variables
 export WORLD_SIZE=${OMPI_COMM_WORLD_SIZE}
@@ -35,18 +45,19 @@ export MASTER_ADDR=$(cat ${LSB_DJOB_HOSTFILE} | uniq | sort | grep -v batch | he
 export LC_ALL=en_US.utf-8
 export LANG=en_US.utf-8
 export WANDB_MODE=dryrun
+
 # determine gpu
 enc_gpu=$(( ${LOCAL_RANK} ))
-dec_gpu=$(( ${LOCAL_RANK} + 3 ))
+dec_gpu=$(( ${LOCAL_RANK} )) #+ 3 ))
 
 
 #echo "REPORT: rank:${RANK}, local_rank:${LOCAL_RANK} enc:${enc_gpu} dec:${dec_gpu}"
 
 # launch code
-cmd="/gpfs/alpine/proj-shared/med110/atrifan/scripts/pytorch-1.6.0_cudnn-8.0.2.39_nccl-2.7.8-1_static_mlperf/bin/python -u /gpfs/alpine/proj-shared/med110/hrlee/git/braceal/molecules/examples/example_vae.py \
+cmd="${conda_path}/bin/python -u ${script_path} \
        -i ${data_dir} \
        -o ${output_dir} \
-       --amp ${distributed} \
+       ${amp} ${distributed} \
        --model_id ${model_id} \
        -f ${cm_format} \
        -t ${model_type} \
