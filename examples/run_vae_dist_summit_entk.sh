@@ -66,6 +66,7 @@ cmd="${conda_path}/bin/python -u ${script_path} \
        -E ${enc_gpu} -D ${dec_gpu} \
        -opt ${optimizer} \
        -S ${sample_interval} \
+       -ti $(($epoch+1)) \
        --dim1 ${height} --dim2 ${width} -d ${dim}"
 echo ${cmd}
 ($cmd)
