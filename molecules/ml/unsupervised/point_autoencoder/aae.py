@@ -276,7 +276,7 @@ class Encoder(nn.Module):
         z = self.reparameterize(mu, logvar)
         return z, mu, logvar
 
-     def encode(self, x):
+    def encode(self, x):
         self.eval()
         with torch.no_grad():
             return self(x)[0]
