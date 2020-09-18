@@ -413,7 +413,7 @@ class VAE:
                 with amp.autocast(self.enable_amp):
                     logit_recon_batch, codes, mu, logvar = self.model(data)
                     valid_loss_rec, valid_loss_kld = self.loss_fnc(logit_recon_batch, data,
-                                                                   mu, logvar, self.lambda_rec)
+                                                                   mu, logvar)
                     valid_loss += (self.lambda_rec * valid_loss_rec + valid_loss_kld).item() / len(data)
 
                 for callback in callbacks:
