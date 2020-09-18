@@ -1,13 +1,15 @@
 import os
 import json
 import click
+import shutil
 import torch
 import numpy as np
 from glob import glob
 from os.path import join
-#import MDAnalysis as mda
+import MDAnalysis as mda
 from torch.utils.data import DataLoader
 from sklearn.neighbors import LocalOutlierFactor
+from molecules.utils import open_h5
 from molecules.ml.unsupervised.cluster import optics_clustering
 
 # plotting
@@ -219,35 +221,58 @@ def local_outlier_factor(embeddings, n_outliers=500, plot_dir=None, **kwargs):
     # Returns n_outlier best outliers sorted from best to worst
     return outlier_inds[sort_inds], outlier_scores[sort_inds]
 
+def find_frame(traj_dict, frame_number=0): 
+    local_frame = frame_number
+    for key in sorted(traj_dict): 
+        if local_frame - traj_dict[key] < 0:            
+            return local_frame, key
+        else: 
+            local_frame -= traj_dict[key]
+    raise Exception('frame %d should not exceed the total number of frames, %d' % (frame_number, sum(np.array(traj_dict.values()).astype(int))))
 
-def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
+def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path, data_path):
     # Get list of simulation trajectory files (Assume all are equal length (ns))
-    traj_fnames = sorted(glob(join(sim_path, 'output-*.dcd')))
 
-    # Get list of simulation PDB files
-    pdb_fnames = sorted(glob(join(sim_path, 'input-*.pdb')))
+    with open_h5(data_path) as h5_file:
+        traj_files = np.array(h5_file['traj_file'])
+        sim_lens = np.array(h5_file['sim_len'])
 
-    # Get total number of simulations
-    sim_count = len(traj_fnames)
+    traj_dict = dict(zip(traj_files, sim_lens))
 
-    # Get simulation indices and frame number coresponding to outliers
-    reward_locs = map(lambda outlier: divmod(outlier, sim_count), rewarded_inds)
+    reward_locs = [find_frame(traj_dict, ind) for ind in rewarded_inds]
 
     # For documentation on mda.Writer methods see:
     #   https://www.mdanalysis.org/mdanalysis/documentation_pages/coordinates/PDB.html
     #   https://www.mdanalysis.org/mdanalysis/_modules/MDAnalysis/coordinates/PDB.html#PDBWriter._update_frame
 
     outlier_pdbs = []
-    for frame, sim_id in reward_locs:
-        pdb_fname = join(pdb_out_path, f'{sim_id}_{frame:06}.pdb')
-        u = mda.Universe(pdb_fnames[sim_id], traj_fnames[sim_id])
-        with mda.Writer(pdb_fname) as writer:
+    for frame, traj_file in reward_locs:
+        sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
+        basename = os.path.basename(os.path.dirname(traj_file))
+        out_pdb = join(pdb_out_path, f'{basename}_{frame:06}.pdb')
+        u = mda.Universe(sim_pdb, traj_file)
+        with mda.Writer(out_pdb) as writer:
             # Write a single coordinate set to a PDB file
             writer._update_frame(u)
             writer._write_timestep(u.trajectory[frame])
-        outlier_pdbs.append(pdb_fname)
+        outlier_pdbs.append(out_pdb)
 
     return outlier_pdbs
+
+def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
+    # Restarts from check point
+    checkpnt_list = sorted(glob(os.path.join(sim_path, 'omm_runs_*/checkpnt.chk')))
+    restart_checkpnts = [] 
+    for checkpnt in checkpnt_list: 
+        checkpnt_filepath = join(pdb_out_path, os.path.basename(os.path.dirname(checkpnt) + '.chk'))
+        if not os.path.exists(checkpnt_filepath): 
+            shutil.copy2(checkpnt, checkpnt_filepath) 
+            # Includes only checkpoint of trajectory that contains an outlier 
+            if any(os.path.basename(os.path.dirname(checkpnt)) in outlier for outlier in outlier_pdbs):  
+                restart_checkpnts.append(checkpnt_filepath)
+
+    return restart_checkpnts
+
 
 
 @click.command()
@@ -257,6 +282,10 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
 
 @click.option('-p', '--pdb_out_path', default=join('.', 'outlier_pdbs'),
               help='Path to folder to write output PDB files to.')
+
+@click.option('-o', '--restart_points_path',
+              default=os.path.abspath('./restart_points.json'),
+              help='Path to write output json file with PDB file list.')
 
 @click.option('-d', '--data_path', required=True,
               type=click.Path(exists=True),
@@ -271,6 +300,9 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
 
 @click.option('-M', '--min_samples', default=10, type=int,
               help='Value of min_samples in the OPTICS algorithm')
+
+@click.option('-n', '--n_outliers', default=500, type=int,
+              help='Number of outlier PDBs to find and output.')
 
 @click.option('-D', '--device', default='cpu',
               help='PyTorch formatted device str. cpu, cuda, cuda:0, etc')
@@ -290,8 +322,8 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path):
                    ' memory and size of input example. Does not affect output.' \
                    ' The larger the batch size, the faster the computation.')
 
-def main(sim_path, pdb_out_path, data_path, model_paths, model_type,
-         min_samples, device, dim1, dim2, cm_format, batch_size):
+def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, model_type,
+         n_outliers, min_samples, device, dim1, dim2, cm_format, batch_size):
 
     # Make directory to store output PDB files
     os.makedirs(pdb_out_path, exist_ok=True)
@@ -315,7 +347,10 @@ def main(sim_path, pdb_out_path, data_path, model_paths, model_type,
     #outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
 
     # Perform LocalOutlierFactor outlier detection on embeddings
-    outlier_inds, scores = local_outlier_factor(embeddings, plot_dir=os.path.join(pdb_out_path,"figures"))
+    outlier_inds, scores = local_outlier_factor(embeddings,
+                                                n_outliers=n_outliers,
+                                                plot_dir=os.path.join(pdb_out_path, 'figures'),
+                                                n_jobs=-1)
     
     print(outlier_inds.shape)
     for ind, score in zip(outlier_inds, scores):
@@ -324,12 +359,13 @@ def main(sim_path, pdb_out_path, data_path, model_paths, model_type,
     # Map shuffled indices back to in-order MD frames
     simulation_inds = indices[outlier_inds]
 
-    print(len(simulation_inds))
-    print(simulation_inds)
-    exit()
-
     # Write rewarded PDB files to shared path
-    write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path)
+    outlier_pdbs = write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path, data_path)
+    restart_checkpnts = md_checkpoints(sim_path, pdb_out_path, outlier_pdbs)
+
+    restart_points = restart_checkpnts + outlier_pdbs
+    with open(restart_points_path, 'w') as restart_file:
+        json.dump(restart_points, restart_file)
 
 if __name__ == '__main__':
     main()

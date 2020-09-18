@@ -3,6 +3,7 @@ import glob
 import click
 import h5py
 import numpy as np
+from molecules.utils import open_h5
 
 @click.command()
 
@@ -39,6 +40,8 @@ def main(data_root, pattern, out_path, rmsd, fnc, contact_map, point_cloud, verb
     if fnc: fields.append('fnc')
     if contact_map: fields.append('contact_map')
     if point_cloud: fields.append('point_cloud')
+    fields.append('sim_len')
+    fields.append('traj_file')
 
     if not fields:
         raise ValueError('No data fields selected to concatenate. Add any ' \
@@ -62,7 +65,8 @@ def main(data_root, pattern, out_path, rmsd, fnc, contact_map, point_cloud, verb
         if verbose:
             print('Reading', in_file)
 
-        with h5py.File(in_file, 'r', libver='latest', driver='core', backing_store=False) as fin:
+        with open_h5(in_file) as fin:
+        #with h5py.File(in_file, 'r', libver='latest', driver='core', backing_store=False) as fin:
             for field in fields:
                 data[field].append(fin[field][...])
 
@@ -79,6 +83,11 @@ def main(data_root, pattern, out_path, rmsd, fnc, contact_map, point_cloud, verb
 
     # Create new dsets from concatenated dataset
     for field, concat_dset in data.items():
+        if field == 'traj_file':
+            utf8_type = h5py.string_dtype('utf-8')
+            fout.create_dataset('traj_file', data=concat_dset, dtype=utf8_type) 
+            continue
+
         shape = concat_dset.shape
         chunkshape = ((1,) + shape[1:])
         # Create dataset

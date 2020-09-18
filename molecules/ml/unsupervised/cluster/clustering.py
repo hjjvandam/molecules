@@ -49,7 +49,7 @@ def dbscan_clustering(X, eps, min_samples, outlier_cutoff=10):
             return opt_eps, outlier_inds, db.labels_
 
 
-def optics_clustering(X, min_samples):
+def optics_clustering(X, **kwargs):
     """
     Performs default OPTICS clustering and returns associated 
     outlier indices.
@@ -59,14 +59,11 @@ def optics_clustering(X, min_samples):
     X : np.ndarray
         Data array to run OPTICS on
 
-    min_samples : int
-        min_samples in the OPTICS algorithm
+    **kwargs : dict
+        Parameters to be passed to OPTICS algorithm, see sklearn docs.
 
     Return
     ------
-    opt_eps : float
-        optimal eps value given the X data
-
     outliers : np.ndarray
         opt_eps associated array of outlier indices in the X data
 
@@ -75,7 +72,7 @@ def optics_clustering(X, min_samples):
     """
 
     # Run OPTICS clustering on the data
-    clustering = OPTICS(min_samples=min_samples).fit(X)
+    clustering = OPTICS(**kwargs).fit(X)
     
     # Array of outlier indices in X data
     outlier_inds = np.flatnonzero(clustering.labels_ == -1)
