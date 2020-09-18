@@ -358,12 +358,12 @@ class VAE:
             self.gscaler.update()
 
             # update loss
-            train_loss += loss.item() / len(data)
+            train_loss += loss.item()
 
             if callbacks:
-                logs['train_loss'] = loss.item() / len(data)
-                logs['train_loss_rec'] = loss_rec.item() / len(data)
-                logs['train_loss_kld'] = loss_kld.item() / len(data)
+                logs['train_loss'] = loss.item()
+                logs['train_loss_rec'] = loss_rec.item()
+                logs['train_loss_kld'] = loss_kld.item()
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose and (self.comm_rank == 0):
@@ -371,7 +371,7 @@ class VAE:
                       epoch, (batch_idx + 1) * self.comm_size * len(data),
                       self.comm_size * len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data), time.time() - start))
+                      loss.item(), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
@@ -414,7 +414,7 @@ class VAE:
                     logit_recon_batch, codes, mu, logvar = self.model(data)
                     valid_loss_rec, valid_loss_kld = self.loss_fnc(logit_recon_batch, data,
                                                                    mu, logvar)
-                    valid_loss += (self.lambda_rec * valid_loss_rec + valid_loss_kld).item() / len(data)
+                    valid_loss += (self.lambda_rec * valid_loss_rec + valid_loss_kld).item()
 
                 for callback in callbacks:
                     callback.on_validation_batch_end(epoch, batch_idx, logs,

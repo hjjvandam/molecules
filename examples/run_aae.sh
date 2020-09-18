@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # set to dev 1
-export CUDA_VISIBLE_DEVICES=0
+export CUDA_VISIBLE_DEVICES=1
 
 # connect to wandb
 wandb login 6c8b9db0b520487f05d32ebc76fcea156bd85d58
 
 # spike data
-#spike_data="/data/spike-for-real/closed/spike-full-point-cloud_closed.h5"
-spike_data="/data/spike-for-real/closed/spike_closed.h5"
+spike_data="/data/spike-for-real/open/spike_open.h5"
+#spike_data="/data/spike-for-real/closed/spike_closed.h5"
 
 # checkpoint
 
@@ -22,7 +22,7 @@ mpirun -np 1 --allow-run-as-root \
        -dn "point_cloud" \
        -rn "rmsd" \
        --resume \
-       -o /data/runs/ -m spike-closed-correct-1-seq-embedding --wandb_project_name covid_dl \
+       -o /data/runs/ -m spike-open-correct-1-seq-embedding --wandb_project_name covid_dl \
        --encoder_kernel_sizes 5 3 3 1 1 \
        -np 3768 -nf 0 \
        -E 0 -G 0 -D 0 \
