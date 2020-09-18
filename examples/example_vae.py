@@ -86,6 +86,9 @@ def parse_dict(ctx, param, value):
 @click.option('-opt', '--optimizer', callback=parse_dict,
               help='Optimizer parameters')
 
+@click.option('-lw', '--loss_weights', callback=parse_dict, default="lambda_rec=1.0",
+              help='Loss weight components')
+
 @click.option('-t', '--model_type', default='resnet',
               help='Model architecture option: [resnet, symmetric]')
 
@@ -121,7 +124,7 @@ def parse_dict(ctx, param, value):
               help='Enable distributed training')
 
 def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
-         dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, model_type,
+         dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, loss_weights, model_type,
          latent_dim, encoder_resnet_layers, scale_factor, embed_interval, tsne_interval, sample_interval, 
          wandb_project_name, local_rank, amp, distributed):
 
@@ -187,6 +190,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                           'dec_filters': dim1,
                           'enc_reslayers': encoder_resnet_layers,
                           'scale_factor': scale_factor,
+                          'lambda_rec': float(loss_weights["lambda_rec"]),
                           'output_activation': 'None'}
 
         input_shape = (dim1, dim1)
@@ -288,6 +292,9 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
         wandb_config.optimizer_name = optimizer_hparams.name
         for param in optimizer_hparams.hparams:
             wandb_config['optimizer_' + param] = optimizer_hparams.hparams[param]
+
+        # loss weight
+        wandb_config.lambda_rec = hparams.lambda_rec
             
         # watch model
         wandb.watch(vae.model)
