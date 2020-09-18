@@ -92,6 +92,9 @@ def parse_dict(ctx, param, value):
 @click.option('-d', '--latent_dim', default=10, type=int,
               help='Number of dimensions in latent space')
 
+@click.option('-erl', '--encoder_resnet_layers', default=None, type=int,
+              help='Number of resnet layers to target')
+
 @click.option('-sf', '--scale_factor', default=2, type=int,
               help='Scale factor hparam for resnet VAE')
 
@@ -119,8 +122,8 @@ def parse_dict(ctx, param, value):
 
 def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
          dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, model_type,
-         latent_dim, scale_factor, embed_interval, tsne_interval, sample_interval, wandb_project_name,
-         local_rank, amp, distributed):
+         latent_dim, encoder_resnet_layers, scale_factor, embed_interval, tsne_interval, sample_interval, 
+         wandb_project_name, local_rank, amp, distributed):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
     
@@ -128,13 +131,13 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
         warnings.warn('Found tsne_interval < embed_interval. Will result in ' \
                       'duplicated t-SNE plots.')
 
-
     # do some scaffolding for DDP
     comm_rank = 0
     comm_size = 1
     comm_local_rank = 0
     comm = None
     if distributed and dist.is_available():
+
         # init mpi4py:
         MPI.Init_thread()
 
@@ -155,7 +158,9 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
             comm_local_rank = local_rank
         else:
             comm_local_rank = int(os.getenv("LOCAL_RANK", 0))
-
+            
+        if comm_rank == 0:
+            print("Distributed setup complete")
 
     assert model_type in ['symmetric', 'resnet']
 
@@ -180,6 +185,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                           'nchars': dim2,
                           'latent_dim': latent_dim,
                           'dec_filters': dim1,
+                          'enc_reslayers': encoder_resnet_layers,
                           'scale_factor': scale_factor,
                           'output_activation': 'None'}
 
