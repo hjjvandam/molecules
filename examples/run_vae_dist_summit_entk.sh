@@ -58,7 +58,7 @@ cmd="${conda_path}/bin/python -u ${script_path} \
        -i ${data_dir} \
        -o ${output_dir} \
        ${amp} ${distributed} \
-       --model_id ${model_id} \
+       --model_prefix ${model_id} \
        -f ${cm_format} \
        -t ${model_type} \
        -e ${epoch} \
@@ -68,4 +68,4 @@ cmd="${conda_path}/bin/python -u ${script_path} \
        -S ${sample_interval} \
        --dim1 ${height} --dim2 ${width} -d ${dim}"
 echo ${cmd}
-$(cmd)
+($cmd)
