@@ -14,9 +14,27 @@ distributed=${10}
 batch_size=${11}
 epoch=${12}
 sample_interval=${13}
+optimizer=${14}
+
+if [ "$distributed" == "distributed" ]
+then
+	distributed='--distributed'
+else
+	distributed=''
+fi
+
+if [ "$amp" == "amp" ]
+then
+	amp="--amp"
+else
+	amp=""
+fi
 
 # create output dir
-mkdir -p ${output_dir}
+#mkdir -p ${output_dir}
+
+conda_path='/gpfs/alpine/proj-shared/med110/atrifan/scripts/pytorch-1.6.0_cudnn-8.0.2.39_nccl-2.7.8-1_static_mlperf'
+script_path='/gpfs/alpine/proj-shared/med110/hrlee/git/braceal/molecules/examples/example_vae.py'
 
 # important variables
 export WORLD_SIZE=${OMPI_COMM_WORLD_SIZE}
@@ -30,34 +48,25 @@ export WANDB_MODE=dryrun
 
 # determine gpu
 enc_gpu=$(( ${LOCAL_RANK} ))
-dec_gpu=$(( ${LOCAL_RANK} + 3 ))
+dec_gpu=$(( ${LOCAL_RANK} )) #+ 3 ))
 
 
 #echo "REPORT: rank:${RANK}, local_rank:${LOCAL_RANK} enc:${enc_gpu} dec:${dec_gpu}"
-echo /gpfs/alpine/proj-shared/med110/atrifan/scripts/pytorch-1.6.0_cudnn-8.0.2.39_nccl-2.7.8-1_static_mlperf/bin/python -u /gpfs/alpine/proj-shared/med110/hrlee/git/braceal/molecules/examples/example_vae.py \
-       -i ${data_dir} \
-       -o ${output_dir} \
-       --amp --distributed \
-       --model_id ${model_id} \
-       -f ${cm_format} \
-       -t ${model_type} \
-       -e ${epoch} \
-       -b ${batch_size} \
-       -E ${enc_gpu} -D ${dec_gpu} \
-       -opt "name=Adam,lr=1e-4" \
-       -S ${sample_interval} \
-       --dim1 ${height} --dim2 ${width} -d ${dim}
+
 # launch code
-/gpfs/alpine/proj-shared/med110/atrifan/scripts/pytorch-1.6.0_cudnn-8.0.2.39_nccl-2.7.8-1_static_mlperf/bin/python -u /gpfs/alpine/proj-shared/med110/hrlee/git/braceal/molecules/examples/example_vae.py.bak \
+cmd="${conda_path}/bin/python -u ${script_path} \
        -i ${data_dir} \
        -o ${output_dir} \
-       --amp --distributed \
-       --model_id ${model_id} \
+       ${amp} ${distributed} \
+       --model_prefix ${model_id} \
        -f ${cm_format} \
        -t ${model_type} \
        -e ${epoch} \
        -b ${batch_size} \
        -E ${enc_gpu} -D ${dec_gpu} \
-       -opt "name=Adam,lr=1e-4" \
+       -opt ${optimizer} \
        -S ${sample_interval} \
-       --dim1 ${height} --dim2 ${width} -d ${dim}
+       -ti $(($epoch+1)) \
+       --dim1 ${height} --dim2 ${width} -d ${dim}"
+echo ${cmd}
+($cmd)
