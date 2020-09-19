@@ -14,18 +14,18 @@ export LOCAL_RANK=0
 
 # checkpoint
 #checkpoint="/data/runs/model-spike-cmaps-merge-debug/checkpoint/epoch-4-20200831-220400.pt"
-checkpoint="/data/runs/checkpoint_test/epoch-50-20200828-145839.pt"
+#checkpoint="/data/runs/checkpoint_test/epoch-50-20200828-145839.pt"
 
-python example_vae.py -i /data/spike-for-real/closed/spike_closed.h5 \
-       -c ${checkpoint} \
-       -a --distributed \
+python example_vae.py -i /data/3clpro/3clpro-monomer.h5 \
+       -a \
        -f sparse-concat \
        -t resnet \
-       -o /data/runs/ -m spike-cmaps-merge-debug \
+       -o /data/runs/ -m cmaps-3clpro-3 \
        --wandb_project_name covid_dl \
-       -opt "name=RMSprop,lr=1e-3" \
+       -opt "name=Adam,lr=5e-4" \
+       --loss_weights "lambda_rec=0.01" \
        -e 150 \
-       -b 4 \
-       -E 0 -D 1 \
-       -S 3 \
-       -h 3768 -w 3768 -d 256
+       -b 256 \
+       -E 0 -D 0 \
+       -S 10 \
+       -h 301 -w 301 -d 38

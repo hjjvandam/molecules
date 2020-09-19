@@ -70,7 +70,7 @@ class VAEModel(nn.Module):
         self.decoder.load_weights(dec_path)
 
 
-def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
+def vae_loss(recon_x, x, mu, logvar, reduction='mean'):
     """
     Effects
     -------
@@ -86,10 +86,10 @@ def vae_loss(recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
     # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return lambda_rec * BCE + KLD
+    return BCE, KLD
 
 
-def vae_logit_loss(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
+def vae_logit_loss(logit_recon_x, x, mu, logvar, reduction='mean'):
     """
     As above, but works directly on logits
     """
@@ -99,8 +99,9 @@ def vae_logit_loss(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mea
     # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return lambda_rec * BCE + KLD
-                    
+    return BCE, KLD
+    
+                
 def vae_logit_loss_outlier_helper(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
     """
     As above, but works directly on logits
@@ -347,7 +348,8 @@ class VAE:
             # forward
             with amp.autocast(self.enable_amp):
                 logit_recon_batch, codes, mu, logvar = self.model(data)
-                loss = self.loss_fnc(logit_recon_batch, data, mu, logvar, self.lambda_rec)
+                loss_rec, loss_kld = self.loss_fnc(logit_recon_batch, data, mu, logvar)
+                loss = self.lambda_rec * loss_rec + loss_kld
 
             # backward
             self.optimizer.zero_grad()
@@ -356,10 +358,12 @@ class VAE:
             self.gscaler.update()
 
             # update loss
-            train_loss += loss.item() / len(data)
+            train_loss += loss.item()
 
             if callbacks:
-                logs['train_loss'] = loss.item() / len(data)
+                logs['train_loss'] = loss.item()
+                logs['train_loss_rec'] = loss_rec.item()
+                logs['train_loss_kld'] = loss_kld.item()
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose and (self.comm_rank == 0):
@@ -367,7 +371,7 @@ class VAE:
                       epoch, (batch_idx + 1) * self.comm_size * len(data),
                       self.comm_size * len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data), time.time() - start))
+                      loss.item(), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
@@ -408,8 +412,9 @@ class VAE:
                 
                 with amp.autocast(self.enable_amp):
                     logit_recon_batch, codes, mu, logvar = self.model(data)
-                    valid_loss += self.loss_fnc(logit_recon_batch, data,
-                                                mu, logvar, self.lambda_rec).item() / len(data)
+                    valid_loss_rec, valid_loss_kld = self.loss_fnc(logit_recon_batch, data,
+                                                                   mu, logvar)
+                    valid_loss += (self.lambda_rec * valid_loss_rec + valid_loss_kld).item()
 
                 for callback in callbacks:
                     callback.on_validation_batch_end(epoch, batch_idx, logs,

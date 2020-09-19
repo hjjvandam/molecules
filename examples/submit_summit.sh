@@ -1,5 +1,5 @@
 #!/bin/bash
-#BSUB -W 50
+#BSUB -W 120
 #BSUB -P MED110
 #BSUB -J spike_train
 #BSUB -alloc_flags "NVME"
@@ -16,7 +16,8 @@ source activate /ccs/home/tkurth/project/pytorch/pytorch-1.6.0_cudnn-8.0.2.39_nc
 
 # run tag
 wandb_token=6c8b9db0b520487f05d32ebc76fcea156bd85d58
-run_tag="cmaps-spike-summit-1"
+nnodes=$(cat ${LSB_DJOB_HOSTFILE} | uniq | grep -v batch)
+run_tag="cmaps-spike-summit-2-nnodes${nnodes}"
 
 # we need that here too
 nnodes=$(cat ${LSB_DJOB_HOSTFILE} | sort | uniq | grep -v login | grep -v batch | wc -l)

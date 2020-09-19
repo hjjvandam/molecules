@@ -8,8 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
 from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-from molecules.utils import open_h5
+import h5py as h5
 
 def compute_pca(embeddings, dim=50):
     # TODO: use pca to drop embeddings to dim 50
@@ -20,7 +19,7 @@ def compute_pca(embeddings, dim=50):
 
 def _load_data(embeddings_path, colors, embeddings_dset='embeddings'):
     color_arrays = {}
-    with open_h5(embeddings_path, libver='latest', swmr=False) as f:
+    with h5.File(embeddings_path, 'r', libver='latest', swmr=False) as f:
         # Load embeddings from h5 file
         embeddings = f[embeddings_dset][...]
         # May contain rmsd, fnc
@@ -228,8 +227,19 @@ if __name__ == '__main__':
     #     h5_file.create_dataset('embeddings', data=data, **scaler_kwargs)
     #     h5_file.create_dataset('rmsd', data=rmsd, **scaler_kwargs)
     #     h5_file.create_dataset('fnc', data=fnc, **scaler_kwargs)
+    
+    #data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-1/model-cmaps-3clpro-summit-run-1/embedddings"
+    #embedding_file="embeddings-raw-step-724-20200918-130640.h5"
 
+    #data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes4/model-cmaps-3clpro-summit-run-2-nnodes4/embedddings"
+    #embedding_file="embeddings-raw-step-1343-20200918-153515.h5"
+
+    data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes1/model-cmaps-3clpro-summit-run-2-nnodes1/embedddings"
+    embedding_file="embeddings-raw-step-1954-20200918-151815.h5"
+    
+    # concat
+    embedding_input=os.path.join(data_dir, embedding_file)
 
     #plot_tsne('test_embed.h5', './tmpdir', '3d', pca=False, colors=['fnc'])
-    plot_tsne('gb-data/3clpro-monomer-1.h5', '.', pca=False, colors=['rmsd', 'fnc'], projection_type='3d')
-    pass
+    plot_tsne(embedding_input, data_dir, pca=False, colors=['rmsd', 'fnc'], projection_type='3d')
+    #pass
