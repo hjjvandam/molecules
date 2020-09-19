@@ -231,5 +231,5 @@ if __name__ == '__main__':
 
 
     #plot_tsne('test_embed.h5', './tmpdir', '3d', pca=False, colors=['fnc'])
-    #plot_tsne('test_embed.h5', './tmpdir', '2d', pca=False, colors=['rmsd', 'fnc'], projection_type='3d_project')
+    plot_tsne('gb-data/3clpro-monomer-1.h5', '.', pca=False, colors=['rmsd', 'fnc'], projection_type='3d')
     pass
