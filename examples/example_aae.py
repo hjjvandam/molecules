@@ -159,7 +159,8 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     
     # optimizers
     optimizer_hparams = OptimizerHyperparams(name = optimizer["name"],
-                                             hparams={'lr':float(optimizer["lr"])})
+                                             hparams={'lr':float(optimizer["lr"]),
+                                                      'weight_decay': float(optimizer['weight_decay'])})
 
     aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu))
