@@ -195,6 +195,8 @@ def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples
 def local_outlier_factor(embeddings, n_outliers=500, plot_dir=None, **kwargs): 
     clf = LocalOutlierFactor(**kwargs)
     # Array with 1 if inlier, -1 if outlier
+    embeddings = np.where(np.isnan(embeddings))
+    embeddings = np.nan_to_num(embeddings)
     clf.fit_predict(embeddings)
 
     # print the results
