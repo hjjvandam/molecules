@@ -275,7 +275,7 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                     col_tmp.append(i)
                     val_tmp.append(1.)
                     for j in range(i + 1, ref_positions.shape[0]):
-                        k += 1
+                        # check if we care
                         if d[k] <= threshold:
                             row_tmp.append(i)
                             col_tmp.append(j)
@@ -283,6 +283,8 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                             if (distance_kernel_params["kernel_type"] == "laplace"):
                                 val = np.exp(-distance_kernel_params["lambda"] * d[k])
                                 val_tmp.append(val)
+                        # increment counter
+                        k += 1
                 
                 # append globally
                 row.append(np.array(row_tmp, dtype=np.int16))
