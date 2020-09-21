@@ -50,7 +50,7 @@ def _save_sparse_contact_maps(h5_file, contact_maps,
         data = ragged([np.concatenate(row_col) for row_col in zip(rows, cols)])
         h5_file.create_dataset('contact_map', data=data, chunks=(1,) + data.shape[1:], dtype=dt, **kwargs)
         if vals:
-            datav = ragged(np.concatenate(vals))
+            datav = ragged(vals)
             h5_file.create_dataset('contact_map_values', data=datav, chunks=(1,) + datav.shape[1:], dtype=dtv, **kwargs)
 
     elif cm_format == 'sparse-rowcol':
