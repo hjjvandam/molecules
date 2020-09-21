@@ -252,9 +252,9 @@ def _traj_to_dset(topology, ref_topology, traj_file,
         positions = atoms.positions
 
         if fnc:
+            threshold =  float(distance_kernel_params["threshold"])
             # Compute contact map of current frame (scipy lil_matrix form)
-            cm = distances.contact_matrix(positions, float(distance_kernel_params["threshold"]),
-                                          returntype='sparse')
+            cm = distances.contact_matrix(positions, threshold, returntype='sparse')
             # Compute fraction of contacts to reference state
             fnc_data[i] = fraction_of_contacts(cm, ref_cm)
 
@@ -262,8 +262,7 @@ def _traj_to_dset(topology, ref_topology, traj_file,
             if (distance_kernel_params["kernel_type"] == "threshold"):
                 # Compute contact map of current frame (scipy lil_matrix form)
                 if not fnc:
-                    cm = distances.contact_matrix(positions, float(distance_kernel_params["threshold"]),
-                                                  returntype='sparse')
+                    cm = distances.contact_matrix(positions, threshold, returntype='sparse')
                 # Represent contact map in COO sparse format
                 coo = cm.tocoo()
                 row.append(coo.row.astype('int16'))
@@ -280,13 +279,13 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                     val_tmp.append(1.)
                     for j in range(i + 1, ref_positions.shape[0]):
                         # check if we care
-                        if d[k] <= threshold:
+                        if dist[k] <= threshold:
                             row_tmp.append(i)
                             col_tmp.append(j)
                             # compute metric
                             if (distance_kernel_params["kernel_type"] == "laplace"):
-                                val = np.exp(-float(distance_kernel_params["lambda"]) * d[k])
-                                val_tmp.append(val)
+                                dval = np.exp(-float(distance_kernel_params["lambda"]) * dist[k])
+                                val_tmp.append(dval)
                         # increment counter
                         k += 1
                 
@@ -449,7 +448,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     if point_cloud:
         point_clouds = []
     if contact_map:
-        rows, cols = [], []
+        rows, cols, vals = [], [], []
 
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         for (rmsd_data, fnc_data, pc_data, contact_map_data, sim_len), id_ in executor.map(_worker, kwargs):
@@ -460,9 +459,10 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
             if point_cloud:
                 point_clouds.append(pc_data)
             if contact_map:
-                row, col = contact_map_data
+                row, col, val = contact_map_data
                 rows.append(row)
                 cols.append(col)
+                vals.append(val)
 
             ids.append(id_)
             sim_lens.append(sim_len)
@@ -479,10 +479,10 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     if point_cloud:
         point_clouds_ = []
     if contact_map:
-        rows_, cols_ = [], []
+        rows_, cols_, vals_ = [], [], []
 
     # Negligible runtime (1e-05 seconds)
-    for _, rmsd_data, fnc_data, pc_data, row, col  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols)):
+    for _, rmsd_data, fnc_data, pc_data, row, col, val  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols, vals)):
         if rmsd:
             rmsds_.append(rmsd_data)
         if fnc:
@@ -492,6 +492,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         if contact_map:
             rows_.append(row)
             cols_.append(col)
+            vals_.append(val)
 
     # Negligible runtime (1e-2 seconds)
     if rmsd:
@@ -503,7 +504,8 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     if contact_map:
         rows_ = list(itertools.chain.from_iterable(rows_))
         cols_ = list(itertools.chain.from_iterable(cols_))
-        contact_maps_ = (rows_, cols_)
+        vals_ = list(itertools.chain.from_iterable(vals_))
+        contact_maps_ = (rows_, cols_, vals_)
 
     _traj_files = [os.path.abspath(traj_file) for traj_file in traj_files]
 
