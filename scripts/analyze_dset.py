@@ -1,5 +1,13 @@
 import click
 
+def plot_histogram(data, name):
+    import matplotlib.pyplot as plt
+    plt.rcParams.update({'figure.figsize':(7,5), 'figure.dpi':100})
+    plt.hist(data, bins=50)
+    plt.gca().set(title=name, ylabel='Frequency')
+    plt.savefig(f'./{"_".join(name.split())}_plot.png')
+    plt.close()
+
 @click.command()
 @click.option('-i', '--input', 'input_path', required=True,
               type=click.Path(exists=True),
@@ -24,6 +32,10 @@ def main(input_path, dim1, dim2, cm_format, dataset_name):
 
     nelem = []
     f = h5.File(input_path, 'r')
+
+    plot_histogram(f['rmsd'][...], 'RMSD to reference state')
+    plot_histogram(f['fnc'][...], 'Fraction of reference contacts')
+
     if cm_format == 'sparse-concat':
         for item in f[dataset_name]:
             # Counts number of 1s since each contact map stores row,col positions
