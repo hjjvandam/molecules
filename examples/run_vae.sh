@@ -16,14 +16,14 @@ export LOCAL_RANK=0
 #checkpoint="/data/runs/model-spike-cmaps-merge-debug/checkpoint/epoch-4-20200831-220400.pt"
 #checkpoint="/data/runs/checkpoint_test/epoch-50-20200828-145839.pt"
 
-python example_vae.py -i /data/3clpro/3clpro-monomer.h5 \
+python example_vae.py -i /data/3clpro/3clpro-monomer-cutoff-16.h5 \
        -a \
        -f sparse-concat \
        -t resnet \
-       -o /data/runs/ -m cmaps-3clpro-3 \
+       -o /data/runs/ -m cmaps-3clpro-16A-1 \
        --wandb_project_name covid_dl \
-       -opt "name=Adam,lr=5e-4" \
-       --loss_weights "lambda_rec=0.01" \
+       -opt "name=Adam,lr=5e-5" \
+       --loss_weights "lambda_rec=0.1" \
        -e 150 \
        -b 256 \
        -E 0 -D 0 \
