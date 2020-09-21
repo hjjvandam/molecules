@@ -1,3 +1,4 @@
+import os
 import h5py
 import numpy as np
 import MDAnalysis as mda
@@ -414,12 +415,12 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
                              distance_kernel_params = distance_kernel_params,
                              cm_format=cm_format, verbose=verbose)
 
+    import os
     import itertools
     from concurrent.futures import ProcessPoolExecutor
 
     # Set num_workers to max necessary/possible unless specified by user
     if num_workers is None:
-        import os
         num_workers = min(os.cpu_count(), len(traj_files))
 
     if verbose:
