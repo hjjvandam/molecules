@@ -235,11 +235,11 @@ if __name__ == '__main__':
     #data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes4/model-cmaps-3clpro-summit-run-2-nnodes4/embedddings"
     #embedding_file="embeddings-raw-step-1343-20200918-153515.h5"
 
-    data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes1/model-cmaps-3clpro-summit-run-2-nnodes1/embedddings"
-    embedding_file="embeddings-raw-step-1954-20200918-151815.h5"
+    data_dir = "/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps_3clpro_16A_3_nnodes8/model-cmaps_3clpro_16A_3_nnodes8/embedddings"
+    embedding_files = [x for x in os.listdir(data_dir) if x.startswith("embeddings") and x.endswith(".h5")]
 
-    embedding_input=os.path.join(data_dir, embedding_file)
+    for embedding_file in embedding_files:
+        embedding_input=os.path.join(data_dir, embedding_file)
+        global_step = int(embedding_file.split("-")[3])
 
-    #plot_tsne('test_embed.h5', './tmpdir', '3d', pca=False, colors=['fnc'])
-    plot_tsne(embedding_input, data_dir, pca=False, colors=['rmsd', 'fnc'], projection_type='2d')
-    #pass
+        plot_tsne(embedding_input, data_dir, pca=False, colors=['rmsd', 'fnc'], projection_type='2d', global_step = global_step)
