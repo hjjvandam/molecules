@@ -219,7 +219,8 @@ def _traj_to_dset(topology, ref_topology, traj_file,
     # Get atomic coordinates of reference atoms
     ref_positions = ref.select_atoms(sel).positions.copy()
     # Get contact map of reference atoms
-    ref_cm = distances.contact_matrix(ref_positions, distance_kernel_params["threshold"], returntype='sparse')
+    ref_cm = distances.contact_matrix(ref_positions, float(distance_kernel_params["threshold"]),
+                                      returntype='sparse')
 
     if rmsd or point_cloud:
         # Align trajectory to compute accurate RMSD or point cloud
@@ -252,14 +253,17 @@ def _traj_to_dset(topology, ref_topology, traj_file,
 
         if fnc:
             # Compute contact map of current frame (scipy lil_matrix form)
-            cm = distances.contact_matrix(positions, distance_kernel_params["threshold"], returntype='sparse')
+            cm = distances.contact_matrix(positions, float(distance_kernel_params["threshold"]),
+                                          returntype='sparse')
             # Compute fraction of contacts to reference state
             fnc_data[i] = fraction_of_contacts(cm, ref_cm)
 
         if contact_map:
-            if (distance_kernel_params["kernel_type"] == "threshold") and not fnc:
+            if (distance_kernel_params["kernel_type"] == "threshold"):
                 # Compute contact map of current frame (scipy lil_matrix form)
-                cm = distances.contact_matrix(positions, distance_kernel_params["threshold"], returntype='sparse')
+                if not fnc:
+                    cm = distances.contact_matrix(positions, float(distance_kernel_params["threshold"]),
+                                                  returntype='sparse')
                 # Represent contact map in COO sparse format
                 coo = cm.tocoo()
                 row.append(coo.row.astype('int16'))
@@ -281,7 +285,7 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                             col_tmp.append(j)
                             # compute metric
                             if (distance_kernel_params["kernel_type"] == "laplace"):
-                                val = np.exp(-distance_kernel_params["lambda"] * d[k])
+                                val = np.exp(-float(distance_kernel_params["lambda"]) * d[k])
                                 val_tmp.append(val)
                         # increment counter
                         k += 1
