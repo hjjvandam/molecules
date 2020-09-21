@@ -220,7 +220,8 @@ def _traj_to_dset(topology, ref_topology, traj_file,
     # Get atomic coordinates of reference atoms
     ref_positions = ref.select_atoms(sel).positions.copy()
     # Get contact map of reference atoms
-    ref_cm = distances.contact_matrix(ref_positions, float(distance_kernel_params["threshold"]),
+    ref_cm = distances.contact_matrix(ref_positions, 
+                                      float(distance_kernel_params["threshold"]),
                                       returntype='sparse')
 
     if rmsd or point_cloud:
@@ -263,26 +264,27 @@ def _traj_to_dset(topology, ref_topology, traj_file,
             if (distance_kernel_params["kernel_type"] == "threshold"):
                 # Compute contact map of current frame (scipy lil_matrix form)
                 if not fnc:
+                    threshold =  float(distance_kernel_params["threshold"])
                     cm = distances.contact_matrix(positions, threshold, returntype='sparse')
                 # Represent contact map in COO sparse format
                 coo = cm.tocoo()
                 row.append(coo.row.astype('int16'))
                 col.append(coo.col.astype('int16'))
             else:
-                dist = distances.self_distance_array(positions, box=None, backend='serial')
+                dist = distances.self_distance_array(positions.copy(), box=None, backend='serial')
                 row_tmp = []
                 col_tmp = []
                 val_tmp = []
                 k = 0
-                for i in range(ref_positions.shape[0]):
-                    row_tmp.append(i)
-                    col_tmp.append(i)
+                for ii in range(ref_positions.shape[0]):
+                    row_tmp.append(ii)
+                    col_tmp.append(ii)
                     val_tmp.append(1.)
-                    for j in range(i + 1, ref_positions.shape[0]):
+                    for jj in range(ii + 1, ref_positions.shape[0]):
                         # check if we care
                         if dist[k] <= threshold:
-                            row_tmp.append(i)
-                            col_tmp.append(j)
+                            row_tmp.append(ii)
+                            col_tmp.append(jj)
                             # compute metric
                             if (distance_kernel_params["kernel_type"] == "laplace"):
                                 dval = np.exp(-float(distance_kernel_params["lambda"]) * dist[k])
