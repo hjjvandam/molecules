@@ -242,6 +242,8 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path, data_path):
 
     reward_locs = [find_frame(traj_dict, ind) for ind in rewarded_inds]
 
+    print('reward_locs len: ', len(reward_locs))
+
     # For documentation on mda.Writer methods see:
     #   https://www.mdanalysis.org/mdanalysis/documentation_pages/coordinates/PDB.html
     #   https://www.mdanalysis.org/mdanalysis/_modules/MDAnalysis/coordinates/PDB.html#PDBWriter._update_frame
@@ -326,19 +328,41 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
 def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, model_type,
          n_outliers, min_samples, device, dim1, dim2, cm_format, batch_size):
 
+    print('DEBUG outlier detection')
+
+    print('sim_path: ', sim_path)
+    print('pdb_out_path: ', pdb_out_path)
+    print('restart_points_path: ', restart_points_path)
+    print('data_path: ', data_path)
+    print('model_paths: ', model_paths)
+    print('model_type: ', model_type)
+    print('n_outliers: ', n_outliers)
+    print('min_samples: ', min_samples)
+    print('device: ', device)
+    print('dim1: ', dim1)
+    print('dim2: ', dim2)
+    print('cm_format: ', cm_format)
+    print('batch_size: ', batch_size)
+
+
+
     # Make directory to store output PDB files
     os.makedirs(pdb_out_path, exist_ok=True)
 
     best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
 
-    print(best_hparams)
-    print(best_checkpoint)
+    print('best hparams: ', best_hparams)
+    print('best_checkpoint: ', best_checkpoint)
 
     # Generate embeddings for all contact matrices produced during MD stage
     embeddings, indices = generate_embeddings(model_type, best_hparams, best_checkpoint, dim1, dim2,
                                               device, data_path, cm_format, batch_size)
 
     print('embeddings shape: ', embeddings.shape)
+    print('indices shape: ', indices.shape)
+
+    print('embeddings vals: ', embeddings[0])
+    print('indices vals: ', indices[0])
     
     # Perform DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, best_checkpoint,
@@ -353,18 +377,27 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
                                                 plot_dir=os.path.join(pdb_out_path, 'figures'),
                                                 n_jobs=-1)
     
-    print(outlier_inds.shape)
+    print('outlier_inds shape: ', outlier_inds.shape)
     for ind, score in zip(outlier_inds, scores):
         print(f'ind, score: {ind}, {score}')
 
     # Map shuffled indices back to in-order MD frames
     simulation_inds = indices[outlier_inds]
 
+    print('simulation_inds shape', simulation_inds.shape)
+
     # Write rewarded PDB files to shared path
     outlier_pdbs = write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path, data_path)
     restart_checkpnts = md_checkpoints(sim_path, pdb_out_path, outlier_pdbs)
 
+    print('outlier_pdbs len: ', len(outlier_pdbs))
+    print('restart_checkpnts len: ', len(restart_checkpnts))
+
     restart_points = restart_checkpnts + outlier_pdbs
+
+    print('restart_points len: ', len(restart_points))
+    print('restart_points: ', restart_points)
+
     with open(restart_points_path, 'w') as restart_file:
         json.dump(restart_points, restart_file)
 
