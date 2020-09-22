@@ -123,10 +123,13 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
+@click.option('-ndw', '--num_data_workers', default=0, type=int, 
+              help='Number of data loaders for training')
+
 def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
          dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, loss_weights, model_type,
          latent_dim, encoder_resnet_layers, scale_factor, embed_interval, tsne_interval, sample_interval, 
-         wandb_project_name, local_rank, amp, distributed):
+         wandb_project_name, local_rank, amp, distributed, num_data_workers):
 
     """Example for training Fs-peptide with either Symmetric or Resnet VAE."""
     
@@ -239,7 +242,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                               drop_last = True,
                               shuffle = True,
                               pin_memory = True,
-                              num_workers = 0)
+                              num_workers = num_data_workers)
 
     # validation
     valid_dataset = ContactMapDataset(input_path,
@@ -261,7 +264,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                               drop_last = True,
                               shuffle = True,
                               pin_memory = True,
-                              num_workers = 0)
+                              num_workers = num_data_workers)
 
     ## we call next once here to make sure the data is pinned to the right GPU
     #with torch.cuda.device(enc_device.index):
@@ -368,4 +371,8 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
     # |   |__ wandb_cache/
 
 if __name__ == '__main__':
+    # set forkserver
+    torch.multiprocessing.set_start_method('forkserver', force = True)
+    
+    # call main
     main()

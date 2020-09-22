@@ -61,6 +61,7 @@ class ContactMapDataset(Dataset):
         self.fnc_name = fnc_name
         self.cm_format = cm_format
         self.shape = shape
+        self.load_values = False
         
         # get lengths and paths
         with open_h5(self.file_path, 'r', libver = 'latest', swmr = False) as f:
@@ -70,6 +71,10 @@ class ContactMapDataset(Dataset):
                 self.len = len(f[self.dataset_name])
             elif self.cm_format == 'full':
                 self.len = len(f[self.dataset_name])
+
+            # check if we need to load values
+            if self.dataset_name + "_values" in f:
+                self.load_values = True
     
         # do splitting
         self.split_ind = int(split_ptc * self.len)
@@ -101,8 +106,12 @@ class ContactMapDataset(Dataset):
             if self.cm_format == 'sparse-rowcol':
                 self.row_dset = self.h5_file[self.dataset_name]['row']
                 self.col_dset = self.h5_file[self.dataset_name]['col']
+                if self.load_values:
+                    self.val_dset = self.h5_file[self.dataset_name + "_values"]
             elif self.cm_format == 'sparse-concat':
                 self.dset = self.h5_file[self.dataset_name]
+                if self.load_values:
+                    self.val_dset = self.h5_file[self.dataset_name + "_values"]
             else:
                 self.dset = self.h5_file[self.dataset_name]
             # Load scalar dsets
@@ -126,7 +135,10 @@ class ContactMapDataset(Dataset):
                 indices = torch.from_numpy(np.vstack((rowind, colind))).to(torch.long)
 
             # Create array of 1s, all values in the contact map are 1
-            values = torch.ones(indices.shape[1], dtype=torch.float32)
+            if self.load_values:
+                values = torch.from_numpy(self.val_dset[index, ...]).to(torch.float32)
+            else:
+                values = torch.ones(indices.shape[1], dtype=torch.float32)
             # Set shape to the last 2 elements of self.shape.
             # Handles (1, W, H) and (W, H)
             data = torch.sparse.FloatTensor(indices, values,
