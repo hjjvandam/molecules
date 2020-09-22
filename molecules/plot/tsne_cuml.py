@@ -235,7 +235,7 @@ if __name__ == '__main__':
     #data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes4/model-cmaps-3clpro-summit-run-2-nnodes4/embedddings"
     #embedding_file="embeddings-raw-step-1343-20200918-153515.h5"
 
-    data_dir = "/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps_3clpro_16A_3_nnodes8/model-cmaps_3clpro_16A_3_nnodes8/embedddings"
+    data_dir = "/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps_3clpro_16A-smooth_1_nnodes1/model-cmaps_3clpro_16A-smooth_1_nnodes1/embedddings"
     embedding_files = [x for x in os.listdir(data_dir) if x.startswith("embeddings") and x.endswith(".h5")]
 
     for embedding_file in embedding_files:

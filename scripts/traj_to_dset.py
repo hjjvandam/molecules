@@ -65,10 +65,17 @@ def parse_dict(ctx, param, value):
                    'the contact maps are stored as. latest gives single ' \
                    'dset format while oldest gives group with row,col dset.')
 
+@click.option('--distributed', is_flag=True,
+              help='Uses MPI for distributed assembly.')
+
 @click.option('-v', '--verbose', is_flag=True)
 
-def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers,
-         selection, contact_maps_parameters, rmsd, fnc, contact_map, point_cloud, cm_format, verbose):
+def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers, selection, 
+         contact_maps_parameters, rmsd, fnc, contact_map, point_cloud, cm_format, distributed, verbose):
+
+    if distributed:
+        from mpi4py import MPI
+        mpi_comm = MPI.COMM_WORLD.Dup()
 
     if os.path.isdir(traj_path):
         traj_path = sorted(glob.glob(os.path.join(traj_path, pattern)))
@@ -83,8 +90,10 @@ def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers,
     traj_to_dset(topology=pdb_path, ref_topology=ref_pdb_path, traj_files=traj_path,
                  save_file=out_path, rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
                  contact_map=contact_map, distance_kernel_params=contact_maps_parameters,
-                 sel=selection, cm_format=cm_format, num_workers=num_workers, verbose=verbose)
+                 sel=selection, cm_format=cm_format, num_workers=num_workers, comm=mpi_comm, verbose=verbose)
     
 if __name__ == '__main__':
+    import multiprocessing as mp
+    mp.set_start_method('forkserver')
     main()
 

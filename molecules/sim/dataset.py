@@ -1,4 +1,5 @@
 import os
+import time
 import h5py
 import numpy as np
 import MDAnalysis as mda
@@ -208,6 +209,9 @@ def _traj_to_dset(topology, ref_topology, traj_file,
         of computation. See _save function parameters for the data format.
     """
 
+    # start timer
+    start_time = time.time()
+
     # Load simulation and reference structures
     sim = mda.Universe(topology, traj_file)
     ref = mda.Universe(ref_topology)
@@ -248,6 +252,7 @@ def _traj_to_dset(topology, ref_topology, traj_file,
         pc_data = np.empty(shape=(len(sim.trajectory), *ref_positions.shape),
                            dtype=np.float32)
 
+    print_freq = 10
     for i, frame in enumerate(sim.trajectory):
 
         # Point cloud positions of selected atoms in frame i
@@ -307,7 +312,7 @@ def _traj_to_dset(topology, ref_topology, traj_file,
             pc_data[i] = positions.copy()
 
         if verbose:
-            if i % 100 == 0: # Print every 100 frames
+            if i % print_freq == 0:
                 str_ = f'Frame {i}/{len(sim.trajectory)}'
                 if rmsd:
                     str_ += f'\trmsd: {rmsd_data[i]}'
@@ -318,7 +323,6 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                 print(str_)
 
     if point_cloud:
-        #pc_data = np.reshape(pc_data, (len(sim.trajectory), 3, -1))
         pc_data = np.transpose(pc_data, [0,2,1])
     if save_file:
         # Write data to HDF5 file
@@ -328,8 +332,12 @@ def _traj_to_dset(topology, ref_topology, traj_file,
 
     sim_len = len(sim.trajectory)
 
+    # end time
+    end_time = time.time()
+    duration = end_time - start_time
+
     # Any of these could be None based on the user input
-    return rmsd_data, fnc_data, pc_data, contact_map_data, sim_len
+    return rmsd_data, fnc_data, pc_data, contact_map_data, sim_len, duration
 
 def _worker(kwargs):
     """Helper function for parallel data collection."""
@@ -340,7 +348,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
                  rmsd=True, fnc=True, point_cloud=True, contact_map=True,
                  distance_kernel_params = {"kernel_type": "threshold", "threshold": 8.}, 
                  sel='protein and name CA', cm_format='sparse-concat',
-                 num_workers=None, verbose=False):
+                 num_workers=None, comm=None, verbose=False):
     """
     User-level function for generating machine learning datasets
     from raw molecular dynamics trajectory data. This function
@@ -394,6 +402,8 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         the smaller of the number of input trajectory files and the
         number of available cpus.
 
+    comm: MPI communicator object, None
+
     verbose: bool
         If true, prints verbose output.
 
@@ -404,7 +414,13 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         of computation. See _save function parameters for the data format.
     """
 
-    if num_workers == 1 or isinstance(traj_files, str):
+    comm_rank = 0
+    comm_size = 1
+    if comm is not None:
+        comm_rank = comm.Get_rank()
+        comm_size = comm.Get_size()
+
+    if (num_workers == 1 and comm_size == 1) or isinstance(traj_files, str):
 
         if verbose:
            num_traj_files = len(traj_files) if isinstance(traj_files, list) else 1
@@ -420,13 +436,19 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     import os
     import itertools
     from concurrent.futures import ProcessPoolExecutor
+    
+    # sort the list of trajectory files
+    traj_files = sorted(traj_files)
+
+    # do round robin assignments because of load balancing
+    traj_files_local = [f for idx,f in enumerate(traj_files) if idx%comm_size == comm_rank]
 
     # Set num_workers to max necessary/possible unless specified by user
     if num_workers is None:
-        num_workers = min(os.cpu_count(), len(traj_files))
+        num_workers = min(os.cpu_count(), len(traj_files_local))
 
     if verbose:
-        print(f'Using {num_workers} workers to process {len(traj_files)} traj files')
+        print(f'Using {num_workers} workers to process {len(traj_files_local)} traj files')
 
     # Arguments for workers
     kwargs = [{'topology': topology,
@@ -440,7 +462,7 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
                'sel': sel,
                'verbose': verbose and (i % num_workers == 0),
                'id': i}
-              for i, traj_file in enumerate(traj_files)]
+              for i, traj_file in enumerate(traj_files_local)]
 
     # initialize buffers
     ids, sim_lens = [], []
@@ -453,8 +475,13 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     if contact_map:
         rows, cols, vals = [], [], []
 
+    if verbose:
+        print("Starting evaluation")
+
+    finished_count = 0
+    #with ThreadPoolExecutor(max_workers=num_workers) as executor:
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        for (rmsd_data, fnc_data, pc_data, contact_map_data, sim_len), id_ in executor.map(_worker, kwargs):
+        for (rmsd_data, fnc_data, pc_data, contact_map_data, sim_len, duration), id_ in executor.map(_worker, kwargs):
             if rmsd:
                 rmsds.append(rmsd_data)
             if fnc:
@@ -470,8 +497,11 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
             ids.append(id_)
             sim_lens.append(sim_len)
 
+            finished_count += 1
+
             if verbose:
                 print('finished id: ', id_)
+                print('duration: ', duration)
 
     # Initialize buffers. Only turn into containers if user specifies to.
     rmsds_, fncs_, point_clouds_, contact_maps_ = None, None, None, None
@@ -497,24 +527,76 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
             cols_.append(col)
             vals_.append(val)
 
+    # we need to gather results here 
+    if comm_size > 1:
+        traj_files_ = comm.gather(traj_files_local, 0)
+        sim_lens = comm.gather(sim_lens, 0)
+        if rmsd:
+            rmsds_ = comm.gather(rmsds_, 0)
+        if fnc:
+            fncs_ = comm.gather(fncs_, 0)
+        if point_cloud:
+            point_clouds_ = comm.gather(point_clouds_, 0)
+        if contact_map:
+            rows_ = comm.gather(rows_, 0)
+            cols_ = comm.gather(cols_, 0)
+            if vals_:
+                vals_ = comm.gather(vals_, 0)
+            else:
+                vals_list = []
+
+        if comm_rank == 0:
+            traj_files_ = list(itertools.chain.from_iterable(traj_files_))
+            sim_lens = list(itertools.chain.from_iterable(sim_lens))
+            sim_lens = [x[1] for x in sorted(zip(traj_files_, sim_lens))]
+            if rmsd:
+                rmsds_ = list(itertools.chain.from_iterable(rmsds_))
+                rmsds_ = [x[1] for x in sorted(zip(traj_files_, rmsds_))]
+
+            if fnc:
+                fncs_ = list(itertools.chain.from_iterable(fncs_))
+                fncs_ = [x[1] for x in sorted(zip(traj_files_, fncs_))]
+
+            if point_cloud:
+                point_clouds_ = list(itertools.chain.from_iterable(point_clouds_))
+                point_clouds_ = [x[1] for x in sorted(zip(traj_files_, point_clouds_))]
+
+            if contact_map:
+                rows_ =list(itertools.chain.from_iterable(rows_))
+                rows_ = [x[1] for x in sorted(zip(traj_files_, rows_))]
+                
+                cols_ =list(itertools.chain.from_iterable(cols_))
+                cols_ = [x[1] for x in sorted(zip(traj_files_, cols_))]
+                
+                if vals_:
+                    vals_ =list(itertools.chain.from_iterable(vals_))
+                    vals_ = [x[1] for x in sorted(zip(traj_files_, vals_))]
+
+            # sort the filenames as well
+            traj_files_ = sorted(traj_files_)
+    else:
+        traj_files_ = traj_files_local
+
     # Negligible runtime (1e-2 seconds)
-    if rmsd:
-        rmsds_ = np.concatenate(rmsds_)
-    if fnc:
-        fncs_ = np.concatenate(fncs_)
-    if point_cloud:
-        point_clouds_ = np.concatenate(point_clouds_)
-    if contact_map:
-        rows_ = list(itertools.chain.from_iterable(rows_))
-        cols_ = list(itertools.chain.from_iterable(cols_))
-        vals_ = list(itertools.chain.from_iterable(vals_))
-        contact_maps_ = (rows_, cols_, vals_)
+    if comm_rank == 0:
+        if rmsd:
+            rmsds_ = np.concatenate(rmsds_)
+        if fnc:
+            fncs_ = np.concatenate(fncs_)
+        if point_cloud:
+            point_clouds_ = np.concatenate(point_clouds_)
+        if contact_map:
+            rows_ = list(itertools.chain.from_iterable(rows_))
+            cols_ = list(itertools.chain.from_iterable(cols_))
+            vals_ = list(itertools.chain.from_iterable(vals_))
+            contact_maps_ = (rows_, cols_, vals_)
 
-    _traj_files = [os.path.abspath(traj_file) for traj_file in traj_files]
+        # store results
+        _traj_files = [os.path.abspath(x) for x in traj_files_]
 
-    _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
-          contact_maps=contact_maps_, cm_format=cm_format, sim_lens=sim_lens,
-          traj_files=_traj_files)
+        _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
+              contact_maps=contact_maps_, cm_format=cm_format, sim_lens=sim_lens,
+              traj_files=_traj_files)
 
     return rmsds_, fncs_, point_clouds_, contact_maps_
 
