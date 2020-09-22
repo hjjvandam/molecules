@@ -252,7 +252,7 @@ def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path, data_path):
     for frame, traj_file in reward_locs:
         sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
         basename = os.path.basename(os.path.dirname(traj_file))
-        out_pdb = join(pdb_out_path, f'{basename}_{frame:06}.pdb')
+        out_pdb = os.path.abspath(join(pdb_out_path, f'{basename}_{frame:06}.pdb'))
         u = mda.Universe(sim_pdb, traj_file)
         with mda.Writer(out_pdb) as writer:
             # Write a single coordinate set to a PDB file
@@ -267,7 +267,7 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
     checkpnt_list = sorted(glob(os.path.join(sim_path, 'omm_runs_*/checkpnt.chk')))
     restart_checkpnts = [] 
     for checkpnt in checkpnt_list: 
-        checkpnt_filepath = join(pdb_out_path, os.path.basename(os.path.dirname(checkpnt) + '.chk'))
+        checkpnt_filepath = os.path.abspath(join(pdb_out_path, os.path.basename(os.path.dirname(checkpnt) + '.chk')))
         if not os.path.exists(checkpnt_filepath): 
             shutil.copy2(checkpnt, checkpnt_filepath) 
             # Includes only checkpoint of trajectory that contains an outlier 
