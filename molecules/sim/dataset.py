@@ -1,11 +1,13 @@
 import os
+import time
 import h5py
 import numpy as np
 import MDAnalysis as mda
 from MDAnalysis.analysis import distances, rms, align
 from molecules.utils import open_h5
 
-def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', **kwargs):
+def _save_sparse_contact_maps(h5_file, contact_maps, 
+                              cm_format='sparse-concat', **kwargs):
     """
     Saves contact maps in sparse format. Only stores row,col
     indices of the 1s in the contact matrix. Values must be
@@ -19,9 +21,10 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
         Open HDF5 file to write contact maps to
 
     contact_maps : tuple
-        (row, col) where row,col are lists of np.ndarrays.
+        (row, col, val) where row,col are lists of np.ndarrays.
         row[i], col[i] represents the indices of a contact
-        map where a 1 exists.
+        map where val[i] is not zero. If val is empty, quantized
+        matrix is expected.
 
     cm_format : str
         Format to save contact maps with.
@@ -35,10 +38,11 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
          the sparse-rowcol format.
    """
 
-    rows, cols = contact_maps
+    rows, cols, vals = contact_maps
 
      # Specify variable length arrays
     dt = h5py.vlen_dtype(np.dtype('int16'))
+    dtv = h5py.vlen_dtype(np.dtype('float32'))
 
     # Helper function to create ragged array
     ragged = lambda data: np.array(data, dtype=object)
@@ -47,6 +51,9 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
         # list of np arrays of shape (2 * X) where X varies
         data = ragged([np.concatenate(row_col) for row_col in zip(rows, cols)])
         h5_file.create_dataset('contact_map', data=data, chunks=(1,) + data.shape[1:], dtype=dt, **kwargs)
+        if vals:
+            datav = ragged(vals)
+            h5_file.create_dataset('contact_map_values', data=datav, chunks=(1,) + datav.shape[1:], dtype=dtv, **kwargs)
 
     elif cm_format == 'sparse-rowcol':
         group = h5_file.create_group('contact_map')
@@ -54,6 +61,8 @@ def _save_sparse_contact_maps(h5_file, contact_maps, cm_format='sparse-concat', 
         # same length. However, neighboring arrays may be any variable length.
         group.create_dataset('row', dtype=dt, data=ragged(rows), chunks=(1,), **kwargs)
         group.create_dataset('col', dtype=dt, data=ragged(cols), chunks=(1,), **kwargs)
+        if vals:
+            group.create_dataset('val', dtype=dtv, data=ragged(vals), chunks=(1,), **kwargs)
 
 def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
           contact_maps=None, cm_format='sparse-concat',
@@ -115,7 +124,8 @@ def _save(save_file, rmsd=None, fnc=None, point_cloud=None,
                                    dtype='float32', **kwargs)
         # Save contact maps
         if contact_maps is not None:
-            _save_sparse_contact_maps(h5_file, contact_maps, cm_format=cm_format, **kwargs)
+            _save_sparse_contact_maps(h5_file, contact_maps, 
+                                      cm_format=cm_format, **kwargs)
 
 def fraction_of_contacts(cm, ref_cm):
     """
@@ -140,8 +150,8 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                   rmsd=True, fnc=True,
                   point_cloud=True,
                   contact_map=True,
+                  distance_kernel_params = {"kernel_type": "threshold", "threshold": 8.},
                   sel='protein and name CA',
-                  cutoff=8.,
                   cm_format='sparse-concat',
                   verbose=False):
     """
@@ -172,17 +182,19 @@ def _traj_to_dset(topology, ref_topology, traj_file,
     rmsd, fnc, point_cloud, contact_map : bool
         Those flags that are marked true are computed and saved
         into h5 dataset files. Any combination may be selected.
-
+                  
+    distance_kernel_params : dict
+        dictionary should contain 
+            `kernel_type`: allowed values are `threshold` and `laplace`.
+            `threshold`: threshold for hard cutoff
+            `lambda`: exponential decay constant for largange kernel
+                      (exp(-lambda * dist)).
+        Only relevant if contact_map = True.
+    
     sel : str
         Selection set of atoms in the protein.
 
-    cutoff : float
-        Cutoff in angstroms for determining contacts in the contact
-        matrix. Contact matrices have a 1 if two residues, or atom
-        selections in general, are within `cutoff` angstroms,
-        otherwise a 0 is entered.
-
-        cm_format : str
+    cm_format : str
         Format to save contact maps with.
         sparse-concat: new format with single dataset
         sparse-rowcol: old format with group containing row,col datasets
@@ -197,6 +209,9 @@ def _traj_to_dset(topology, ref_topology, traj_file,
         of computation. See _save function parameters for the data format.
     """
 
+    # start timer
+    start_time = time.time()
+
     # Load simulation and reference structures
     sim = mda.Universe(topology, traj_file)
     ref = mda.Universe(ref_topology)
@@ -209,7 +224,9 @@ def _traj_to_dset(topology, ref_topology, traj_file,
     # Get atomic coordinates of reference atoms
     ref_positions = ref.select_atoms(sel).positions.copy()
     # Get contact map of reference atoms
-    ref_cm = distances.contact_matrix(ref_positions, cutoff, returntype='sparse')
+    ref_cm = distances.contact_matrix(ref_positions, 
+                                      float(distance_kernel_params["threshold"]),
+                                      returntype='sparse')
 
     if rmsd or point_cloud:
         # Align trajectory to compute accurate RMSD or point cloud
@@ -227,43 +244,75 @@ def _traj_to_dset(topology, ref_topology, traj_file,
 
     # Buffers for sparse contact row/col data
     if contact_map:
-        row, col = [], []
-        contact_map_data = (row, col)
+        row, col, val = [], [], []
+        contact_map_data = (row, col, val)
 
     # Buffer for point cloud data
     if point_cloud:
         pc_data = np.empty(shape=(len(sim.trajectory), *ref_positions.shape),
                            dtype=np.float32)
 
+    print_freq = 10
     for i, frame in enumerate(sim.trajectory):
 
         # Point cloud positions of selected atoms in frame i
         positions = atoms.positions
 
-        if contact_map or fnc:
+        if fnc:
+            threshold =  float(distance_kernel_params["threshold"])
             # Compute contact map of current frame (scipy lil_matrix form)
-            cm = distances.contact_matrix(positions, cutoff, returntype='sparse')
+            cm = distances.contact_matrix(positions, threshold, returntype='sparse')
+            # Compute fraction of contacts to reference state
+            fnc_data[i] = fraction_of_contacts(cm, ref_cm)
+
+        if contact_map:
+            if (distance_kernel_params["kernel_type"] == "threshold"):
+                # Compute contact map of current frame (scipy lil_matrix form)
+                if not fnc:
+                    threshold =  float(distance_kernel_params["threshold"])
+                    cm = distances.contact_matrix(positions, threshold, returntype='sparse')
+                # Represent contact map in COO sparse format
+                coo = cm.tocoo()
+                row.append(coo.row.astype('int16'))
+                col.append(coo.col.astype('int16'))
+            else:
+                dist = distances.self_distance_array(positions.copy(), box=None, backend='serial')
+                row_tmp = []
+                col_tmp = []
+                val_tmp = []
+                k = 0
+                for ii in range(ref_positions.shape[0]):
+                    row_tmp.append(ii)
+                    col_tmp.append(ii)
+                    val_tmp.append(1.)
+                    for jj in range(ii + 1, ref_positions.shape[0]):
+                        # check if we care
+                        if dist[k] <= threshold:
+                            row_tmp.append(ii)
+                            col_tmp.append(jj)
+                            # compute metric
+                            if (distance_kernel_params["kernel_type"] == "laplace"):
+                                dval = np.exp(-float(distance_kernel_params["lambda"]) * dist[k])
+                                val_tmp.append(dval)
+                        # increment counter
+                        k += 1
+                
+                # append globally
+                row.append(np.array(row_tmp, dtype=np.int16))
+                col.append(np.array(col_tmp, dtype=np.int16))
+                val.append(np.array(val_tmp, dtype=np.float32))
 
         if rmsd:
             # Compute and store RMSD to reference state
             rmsd_data[i] = rms.rmsd(positions, ref_positions, center=True,
                                     superposition=True)
-        if fnc:
-            # Compute fraction of contacts to reference state
-            fnc_data[i] = fraction_of_contacts(cm, ref_cm)
-
-        if contact_map:
-            # Represent contact map in COO sparse format
-            coo = cm.tocoo()
-            row.append(coo.row.astype('int16'))
-            col.append(coo.col.astype('int16'))
 
         if point_cloud:
             # Store reference atoms point cloud of current frame
             pc_data[i] = positions.copy()
 
         if verbose:
-            if i % 100 == 0: # Print every 100 frames
+            if i % print_freq == 0:
                 str_ = f'Frame {i}/{len(sim.trajectory)}'
                 if rmsd:
                     str_ += f'\trmsd: {rmsd_data[i]}'
@@ -274,7 +323,6 @@ def _traj_to_dset(topology, ref_topology, traj_file,
                 print(str_)
 
     if point_cloud:
-        #pc_data = np.reshape(pc_data, (len(sim.trajectory), 3, -1))
         pc_data = np.transpose(pc_data, [0,2,1])
     if save_file:
         # Write data to HDF5 file
@@ -284,8 +332,12 @@ def _traj_to_dset(topology, ref_topology, traj_file,
 
     sim_len = len(sim.trajectory)
 
+    # end time
+    end_time = time.time()
+    duration = end_time - start_time
+
     # Any of these could be None based on the user input
-    return rmsd_data, fnc_data, pc_data, contact_map_data, sim_len
+    return rmsd_data, fnc_data, pc_data, contact_map_data, sim_len, duration
 
 def _worker(kwargs):
     """Helper function for parallel data collection."""
@@ -294,8 +346,9 @@ def _worker(kwargs):
 
 def traj_to_dset(topology, ref_topology, traj_files, save_file,
                  rmsd=True, fnc=True, point_cloud=True, contact_map=True,
-                 sel='protein and name CA', cutoff=8., cm_format='sparse-concat',
-                 num_workers=None, verbose=False):
+                 distance_kernel_params = {"kernel_type": "threshold", "threshold": 8.}, 
+                 sel='protein and name CA', cm_format='sparse-concat',
+                 num_workers=None, comm=None, verbose=False):
     """
     User-level function for generating machine learning datasets
     from raw molecular dynamics trajectory data. This function
@@ -327,14 +380,16 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         Those flags that are marked true are computed and saved
         into h5 dataset files. Any combination may be selected.
 
+    distance_kernel_params : dict
+        dictionary should contain 
+            `kernel_type`: allowed values are `threshold` and `lagrange`.
+            `threshold`: threshold for hard cutoff
+            `lambda`: exponential decay constant for largange kernel
+                      (exp(-lambda * dist)).
+        Only relevant if contact_map = True.
+
     sel : str
         Selection set of atoms in the protein.
-
-    cutoff : float
-        Cutoff in angstroms for determining contacts in the contact
-        matrix. Contact matrices have a 1 if two residues, or atom
-        selections in general, are within `cutoff` angstroms,
-        otherwise a 0 is entered.
 
     cm_format : str
         Format to save contact maps with.
@@ -347,6 +402,8 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         the smaller of the number of input trajectory files and the
         number of available cpus.
 
+    comm: MPI communicator object, None
+
     verbose: bool
         If true, prints verbose output.
 
@@ -357,7 +414,13 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         of computation. See _save function parameters for the data format.
     """
 
-    if num_workers == 1 or isinstance(traj_files, str):
+    comm_rank = 0
+    comm_size = 1
+    if comm is not None:
+        comm_rank = comm.Get_rank()
+        comm_size = comm.Get_size()
+
+    if (num_workers == 1 and comm_size == 1) or isinstance(traj_files, str):
 
         if verbose:
            num_traj_files = len(traj_files) if isinstance(traj_files, list) else 1
@@ -365,20 +428,27 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
 
         return _traj_to_dset(topology, ref_topology, traj_files,
                              sel=sel, save_file=save_file,
-                             cutoff=cutoff, rmsd=rmsd, fnc=fnc,
+                             rmsd=rmsd, fnc=fnc,
                              point_cloud=point_cloud, contact_map=contact_map,
+                             distance_kernel_params = distance_kernel_params,
                              cm_format=cm_format, verbose=verbose)
 
     import os
     import itertools
     from concurrent.futures import ProcessPoolExecutor
+    
+    # sort the list of trajectory files
+    traj_files = sorted(traj_files)
+
+    # do round robin assignments because of load balancing
+    traj_files_local = [f for idx,f in enumerate(traj_files) if idx%comm_size == comm_rank]
 
     # Set num_workers to max necessary/possible unless specified by user
     if num_workers is None:
-        num_workers = min(os.cpu_count(), len(traj_files))
+        num_workers = min(os.cpu_count(), len(traj_files_local))
 
     if verbose:
-        print(f'Using {num_workers} workers to process {len(traj_files)} traj files')
+        print(f'Using {num_workers} workers to process {len(traj_files_local)} traj files')
 
     # Arguments for workers
     kwargs = [{'topology': topology,
@@ -388,11 +458,11 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
                'fnc': fnc,
                'point_cloud': point_cloud,
                'contact_map': contact_map,
+               'distance_kernel_params': distance_kernel_params,
                'sel': sel,
-               'cutoff': cutoff,
                'verbose': verbose and (i % num_workers == 0),
                'id': i}
-              for i, traj_file in enumerate(traj_files)]
+              for i, traj_file in enumerate(traj_files_local)]
 
     # initialize buffers
     ids, sim_lens = [], []
@@ -403,10 +473,15 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     if point_cloud:
         point_clouds = []
     if contact_map:
-        rows, cols = [], []
+        rows, cols, vals = [], [], []
 
+    if verbose:
+        print("Starting evaluation")
+
+    finished_count = 0
+    #with ThreadPoolExecutor(max_workers=num_workers) as executor:
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
-        for (rmsd_data, fnc_data, pc_data, contact_map_data, sim_len), id_ in executor.map(_worker, kwargs):
+        for (rmsd_data, fnc_data, pc_data, contact_map_data, sim_len, duration), id_ in executor.map(_worker, kwargs):
             if rmsd:
                 rmsds.append(rmsd_data)
             if fnc:
@@ -414,15 +489,19 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
             if point_cloud:
                 point_clouds.append(pc_data)
             if contact_map:
-                row, col = contact_map_data
+                row, col, val = contact_map_data
                 rows.append(row)
                 cols.append(col)
+                vals.append(val)
 
             ids.append(id_)
             sim_lens.append(sim_len)
 
+            finished_count += 1
+
             if verbose:
                 print('finished id: ', id_)
+                print('duration: ', duration)
 
     # Initialize buffers. Only turn into containers if user specifies to.
     rmsds_, fncs_, point_clouds_, contact_maps_ = None, None, None, None
@@ -433,10 +512,10 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
     if point_cloud:
         point_clouds_ = []
     if contact_map:
-        rows_, cols_ = [], []
+        rows_, cols_, vals_ = [], [], []
 
     # Negligible runtime (1e-05 seconds)
-    for _, rmsd_data, fnc_data, pc_data, row, col  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols)):
+    for _, rmsd_data, fnc_data, pc_data, row, col, val  in sorted(zip(ids, rmsds, fncs, point_clouds, rows, cols, vals)):
         if rmsd:
             rmsds_.append(rmsd_data)
         if fnc:
@@ -446,24 +525,78 @@ def traj_to_dset(topology, ref_topology, traj_files, save_file,
         if contact_map:
             rows_.append(row)
             cols_.append(col)
+            vals_.append(val)
+
+    # we need to gather results here 
+    if comm_size > 1:
+        traj_files_ = comm.gather(traj_files_local, 0)
+        sim_lens = comm.gather(sim_lens, 0)
+        if rmsd:
+            rmsds_ = comm.gather(rmsds_, 0)
+        if fnc:
+            fncs_ = comm.gather(fncs_, 0)
+        if point_cloud:
+            point_clouds_ = comm.gather(point_clouds_, 0)
+        if contact_map:
+            rows_ = comm.gather(rows_, 0)
+            cols_ = comm.gather(cols_, 0)
+            if vals_:
+                vals_ = comm.gather(vals_, 0)
+            else:
+                vals_list = []
+
+        if comm_rank == 0:
+            traj_files_ = list(itertools.chain.from_iterable(traj_files_))
+            sim_lens = list(itertools.chain.from_iterable(sim_lens))
+            sim_lens = [x[1] for x in sorted(zip(traj_files_, sim_lens))]
+            if rmsd:
+                rmsds_ = list(itertools.chain.from_iterable(rmsds_))
+                rmsds_ = [x[1] for x in sorted(zip(traj_files_, rmsds_))]
+
+            if fnc:
+                fncs_ = list(itertools.chain.from_iterable(fncs_))
+                fncs_ = [x[1] for x in sorted(zip(traj_files_, fncs_))]
+
+            if point_cloud:
+                point_clouds_ = list(itertools.chain.from_iterable(point_clouds_))
+                point_clouds_ = [x[1] for x in sorted(zip(traj_files_, point_clouds_))]
+
+            if contact_map:
+                rows_ =list(itertools.chain.from_iterable(rows_))
+                rows_ = [x[1] for x in sorted(zip(traj_files_, rows_))]
+                
+                cols_ =list(itertools.chain.from_iterable(cols_))
+                cols_ = [x[1] for x in sorted(zip(traj_files_, cols_))]
+                
+                if vals_:
+                    vals_ =list(itertools.chain.from_iterable(vals_))
+                    vals_ = [x[1] for x in sorted(zip(traj_files_, vals_))]
+
+            # sort the filenames as well
+            traj_files_ = sorted(traj_files_)
+    else:
+        traj_files_ = traj_files_local
 
     # Negligible runtime (1e-2 seconds)
-    if rmsd:
-        rmsds_ = np.concatenate(rmsds_)
-    if fnc:
-        fncs_ = np.concatenate(fncs_)
-    if point_cloud:
-        point_clouds_ = np.concatenate(point_clouds_)
-    if contact_map:
-        rows_ = list(itertools.chain.from_iterable(rows_))
-        cols_ = list(itertools.chain.from_iterable(cols_))
-        contact_maps_ = (rows_, cols_)
+    if comm_rank == 0:
+        if rmsd:
+            rmsds_ = np.concatenate(rmsds_)
+        if fnc:
+            fncs_ = np.concatenate(fncs_)
+        if point_cloud:
+            point_clouds_ = np.concatenate(point_clouds_)
+        if contact_map:
+            rows_ = list(itertools.chain.from_iterable(rows_))
+            cols_ = list(itertools.chain.from_iterable(cols_))
+            vals_ = list(itertools.chain.from_iterable(vals_))
+            contact_maps_ = (rows_, cols_, vals_)
 
-    _traj_files = [os.path.abspath(traj_file) for traj_file in traj_files]
+        # store results
+        _traj_files = [os.path.abspath(x) for x in traj_files_]
 
-    _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
-          contact_maps=contact_maps_, cm_format=cm_format, sim_lens=sim_lens,
-          traj_files=_traj_files)
+        _save(save_file, rmsd=rmsds_, fnc=fncs_, point_cloud=point_clouds_,
+              contact_maps=contact_maps_, cm_format=cm_format, sim_lens=sim_lens,
+              traj_files=_traj_files)
 
     return rmsds_, fncs_, point_clouds_, contact_maps_
 
