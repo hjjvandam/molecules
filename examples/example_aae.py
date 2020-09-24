@@ -58,6 +58,11 @@ def parse_dict(ctx, param, value):
 @click.option('-r', '--resume',is_flag=True,
               help='Resume from latest checkpoint')
 
+@click.option('-iw', '--init_weights',
+             type=click.Path(exists=True),
+             help='Model checkpoint file to load model weights fromg. ' \
+                  'Checkpoint files saved as .pt by CheckpointCallback.')
+
 @click.option('-m', '--model_id', required=True, type=str,
               help='Model ID in for file naming')
 
@@ -111,7 +116,7 @@ def parse_dict(ctx, param, value):
               help='Enable distributed training')
 
 def main(input_path, dataset_name, rmsd_name, fnc_name,
-         out_path, checkpoint, resume, model_id,
+         out_path, checkpoint, resume, init_weights, model_id,
          num_points, num_features, encoder_kernel_sizes,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
@@ -162,7 +167,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
                                              hparams={'lr':float(optimizer["lr"])})
 
     aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, generator_gpu, discriminator_gpu))
+              gpu=(encoder_gpu, generator_gpu, discriminator_gpu), init_weights=init_weights)
 
     if comm_size > 1:
         if (encoder_gpu == decoder_gpu):
