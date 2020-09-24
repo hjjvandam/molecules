@@ -2,13 +2,13 @@ import torch
 from torch import nn
 from molecules.ml.unsupervised.utils import (conv_output_shape,
                                              same_padding, get_activation,
-                                             init_weights, prod)
+                                             _init_weights, prod)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
 
 class ResnetEncoder(nn.Module):
-    def __init__(self, input_shape, hparams):
+    def __init__(self, input_shape, hparams, init_weights=None):
         super(ResnetEncoder, self).__init__()
 
         assert isinstance(hparams, ResnetVAEHyperparams)
@@ -26,12 +26,17 @@ class ResnetEncoder(nn.Module):
         self.mu = self._embedding_layer(self.match_shape[0])
         self.logvar = self._embedding_layer(self.match_shape[0])
 
-        self.init_weights()
+        self.init_weights(init_weights)
 
-    def init_weights(self):
-        self.encoder.apply(init_weights)
-        init_weights(self.mu)
-        init_weights(self.logvar)
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.encoder.apply(_init_weights)
+            _init_weights(self.mu)
+            _init_weights(self.logvar)
+        # Loading checkpoint weights
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights)
+            self.load_state_dict(checkpoint['encoder_state_dict'])
 
     def forward(self, x):
         # encode
