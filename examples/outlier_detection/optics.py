@@ -1,13 +1,16 @@
 import os
 import json
+import itertools
+import time
 import click
 import shutil
 import torch
 import numpy as np
+import pandas as pd
 from glob import glob
 from os.path import join
 import MDAnalysis as mda
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 from sklearn.neighbors import LocalOutlierFactor
 from molecules.utils import open_h5
 from molecules.ml.unsupervised.cluster import optics_clustering
@@ -36,7 +39,7 @@ def parse_list(ctx, param, value):
     if value is not None:
         return value.split(',')
 
-def model_selection(model_paths, num_select=1):
+def model_selection(model_paths, num_select=1, comm=None):
     """
     Parameters
     ----------
@@ -59,6 +62,15 @@ def model_selection(model_paths, num_select=1):
         │   └── optimizer-hparams.json
         |   |__ wandb_cache/
     """
+    # start timer
+    t_start = time.time()
+
+    # communicator stuff
+    comm_size = 1
+    comm_rank = 0
+    if comm is not None:
+        comm_size = comm.Get_size()
+        comm_rank = comm.Get_rank()
 
     # Best model checkpoint file for each HPO run and
     # associated validation loss 
@@ -92,11 +104,26 @@ def model_selection(model_paths, num_select=1):
     best_checkpoint = best_checkpoints[best_model]
     best_hparams = hparams[best_model]
 
+    # stop timer
+    t_end = time.time()
+    if comm_rank == 0:
+        print("Model Selection Time: {}s".format(t_end - t_start))
+
     return best_hparams, best_checkpoint
 
 
 def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
-                        device, input_path, cm_format, batch_size):
+                        device, input_path, cm_format, batch_size, comm = None):
+
+    # start timer
+    t_start = time.time()
+
+    # communicator stuff
+    comm_size = 1
+    comm_rank = 0
+    if comm is not None:
+        comm_size = comm.Get_size()
+        comm_rank = comm.Get_rank()
 
     if model_type == 'vae-resnet':
         from molecules.ml.datasets import ContactMapDataset
@@ -131,7 +158,14 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
                                    split_ptc=1.,
                                    normalize='box',
                                    cms_transform=False)
-
+    
+    # shard the dataset
+    if comm_size > 1:
+        fullsize = len(dataset)
+        chunksize = int(np.ceil(fullsize / comm_size))
+        start = comm_rank * chunksize
+        end = min([start + chunksize, fullsize])
+        dataset = Subset(dataset, range(start, end))
 
     # Put encoder on specified CPU/GPU
     encoder.to(device)
@@ -150,18 +184,34 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
                              num_workers=4)
 
     # Collect embeddings and associated index into simulation trajectory
+    if comm_rank == 0:
+        print("Generating embeddings")
     embeddings, indices = [], []
     for i, (data, rmsd, fnc, index) in enumerate(data_loader):
         data = data.to(device)
         embeddings.append(encoder.encode(data).cpu().numpy())
         indices.append(index)
-        if i % 100 == 0:
+        if (i % 100 == 0) and (comm_rank == 0):
             print(f'Batch {i}/{len(data_loader)}')
-
+        
+    if comm_size > 1:
+        # gather results
+        embeddings = comm.allgather(embeddings)
+        embeddings = list(itertools.chain.from_iterable(embeddings))
+        indices = comm.allgather(indices)
+        indices = list(itertools.chain.from_iterable(indices))
+    
+    # concatenate
     embeddings = np.concatenate(embeddings)
     indices = np.concatenate(indices)
 
+    # stop timer
+    t_end = time.time()
+    if comm_rank == 0:
+        print("Generating Embeddings Time: {}s".format(t_end - t_start))
+
     return embeddings, indices
+
 
 def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples, eps):
     # TODO: if we decide on OPTICS clustering, then remove all eps code
@@ -192,14 +242,30 @@ def perform_clustering(eps_path, encoder_weight_path, cm_embeddings, min_samples
     return outlier_inds, labels
 
 
-def local_outlier_factor(embeddings, n_outliers=500, plot_dir=None, **kwargs): 
+# LOF
+def local_outlier_factor(embeddings, n_outliers=500, plot_dir=None, comm=None, **kwargs): 
+    # start timer
+    t_start = time.time()
+
+    # mpi stuff
+    comm_size = 1
+    comm_rank = 0
+    if comm is not None:
+        comm_size = comm.Get_size()
+        comm_rank = comm.Get_rank()
+
+    # LOF
+    if comm_rank == 0:
+        print("Running LOF")
+
+    # compute LOF
     clf = LocalOutlierFactor(**kwargs)
     # Array with 1 if inlier, -1 if outlier
     embeddings = np.nan_to_num(embeddings, nan=0.)
     clf.fit_predict(embeddings)
 
     # print the results
-    if plot_dir is not None:
+    if (plot_dir is not None) and (comm_rank == 0):
         # create directory
         os.makedirs(plot_dir, exist_ok=True)
         # plot
@@ -218,6 +284,11 @@ def local_outlier_factor(embeddings, n_outliers=500, plot_dir=None, **kwargs):
 
     # Only sorts an array of size n_outliers
     sort_inds = np.argsort(outlier_scores)
+    
+    # stop timer
+    t_end = time.time()
+    if comm_rank == 0:
+        print("LOF Time: {}s".format(t_end - t_start))
 
     # Returns n_outlier best outliers sorted from best to worst
     return outlier_inds[sort_inds], outlier_scores[sort_inds]
@@ -231,34 +302,111 @@ def find_frame(traj_dict, frame_number=0):
             local_frame -= traj_dict[key]
     raise Exception('frame %d should not exceed the total number of frames, %d' % (frame_number, sum(np.array(traj_dict.values()).astype(int))))
 
-def write_rewarded_pdbs(rewarded_inds, sim_path, pdb_out_path, data_path):
-    # Get list of simulation trajectory files (Assume all are equal length (ns))
 
+def find_values(rewards_df, fname, xmin, xmax):
+    selection = rewards_df["rewarded_inds"].between(xmin, xmax)
+    #sel = rewarded_inds_ts[rewarded_inds_ts.between(xmin, xmax)].dropna().values
+    selection = rewards_df[selection].dropna()
+    selection["rewarded_inds"] -= xmin
+    selection["files"] = fname
+    return selection
+
+
+def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, comm = None):
+    # start timer
+    t_start = time.time()
+
+    # mpi stuff
+    comm_size = 1
+    comm_rank = 0
+    if comm is not None:
+        comm_size = comm.Get_size()
+        comm_rank = comm.Get_rank()
+
+    # Get list of simulation trajectory files (Assume all are equal length (ns))
     with open_h5(data_path) as h5_file:
         traj_files = np.array(h5_file['traj_file'])
         sim_lens = np.array(h5_file['sim_len'])
 
-    traj_dict = dict(zip(traj_files, sim_lens))
+    # store file and indices in dataframe
+    trajdf = pd.DataFrame({"files": traj_files, "lengths": sim_lens})
 
-    reward_locs = [find_frame(traj_dict, ind) for ind in rewarded_inds]
-
-    print('reward_locs len: ', len(reward_locs))
+    # get a global start index
+    trajdf["start_index"] = trajdf.shift(1).fillna(0)["lengths"].cumsum(axis=0).astype(int)
+    rewards_df = pd.DataFrame({"rewarded_inds": rewarded_inds, "scores": scores}).sort_values("rewarded_inds").reset_index(drop=True)
+    trajdf["selected"] = trajdf.apply(lambda x: find_values(rewards_df, x["files"], x["start_index"], x["start_index"] + x["lengths"] - 1), axis=1)
+    trajdf = trajdf[ trajdf["selected"].apply(lambda x: x.empty == False) ].reset_index()
+    trajdf = pd.concat(trajdf["selected"].tolist()).sort_values("scores", ascending=True).reset_index(drop=True)
+    trajdf["order"] = trajdf.index
+    
+    # now, chunk the frame for each node
+    if comm_size > 1:
+        fullsize = trajdf.shape[0]
+        chunksize = int(np.ceil(fullsize / comm_size))
+        start = chunksize * comm_rank
+        end = min([start + chunksize, fullsize])
+        trajdf = trajdf.iloc[start:end, :]    
 
     # For documentation on mda.Writer methods see:
     #   https://www.mdanalysis.org/mdanalysis/documentation_pages/coordinates/PDB.html
     #   https://www.mdanalysis.org/mdanalysis/_modules/MDAnalysis/coordinates/PDB.html#PDBWriter._update_frame
 
+    # now group by files to improve IO
+    trajdf.sort_values(by=["files", "rewarded_inds"], inplace=True)
+
+    # do the IO
+    groups = trajdf.groupby("files")
     outlier_pdbs = []
-    for frame, traj_file in reward_locs:
+    orders = []
+    for traj_file, item in groups:
         sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
         basename = os.path.basename(os.path.dirname(traj_file))
-        out_pdb = os.path.abspath(join(pdb_out_path, f'{basename}_{frame:06}.pdb'))
+        load_trajec = time.time()
         u = mda.Universe(sim_pdb, traj_file)
-        with mda.Writer(out_pdb) as writer:
-            # Write a single coordinate set to a PDB file
-            writer._update_frame(u)
-            writer._write_timestep(u.trajectory[frame])
-        outlier_pdbs.append(out_pdb)
+        load_trajec = time.time() - load_trajec
+        #print("Load trajectory time: {}s".format(load_trajec))
+
+        save_trajec = time.time()
+        orders += list(item["order"])
+        for frame in item["rewarded_inds"]:
+            out_pdb = os.path.abspath(join(pdb_out_path, f'{basename}_{frame:06}.pdb'))
+            with mda.Writer(out_pdb) as writer:
+                # Write a single coordinate set to a PDB file
+                writer._update_frame(u)
+                writer._write_timestep(u.trajectory[frame])
+            outlier_pdbs.append(out_pdb)
+        save_trajec = time.time() - save_trajec
+        #print("Save trajectory time: {}s".format(save_trajec))
+
+    if comm_size > 1:
+        outlier_pdbs = comm.allgather(outlier_pdbs)
+        outlier_pdbs = list(itertools.chain.from_iterable(outlier_pdbs))
+        orders = comm.allgather(orders)
+        orders = list(itertools.chain.from_iterable(orders))
+        
+        
+    # sort by order
+    outlier_pdbs = [x[1] for x in sorted(zip(orders, outlier_pdbs))]
+
+    #outlier_pdbs = []    
+    #for frame, traj_file in reward_locs:
+    #    sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
+    #    basename = os.path.basename(os.path.dirname(traj_file))
+    #    out_pdb = os.path.abspath(join(pdb_out_path, f'{basename}_{frame:06}.pdb'))
+    #    u = mda.Universe(sim_pdb, traj_file)
+    #    with mda.Writer(out_pdb) as writer:
+    #        # Write a single coordinate set to a PDB file
+    #        writer._update_frame(u)
+    #        writer._write_timestep(u.trajectory[frame])
+    #    outlier_pdbs.append(out_pdb)
+    
+    #comm.barrier()
+    #exit(1)
+
+    # stop timer
+    t_end = time.time()
+    if comm_rank == 0:
+        print("Write PDB Time: {}s".format(t_end - t_start))
 
     return outlier_pdbs
 
@@ -325,44 +473,67 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
                    ' memory and size of input example. Does not affect output.' \
                    ' The larger the batch size, the faster the computation.')
 
+@click.option('--distributed', is_flag=True,
+              help='Enable distributed training')
+
 def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, model_type,
-         n_outliers, min_samples, device, dim1, dim2, cm_format, batch_size):
+         n_outliers, min_samples, device, dim1, dim2, cm_format, batch_size, distributed):
 
-    print('DEBUG outlier detection')
+    # start timer
+    t_start = time.time()
 
-    print('sim_path: ', sim_path)
-    print('pdb_out_path: ', pdb_out_path)
-    print('restart_points_path: ', restart_points_path)
-    print('data_path: ', data_path)
-    print('model_paths: ', model_paths)
-    print('model_type: ', model_type)
-    print('n_outliers: ', n_outliers)
-    print('min_samples: ', min_samples)
-    print('device: ', device)
-    print('dim1: ', dim1)
-    print('dim2: ', dim2)
-    print('cm_format: ', cm_format)
-    print('batch_size: ', batch_size)
+    comm_size = 1
+    comm_rank = 0
+    comm = None
+    if distributed:
+        # get communicator: duplicate from comm world
+        from mpi4py import MPI
+        comm = MPI.COMM_WORLD.Dup()
+        comm_size = comm.Get_size()
+        comm_rank = comm.Get_rank()
 
-
+    if comm_rank == 0:
+        print('DEBUG outlier detection')
+        print('sim_path: ', sim_path)
+        print('pdb_out_path: ', pdb_out_path)
+        print('restart_points_path: ', restart_points_path)
+        print('data_path: ', data_path)
+        print('model_paths: ', model_paths)
+        print('model_type: ', model_type)
+        print('n_outliers: ', n_outliers)
+        print('min_samples: ', min_samples)
+        print('device: ', device)
+        print('dim1: ', dim1)
+        print('dim2: ', dim2)
+        print('cm_format: ', cm_format)
+        print('batch_size: ', batch_size)
 
     # Make directory to store output PDB files
-    os.makedirs(pdb_out_path, exist_ok=True)
+    if comm_rank == 0:
+        os.makedirs(pdb_out_path, exist_ok=True)
 
-    best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
+    if comm_rank ==0:
+        best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
+        print('best hparams: ', best_hparams)
+        print('best_checkpoint: ', best_checkpoint)
+    else:
+        best_hparams = None
+        best_checkpoint = None
 
-    print('best hparams: ', best_hparams)
-    print('best_checkpoint: ', best_checkpoint)
+    if comm_size > 1:
+        best_hparams = comm.bcast(best_hparams, 0)
+        best_checkpoint = comm.bcast(best_checkpoint, 0)
 
     # Generate embeddings for all contact matrices produced during MD stage
     embeddings, indices = generate_embeddings(model_type, best_hparams, best_checkpoint, dim1, dim2,
-                                              device, data_path, cm_format, batch_size)
+                                              device, data_path, cm_format, batch_size, comm=comm)
 
-    print('embeddings shape: ', embeddings.shape)
-    print('indices shape: ', indices.shape)
+    if comm_rank == 0:
+        print('embeddings shape: ', embeddings.shape)
+        print('indices shape: ', indices.shape)
 
-    print('embeddings vals: ', embeddings[0])
-    print('indices vals: ', indices[0])
+        print('embeddings vals: ', embeddings[0])
+        print('indices vals: ', indices[0])
     
     # Perform DBSCAN clustering on embeddings
     #outlier_inds, labels = perform_clustering(eps_path, best_checkpoint,
@@ -372,34 +543,58 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
     #outlier_inds, labels = optics_clustering(embeddings, min_samples=min_samples)
 
     # Perform LocalOutlierFactor outlier detection on embeddings
-    outlier_inds, scores = local_outlier_factor(embeddings,
-                                                n_outliers=n_outliers,
-                                                plot_dir=os.path.join(pdb_out_path, 'figures'),
-                                                n_jobs=-1)
-    
-    print('outlier_inds shape: ', outlier_inds.shape)
-    for ind, score in zip(outlier_inds, scores):
-        print(f'ind, score: {ind}, {score}')
+    if comm_rank == 0:
+        outlier_inds, scores = local_outlier_factor(embeddings,
+                                                    n_outliers=n_outliers,
+                                                    plot_dir=os.path.join(pdb_out_path, 'figures'),
+                                                    n_jobs=-1, comm=comm)
+    else:
+        outlier_inds = None
+        scores = None
+
+    if comm_size > 1:
+        outlier_inds = comm.bcast(outlier_inds, 0)
+        scores = comm.bcast(scores, 0)
+
+    if comm_rank == 0:
+        print('outlier_inds shape: ', outlier_inds.shape)
+        for ind, score in zip(outlier_inds, scores):
+            print(f'ind, score: {ind}, {score}')
 
     # Map shuffled indices back to in-order MD frames
     simulation_inds = indices[outlier_inds]
 
-    print('simulation_inds shape', simulation_inds.shape)
+    if comm_rank == 0:
+        print('simulation_inds shape', simulation_inds.shape)
 
     # Write rewarded PDB files to shared path
-    outlier_pdbs = write_rewarded_pdbs(simulation_inds, sim_path, pdb_out_path, data_path)
-    restart_checkpnts = md_checkpoints(sim_path, pdb_out_path, outlier_pdbs)
+    outlier_pdbs = write_rewarded_pdbs(simulation_inds, scores, pdb_out_path, data_path, comm)
+    
+    if comm_rank == 0:
+        restart_checkpnts = md_checkpoints(sim_path, pdb_out_path, outlier_pdbs)
 
-    print('outlier_pdbs len: ', len(outlier_pdbs))
-    print('restart_checkpnts len: ', len(restart_checkpnts))
+    if comm_rank == 0:
+        print('outlier_pdbs len: ', len(outlier_pdbs))
+        print('restart_checkpnts len: ', len(restart_checkpnts))
 
-    restart_points = restart_checkpnts + outlier_pdbs
+    if comm_rank == 0:
+        restart_points = restart_checkpnts + outlier_pdbs
 
-    print('restart_points len: ', len(restart_points))
-    print('restart_points: ', restart_points)
-
-    with open(restart_points_path, 'w') as restart_file:
-        json.dump(restart_points, restart_file)
+    if comm_rank == 0:
+        print('restart_points len: ', len(restart_points))
+        print('restart_points: ', restart_points)
+        
+    if comm_rank == 0:
+        with open(restart_points_path, 'w') as restart_file:
+            json.dump(restart_points, restart_file)
+    
+    # end
+    t_end = time.time()
+    if comm_rank == 0:
+        print("Outlier Detection Time: {}s".format(t_end - t_start))
 
 if __name__ == '__main__':
+    # set forkserver
+    torch.multiprocessing.set_start_method('forkserver', force = True)
+
     main()
