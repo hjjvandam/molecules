@@ -15,6 +15,7 @@ batch_size=${11}
 epoch=${12}
 sample_interval=${13}
 optimizer=${14}
+checkpoint=${15}
 
 if [ "$distributed" == "distributed" ]
 then
@@ -28,6 +29,13 @@ then
 	amp="--amp"
 else
 	amp=""
+fi
+
+if [ "$checkpoint" != "" ]
+then
+	checkpoint="-c $checkpoint"
+else
+	checkpoint=""
 fi
 
 # create output dir
@@ -64,7 +72,7 @@ cmd="${conda_path}/bin/python -u ${script_path} \
        -e ${epoch} \
        -b ${batch_size} \
        -E ${enc_gpu} -D ${dec_gpu} \
-       -opt ${optimizer} \
+       -opt ${optimizer} ${checkpoint} \
        -S ${sample_interval} \
        -ti $(($epoch+1)) \
        --dim1 ${height} --dim2 ${width} -d ${dim}"
