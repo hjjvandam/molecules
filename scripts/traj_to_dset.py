@@ -73,6 +73,7 @@ def parse_dict(ctx, param, value):
 def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers, selection, 
          contact_maps_parameters, rmsd, fnc, contact_map, point_cloud, cm_format, distributed, verbose):
 
+    mpi_comm = None
     if distributed:
         from mpi4py import MPI
         mpi_comm = MPI.COMM_WORLD.Dup()
