@@ -2,14 +2,14 @@
 #SBATCH --exclusive
 #SBATCH --gres=gpu:8
 #SBATCH -A lambda
-#SBATCH -J test_ddp
+#SBATCH -J spike_hpo
 #SBATCH -t 01:30:00
 #ranks per node
 set -x
 rankspernode=4
 totalranks=$(( ${SLURM_NNODES} * ${rankspernode} ))
 #parameters
-run_tag="fspeptide-test-${SLURM_NNODES}_run-26"
+run_tag="spike-test-${SLURM_NNODES}_bs-128_opt_RMSprop_lr-1e-4_cutoff-8"
 data_dir_prefix="data"
 wandb_token=${WANDB_TOKEN}
 output_dir="runs"
