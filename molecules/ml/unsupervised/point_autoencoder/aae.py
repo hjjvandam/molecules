@@ -6,7 +6,7 @@ import torch.nn as nn
 from itertools import chain 
 from collections import OrderedDict, namedtuple
 from molecules.ml.unsupervised.point_autoencoder.hyperparams import AAE3dHyperparams
-from molecules.ml.unsupervised.utils import init_weights
+from molecules.ml.unsupervised.utils import _init_weights
 from molecules.ml.unsupervised.point_autoencoder.losses import chamfer_loss as cl
 #from molecules.ml.unsupervised.point_autoencoder.losses import earth_movers_distance as emd
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
@@ -16,7 +16,7 @@ __all__ = ['AAE3d']
 Device = namedtuple('Device', ['encoder', 'generator', 'discriminator'])
 
 class Generator(nn.Module):
-    def __init__(self, num_points, num_features, hparams):
+    def __init__(self, num_points, num_features, hparams, init_weights):
         super().__init__()
 
         # copy some parameters
@@ -56,7 +56,7 @@ class Generator(nn.Module):
         self.model = nn.Sequential(layers)
         
         # init weights
-        self.init_weights()
+        self.init_weights(init_weights)
         
         #self.model = nn.Sequential(
         #    nn.Linear(in_features=self.z_size, out_features=64, bias=self.use_bias),
@@ -74,8 +74,12 @@ class Generator(nn.Module):
         #    nn.Linear(in_features=1024, out_features=2048 * 3, bias=self.use_bias),
         #)
         
-    def init_weights(self):
-        self.model.apply(init_weights)
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.model.apply(_init_weights)
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights)
+            self.load_state_dict(checkpoint['generator_state_dict'])
         
     def save_weights(self, path):
         torch.save(self.state_dict(), path)
@@ -90,7 +94,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, hparams):
+    def __init__(self, hparams, init_weights):
         super().__init__()
 
         self.z_size = hparams.latent_dim
@@ -127,7 +131,7 @@ class Discriminator(nn.Module):
         self.model = nn.Sequential(layers)
         
         # init weights
-        self.init_weights()
+        self.init_weights(init_weights)
             
         #self.model = nn.Sequential(
         #
@@ -146,9 +150,13 @@ class Discriminator(nn.Module):
         #    nn.Linear(64, 1, bias=True)
         #)
         
-    def init_weights(self):
-        self.model.apply(init_weights)
-        
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.model.apply(_init_weights)
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights)
+            self.load_state_dict(checkpoint['discriminator_state_dict'])
+    
     def save_weights(self, path):
         torch.save(self.state_dict(), path)
         
@@ -161,7 +169,7 @@ class Discriminator(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_points, num_features, hparams):
+    def __init__(self, num_points, num_features, hparams, init_weights):
         super().__init__()
 
         # copy some parameters
@@ -214,7 +222,7 @@ class Encoder(nn.Module):
         self.std_layer = nn.Linear(hparams.encoder_filters[-2], self.z_size, bias=True)
         
         # init model
-        self.init_weights()
+        self.init_weights(init_weights)
         
         #self.conv = nn.Sequential(
         #    nn.Conv1d(in_channels=3, out_channels=64, kernel_size=1,
@@ -245,11 +253,15 @@ class Encoder(nn.Module):
         #self.mu_layer = nn.Linear(256, self.z_size, bias=True)
         #self.std_layer = nn.Linear(256, self.z_size, bias=True)
     
-    def init_weights(self):
-        self.conv.apply(init_weights)
-        self.fc.apply(init_weights)
-        self.mu_layer.apply(init_weights)
-        self.std_layer.apply(init_weights)
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.conv.apply(_init_weights)
+            self.fc.apply(_init_weights)
+            self.mu_layer.apply(_init_weights)
+            self.std_layer.apply(_init_weights)
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights)
+            self.load_state_dict(checkpoint['encoder_state_dict'])
         
     def save_weights(self, path):
         torch.save(self.state_dict(), path)
@@ -283,13 +295,13 @@ class Encoder(nn.Module):
 
 
 class AAE3dModel(nn.Module):
-    def __init__(self, num_points, num_features, hparams, devices):
+    def __init__(self, num_points, num_features, hparams, devices, init_weights):
         super(AAE3dModel, self).__init__()
 
         # instantiate encoder, generator and discriminator
-        self.encoder = Encoder(num_points, num_features, hparams).to(devices[0])
-        self.generator = Generator(num_points, num_features, hparams).to(devices[1])
-        self.discriminator = Discriminator(hparams).to(devices[2])
+        self.encoder = Encoder(num_points, num_features, hparams, init_weights).to(devices[0])
+        self.generator = Generator(num_points, num_features, hparams, init_weights).to(devices[1])
+        self.discriminator = Discriminator(hparams, init_weights).to(devices[2])
 
     def forward(self, x):
         z, mu, logvar = self.encoder(x)
@@ -360,6 +372,7 @@ class AAE3d(object):
                      hparams = AAE3dHyperparams(),
                      optimizer_hparams = OptimizerHyperparams(),
                      gpu = None,
+                     init_weights=None,
                      verbose = True):
         """
         Parameters
@@ -377,6 +390,12 @@ class AAE3d(object):
         loss: : function, optional
             Defines an optional loss function with inputs (recon_x, x, mu, logvar)
             and ouput torch loss.
+
+        init_weights : str, None
+            If str and ends with .pt, init_weights is a model checkpoint from
+            which pretrained weights can be loaded for the encoder, generator
+            and discriminator. If None, model will start with default weight
+            initialization.
 
         gpu : int, tuple, or None
             Encoder and decoder will train on ...
@@ -404,7 +423,7 @@ class AAE3d(object):
         self.devices = Device(*self._configure_device(gpu))
 
         # model
-        self.model = AAE3dModel(num_points, num_features, hparams, self.devices)
+        self.model = AAE3dModel(num_points, num_features, hparams, self.devices, init_weights)
         
         # fixed noise vector
         self.num_points = num_points

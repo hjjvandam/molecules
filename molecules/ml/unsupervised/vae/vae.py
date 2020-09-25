@@ -15,19 +15,21 @@ __all__ = ['VAE']
 Device = namedtuple('Device', ['encoder', 'decoder'])
 
 class VAEModel(nn.Module):
-    def __init__(self, input_shape, hparams, device):
+    def __init__(self, input_shape, hparams, init_weights, device):
         super(VAEModel, self).__init__()
 
         # Select encoder/decoder models by the type of the hparams
         if isinstance(hparams, SymmetricVAEHyperparams):
             from .symmetric import SymmetricEncoderConv2d, SymmetricDecoderConv2d
-            self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
-            self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.shapes)
+            self.encoder = SymmetricEncoderConv2d(input_shape,  hparams, init_weights)
+            self.decoder = SymmetricDecoderConv2d(input_shape, hparams,
+                                                  self.encoder.shapes, init_weights)
 
         elif isinstance(hparams, ResnetVAEHyperparams):
             from .resnet import ResnetEncoder, ResnetDecoder
-            self.encoder = ResnetEncoder(input_shape, hparams)
-            self.decoder = ResnetDecoder(self.encoder.match_shape, input_shape, hparams)
+            self.encoder = ResnetEncoder(input_shape, hparams, init_weights)
+            self.decoder = ResnetDecoder(self.encoder.match_shape, input_shape,
+                                         hparams, init_weights)
 
         else:
             raise TypeError(f'Invalid hparams type: {type(hparams)}.')
@@ -156,6 +158,7 @@ class VAE:
                  loss=None,
                  gpu=None,
                  enable_amp=False,
+                 init_weights=None,
                  verbose=True):
         """
         Parameters
@@ -185,6 +188,11 @@ class VAE:
             If int, the specified GPU.
             If tuple, the first and second GPUs respectively.
 
+        init_weights : str, None
+            If str and ends with .pt, init_weights is a model checkpoint from
+            which pretrained weights can be loaded for the encoder and decoder.
+            If None, model will start with default weight initialization.
+
         verbose : bool
             True prints training and validation loss to stdout.
         """        
@@ -198,7 +206,7 @@ class VAE:
         # Tuple of encoder, decoder device
         self.device = Device(*self._configure_device(gpu))
 
-        self.model = VAEModel(input_shape, hparams, self.device)
+        self.model = VAEModel(input_shape, hparams, init_weights, self.device)
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0

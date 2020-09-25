@@ -153,7 +153,7 @@ def get_activation(activation):
     raise ValueError(f'Invalid activation type: {activation}')
 
 # TODO: generalize this more.
-def init_weights(m):
+def _init_weights(m):
     if type(m) == nn.Linear:
         nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)

@@ -67,6 +67,11 @@ def parse_dict(ctx, param, value):
 @click.option('-r', '--resume',is_flag=True,
               help='Resume from latest checkpoint')
 
+@click.option('-iw', '--init_weights',
+             type=click.Path(exists=True),
+             help='Model checkpoint file to load model weights fromg. ' \
+                  'Checkpoint files saved as .pt by CheckpointCallback.')
+
 @click.option('-f', '--cm_format', default='sparse-concat',
               help='Format of contact map files. Options ' \
                    '[full, sparse-concat, sparse-rowcol]')
@@ -127,7 +132,7 @@ def parse_dict(ctx, param, value):
               help='Number of data loaders for training')
 
 def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, resume, model_prefix,
-         dim1, dim2, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, loss_weights, model_type,
+         dim1, dim2, init_weights, cm_format, encoder_gpu, decoder_gpu, epochs, batch_size, optimizer, loss_weights, model_type,
          latent_dim, encoder_resnet_layers, scale_factor, embed_interval, tsne_interval, sample_interval, 
          wandb_project_name, local_rank, amp, distributed, num_data_workers):
 
@@ -202,7 +207,9 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
     optimizer_hparams = OptimizerHyperparams(name=optimizer["name"], hparams={'lr': float(optimizer["lr"])})
 
     vae = VAE(input_shape, hparams, optimizer_hparams,
-              gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
+              gpu=(encoder_gpu, decoder_gpu),
+              enable_amp=amp,
+              init_weights=init_weights)
 
     enc_device = torch.device(f'cuda:{encoder_gpu}')
     dec_device = torch.device(f'cuda:{decoder_gpu}')
@@ -340,7 +347,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
                 print(f"No checkpoint files in directory {join(model_path, 'checkpoint')}, \
                        cannot resume training, will start from scratch.")
     
-
     # create model
     vae.train(train_loader, valid_loader, epochs,
               checkpoint=checkpoint, callbacks=callbacks)
