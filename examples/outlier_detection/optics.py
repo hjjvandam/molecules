@@ -359,8 +359,8 @@ def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, comm = N
     outlier_pdbs = []
     orders = []
     for traj_file, item in groups:
+        sim_id = os.path.splitext(os.path.basename(traj_file))[0]
         sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
-        basename = os.path.basename(os.path.dirname(traj_file))
         load_trajec = time.time()
         u = mda.Universe(sim_pdb, traj_file)
         load_trajec = time.time() - load_trajec
@@ -369,7 +369,7 @@ def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, comm = N
         save_trajec = time.time()
         orders += list(item["order"])
         for frame in item["rewarded_inds"]:
-            out_pdb = os.path.abspath(join(pdb_out_path, f'{basename}_{frame:06}.pdb'))
+            out_pdb = os.path.abspath(join(pdb_out_path, f'{sim_id}_{frame:06}.pdb'))
             with mda.Writer(out_pdb) as writer:
                 # Write a single coordinate set to a PDB file
                 writer._update_frame(u)
@@ -423,7 +423,6 @@ def md_checkpoints(sim_path, pdb_out_path, outlier_pdbs):
                 restart_checkpnts.append(checkpnt_filepath)
 
     return restart_checkpnts
-
 
 
 @click.command()
