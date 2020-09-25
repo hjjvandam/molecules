@@ -75,6 +75,7 @@ cmd="${conda_path}/bin/python -u ${script_path} \
        -opt ${optimizer} ${checkpoint} \
        -S ${sample_interval} \
        -ti $(($epoch+1)) \
-       --dim1 ${height} --dim2 ${width} -d ${dim}"
+       --dim1 ${height} --dim2 ${width} -d ${dim}
+       --num_data_workers 4" # -ndw
 echo ${cmd}
 ($cmd)
