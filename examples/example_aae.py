@@ -99,7 +99,10 @@ def parse_dict(ctx, param, value):
 @click.option('-lw', '--loss_weights', callback=parse_dict,
               help='Loss parameters')
 
-@click.option('-I', '--interval', default=1, type=int,
+@click.option('-ei', '--embed_interval', default=1, type=int,
+              help="Saves embedddings every interval'th point")
+
+@click.option('-ti', '--tsne_interval', default=1, type=int,
               help='Saves model checkpoints, embedddings, tsne plots every ' \
                    "interval'th point")
 
@@ -120,8 +123,9 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
          num_points, num_features, encoder_kernel_sizes,
          encoder_gpu, generator_gpu, discriminator_gpu,
          epochs, batch_size, optimizer, latent_dim,
-         loss_weights, interval, sample_interval, local_rank,
-         wandb_project_name, distributed):
+         loss_weights, embed_interval, tsne_interval,
+         sample_interval, local_rank, wandb_project_name,
+         distributed):
     """Example for training Fs-peptide with AAE3d."""
 
     # do some scaffolding for DDP
@@ -265,7 +269,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
                                              mpi_comm=comm)
 
     save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
-                                           interval=interval,
+                                           interval=embed_interval,
                                            sample_interval=sample_interval,
                                            mpi_comm=comm)
 
@@ -273,7 +277,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
                                      projection_type='3d',
                                      target_perplexity=100,
-                                     interval=interval,
+                                     interval=tsne_interval,
                                      tsne_is_blocking=True,
                                      wandb_config=wandb_config,
                                      mpi_comm=comm)
