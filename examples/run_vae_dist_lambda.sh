@@ -36,17 +36,16 @@ dec_gpu=$(( 2 * ${LOCAL_RANK} + 1 ))
 
 # launch code
 python molecules/examples/example_vae.py \
-       -i "data/spike-short-rep1.h5" \
+       -i data/spike-short-rep1.h5 \
        -o ${output_dir} -m ${run_tag} ${cflag} \
-       -dn contact_maps \
-       --wandb_project_name spike \
+       -wp spike \
        --amp --distributed \
        -opt "name=RMSprop,lr=1e-4" \
        -f sparse-concat \
        -t resnet \
        -e 20 \
        -ti 5 \
-       -b 32 \
+       -b 16 \
        -E ${enc_gpu} -D ${dec_gpu} \
        -S 1 \
        -h 3375 -w 3375 -d 64
