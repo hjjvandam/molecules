@@ -8,7 +8,7 @@ wandb login 6c8b9db0b520487f05d32ebc76fcea156bd85d58
 
 # spike data
 #spike_data="/data/spike-for-real/open/spike_open.h5"
-data="/data/3clpro/3clpro-monomer-cutoff-16.h5"
+data="/data/3clpro/3clpro-residues-303-cutoff-16.h5"
 #spike_data="/data/spike-for-real/closed/spike_closed.h5"
 
 # checkpoint
@@ -23,12 +23,12 @@ mpirun -np 1 --allow-run-as-root \
        -dn "point_cloud" \
        -rn "rmsd" \
        --resume \
-       -o /data/runs/ -m aae-3clpro-16A-1 --wandb_project_name covid_dl \
+       -o /data/runs/ -m aae-3clpro-fixed-16A-1 --wandb_project_name covid_dl \
        --encoder_kernel_sizes 5 3 3 1 1 \
-       -np 301 -nf 0 \
+       -np 303 -nf 0 \
        -E 0 -G 0 -D 0 \
        -e 200 -b 32 \
        -opt "name=Adam,lr=0.0001" \
        -d 64 \
-       -lw "lambda_rec=0.5,lambda_gp=10." \
-       -S 3
+       -lw "lambda_rec=1.,lambda_gp=10." \
+       -S 10

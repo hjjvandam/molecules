@@ -174,7 +174,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu), init_weights=init_weights)
 
     if comm_size > 1:
-        if (encoder_gpu == decoder_gpu):
+        if (encoder_gpu == generator_gpu) and (encoder_gpu == discriminator_gpu):
             devid = torch.device(f'cuda:{encoder_gpu}')
             aae.model = DDP(aae.model, device_ids = [devid], output_device = devid)
         else:

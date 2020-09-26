@@ -590,6 +590,9 @@ class AAE3d(object):
         logs : dict
             Filled with data for callbacks
         """
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
 
         self.model.train()
         train_loss_d = 0.
@@ -610,7 +613,7 @@ class AAE3d(object):
             data = data.to(self.devices[0])
                 
             # get reconstruction
-            codes, mu, logvar = self.model.encode(data)
+            codes, mu, logvar = handle.encode(data)
             
             # get noise
             self.noise.normal_(mean = self.noise_mu, std = self.noise_std)
@@ -692,6 +695,10 @@ class AAE3d(object):
         logs : dict
             Filled with data for callbacks
         """
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        
         self.model.eval()
         valid_loss = 0.
         for callback in callbacks:
@@ -703,7 +710,7 @@ class AAE3d(object):
                 data, rmsd, fnc, index = token
                 data = data.to(self.devices[0])
                 # get reconstruction
-                codes, mu, logvar = self.model.encode(data)
+                codes, mu, logvar = handle.encode(data)
                 # just reconstruction loss is important here
                 recons_batch = self.model.generate(codes)
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
