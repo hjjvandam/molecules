@@ -48,7 +48,7 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
     ncols = 3 if projection_type == '3d' else 1
 
     # If outliers are plotted, make them prominent
-    alpha = 0.75 if outlier_inds is not None else None
+    alpha = 0.3 if outlier_inds is not None else None
 
     # Precompute tsne embeddings for each perplexity
     tsne_embeddings = []
@@ -262,10 +262,13 @@ if __name__ == '__main__':
     #embedding_file="embeddings-raw-step-1343-20200918-153515.h5"
 
     # data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes1/model-cmaps-3clpro-summit-run-2-nnodes1/embedddings"
-    # embedding_file="embeddings-raw-step-1954-20200918-151815.h5"
+    #embedding_file="runs/model-3clpro-aae-test_bs-32_opt_Adam_lr-1e-4_latentdim-48_cutoff-16/embedddings/embeddings-raw-step-37499-20200925-213727.h5"
     
     # # concat
     # embedding_input=os.path.join(data_dir, embedding_file)
 
-    # plot_tsne(embedding_input, data_dir, pca=False, colors=['rmsd', 'fnc'], projection_type='3d')
+    #outlier_inds = np.arange(200)
+
+    #plot_tsne(embedding_file, colors=['rmsd', 'fnc'], projection_type='3d',
+    #          outlier_inds=outlier_inds)
     pass
