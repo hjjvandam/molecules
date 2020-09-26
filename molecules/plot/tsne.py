@@ -33,8 +33,10 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
               target_perplexity=30,
               perplexities=[5, 30, 50, 100, 200],
               pca_dim=50,
+              outlier_inds=None,
               wandb_config=None,
-              global_step=0, epoch=1):
+              global_step=0,
+              epoch=1):
 
     embeddings, color_arrays = _load_data(embeddings_path, colors)
 
@@ -44,6 +46,9 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
     # create plot grid
     nrows = len(perplexities)
     ncols = 3 if projection_type == '3d' else 1
+
+    # If outliers are plotted, make them prominent
+    alpha = 0.75 if outlier_inds is not None else None
 
     # Precompute tsne embeddings for each perplexity
     tsne_embeddings = []
@@ -86,14 +91,14 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
                 z3mm = (z3mm[0] * 0.95, z3mm[1] * 1.05)
                 # x-y
                 ax1 = axs[idr, 0]
-                ax1.scatter(z1, z2, marker='.', c=color)
+                ax1.scatter(z1, z2, marker='.', c=color, alpha=alpha)
                 ax1.set_xlim(z1mm)
                 ax1.set_ylim(z2mm)
                 ax1.set_xlabel(r'$z_1$')
                 ax1.set_ylabel(r'$z_2$')
                 # x-z
                 ax2 = axs[idr, 1]
-                ax2.scatter(z1, z3, marker='.', c=color)
+                ax2.scatter(z1, z3, marker='.', c=color, alpha=alpha)
                 ax2.set_xlim(z1mm)
                 ax2.set_ylim(z3mm)
                 ax2.set_xlabel(r'$z_1$')
@@ -102,7 +107,7 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
                     ax2.set_title(titlestring)
                 # y-z
                 ax3 = axs[idr, 2]
-                ax3.scatter(z2, z3, marker='.', c=color)
+                ax3.scatter(z2, z3, marker='.', c=color, alpha=alpha)
                 ax3.set_xlim(z2mm)
                 ax3.set_ylim(z3mm)
                 ax3.set_xlabel(r'$z_2$')
@@ -111,11 +116,18 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
                 divider = make_axes_locatable(axs[idr, 2])
                 cax = divider.append_axes('right', size='5%', pad=0.1)
                 fig.colorbar(scalar_map, ax=axs[idr, 2], cax=cax)
+
+                if outlier_inds is not None:
+                    # Plot outliers as diamonds with no transparency
+                    outlier_kwargs = {'marker': 'D', 'color': color[outlier_inds]}
+                    ax1.scatter(z1[outlier_inds], z2[outlier_inds], **outlier_kwargs)
+                    ax2.scatter(z1[outlier_inds], z3[outlier_inds], **outlier_kwargs)
+                    ax3.scatter(z2[outlier_inds], z3[outlier_inds], **outlier_kwargs)
             
             else:
                 ax = axs[idr]
                 z1, z2 = emb_trans[:, 0], emb_trans[:, 1]
-                ax.scatter(z1, z2, marker='.', c=color)
+                ax.scatter(z1, z2, marker='.', c=color, alpha=alpha)
                 z1mm = np.min(z1), np.max(z1)
                 z2mm = np.min(z2), np.max(z2)
                 z1mm = (z1mm[0] * 0.95, z1mm[1] * 1.05)
@@ -130,6 +142,11 @@ def plot_tsne(embeddings_path, out_dir='./', colors=['rmsd'],
                 divider = make_axes_locatable(ax)
                 cax = divider.append_axes('right', size='5%', pad=0.1)
                 fig.colorbar(scalar_map, ax=axs, cax=cax)
+
+                if outlier_inds is not None:
+                    # Plot outliers as diamonds with no transparency
+                    outlier_kwargs = {'marker': 'D', 'color': color[outlier_inds]}
+                    ax.scatter(z1[outlier_inds], z2[outlier_inds], **outlier_kwargs)
 
             # plot as 3D object on wandb
             if (wandb_config is not None) and (perplexity == target_perplexity):
@@ -215,6 +232,7 @@ def plot_tsne_publication(embeddings_path, out_dir='./', colors=['rmsd'],
         plt.close(fig)
 
 if __name__ == '__main__':
+
     # data1 = np.random.normal(size=(100, 6))
     # data2 = np.random.normal(size=(100, 6), loc=10, scale=2)
     # data3 = np.random.normal(size=(100, 6), loc=5, scale=1)
@@ -222,11 +240,20 @@ if __name__ == '__main__':
     # rmsd = np.random.normal(size=300)
     # fnc = np.random.normal(size=300)
 
+    # from molecules.utils import open_h5
     # scaler_kwargs = {'fletcher32': True}
-    # with open_h5('test_embed.h5', 'w', swmr=False) as h5_file:
+    # with open_h5('tmpdir/test_embed.h5', 'w', swmr=False) as h5_file:
     #     h5_file.create_dataset('embeddings', data=data, **scaler_kwargs)
     #     h5_file.create_dataset('rmsd', data=rmsd, **scaler_kwargs)
     #     h5_file.create_dataset('fnc', data=fnc, **scaler_kwargs)
+
+    # outlier_inds = [1,2,3,4,5]
+
+    # plot_tsne('tmpdir/test_embed.h5', './tmpdir',
+    #           projection_type='3d', colors=['rmsd'],
+    #           outlier_inds=outlier_inds)
+
+
     
     #data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-1/model-cmaps-3clpro-summit-run-1/embedddings"
     #embedding_file="embeddings-raw-step-724-20200918-130640.h5"
@@ -234,12 +261,11 @@ if __name__ == '__main__':
     #data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes4/model-cmaps-3clpro-summit-run-2-nnodes4/embedddings"
     #embedding_file="embeddings-raw-step-1343-20200918-153515.h5"
 
-    data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes1/model-cmaps-3clpro-summit-run-2-nnodes1/embedddings"
-    embedding_file="embeddings-raw-step-1954-20200918-151815.h5"
+    # data_dir="/gpfs/alpine/med110/proj-shared/tkurth/runs/cmaps-3clpro-summit-run-2-nnodes1/model-cmaps-3clpro-summit-run-2-nnodes1/embedddings"
+    # embedding_file="embeddings-raw-step-1954-20200918-151815.h5"
     
-    # concat
-    embedding_input=os.path.join(data_dir, embedding_file)
+    # # concat
+    # embedding_input=os.path.join(data_dir, embedding_file)
 
-    #plot_tsne('test_embed.h5', './tmpdir', '3d', pca=False, colors=['fnc'])
-    plot_tsne(embedding_input, data_dir, pca=False, colors=['rmsd', 'fnc'], projection_type='3d')
-    #pass
+    # plot_tsne(embedding_input, data_dir, pca=False, colors=['rmsd', 'fnc'], projection_type='3d')
+    pass
