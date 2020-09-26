@@ -340,6 +340,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
 
 if __name__ == '__main__':
     # set forkserver (needed for summit runs, may cause errors elsewhere)
-    torch.multiprocessing.set_start_method('forkserver', force = True)
+    #torch.multiprocessing.set_start_method('forkserver', force = True)
 
     main()
