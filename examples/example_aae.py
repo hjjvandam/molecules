@@ -118,6 +118,9 @@ def parse_dict(ctx, param, value):
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
+@click.option('-ndw', '--num_data_workers', default=0, type=int, 
+              help='Number of data loaders for training')
+
 def main(input_path, dataset_name, rmsd_name, fnc_name,
          out_path, checkpoint, resume, init_weights, model_id,
          num_points, num_features, encoder_kernel_sizes,
@@ -125,7 +128,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
          epochs, batch_size, optimizer, latent_dim,
          loss_weights, embed_interval, tsne_interval,
          sample_interval, local_rank, wandb_project_name,
-         distributed):
+         distributed, num_data_workers):
     """Example for training Fs-peptide with AAE3d."""
 
     # do some scaffolding for DDP
@@ -205,7 +208,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
-                              pin_memory = True, num_workers = 1)
+                              pin_memory = True, num_workers = num_data_workers)
 
     valid_dataset = PointCloudDataset(input_path,
                                       dataset_name,
@@ -224,7 +227,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
                                list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
     
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
-                              pin_memory = True, num_workers = 1)
+                              pin_memory = True, num_workers = num_data_workers)
 
     print(f"Having {len(train_dataset)} training and {len(valid_dataset)} validation samples.")
     
@@ -336,4 +339,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     # │   └── optimizer-hparams.pkl
 
 if __name__ == '__main__':
+    # set forkserver (needed for summit runs, may cause errors elsewhere)
+    torch.multiprocessing.set_start_method('forkserver', force = True)
+
     main()

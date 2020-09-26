@@ -76,6 +76,6 @@ cmd="${conda_path}/bin/python -u ${script_path} \
        -S ${sample_interval} \
        -ti $(($epoch+1)) \
        -d ${latent_dim} \
-       --num_data_workers 4" # -ndw
+       --num_data_workers 1" # -ndw
 echo ${cmd}
 ($cmd)
