@@ -485,13 +485,18 @@ class AAE3d(object):
         return str(self.model)
 
     def _loss_fnc_d(self, noise, real_logits, codes, fake_logits):
+
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+
         # classification loss (critic)
         loss = torch.mean(fake_logits) - torch.mean(real_logits)
         
         # gradient penalty
         alpha = torch.rand(self.batch_size, 1).to(self.devices[2])
         interpolates = noise + alpha * (codes - noise)
-        disc_interpolates = self.model.discriminate(interpolates)
+        disc_interpolates = handle.discriminate(interpolates)
         
         gradients = torch.autograd.grad(outputs=disc_interpolates,
                                         inputs=interpolates,
@@ -594,7 +599,7 @@ class AAE3d(object):
         if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
             handle = handle.module
 
-        self.model.train()
+        handle.train()
         train_loss_d = 0.
         train_loss_eg = 0.
         for batch_idx, token in enumerate(train_loader):
@@ -619,15 +624,15 @@ class AAE3d(object):
             self.noise.normal_(mean = self.noise_mu, std = self.noise_std)
             
             # get logits
-            real_logits = self.model.discriminate(self.noise)
-            fake_logits = self.model.discriminate(codes)
+            real_logits = handle.discriminate(self.noise)
+            fake_logits = handle.discriminate(codes)
             
             # get loss
             loss_d = self._loss_fnc_d(self.noise, real_logits, codes, fake_logits)
             
             # backward pass
             self.optimizer_d.zero_grad()
-            self.model.discriminator.zero_grad()
+            handle.discriminator.zero_grad()
             loss_d.backward(retain_graph = True)
             
             # optimizer step
@@ -635,16 +640,16 @@ class AAE3d(object):
             self.optimizer_d.step()
 
             # eg step
-            rec_batch = self.model.generate(codes)
-            fake_logit = self.model.discriminate(codes)
+            rec_batch = handle.generate(codes)
+            fake_logit = handle.discriminate(codes)
             
             # get loss
             loss_eg = self._loss_fnc_eg(data, rec_batch, fake_logit)
             
             # backward pass
             self.optimizer_eg.zero_grad()
-            self.model.generator.zero_grad()
-            self.model.encoder.zero_grad()
+            handle.generator.zero_grad()
+            handle.encoder.zero_grad()
             loss_eg.backward()
             
             # optimizer step
@@ -699,7 +704,7 @@ class AAE3d(object):
         if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
             handle = handle.module
         
-        self.model.eval()
+        handle.eval()
         valid_loss = 0.
         for callback in callbacks:
             callback.on_validation_begin(epoch, logs)
@@ -712,7 +717,7 @@ class AAE3d(object):
                 # get reconstruction
                 codes, mu, logvar = handle.encode(data)
                 # just reconstruction loss is important here
-                recons_batch = self.model.generate(codes)
+                recons_batch = handle.generate(codes)
                 valid_loss += self._loss_fnc_eg(data, recons_batch, None).item()
 
                 for callback in callbacks:
