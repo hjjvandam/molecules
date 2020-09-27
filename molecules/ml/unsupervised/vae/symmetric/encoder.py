@@ -32,7 +32,7 @@ class SymmetricEncoderConv2d(nn.Module):
             _init_weights(self.logvar)
         # Loading checkpoint weights
         elif init_weights.endswith('.pt'):
-            checkpoint = torch.load(init_weights)
+            checkpoint = torch.load(init_weights, map_location='cpu')
             self.load_state_dict(checkpoint['encoder_state_dict'])
 
     def forward(self, x):

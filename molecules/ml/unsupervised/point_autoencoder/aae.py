@@ -78,7 +78,7 @@ class Generator(nn.Module):
         if init_weights is None:
             self.model.apply(_init_weights)
         elif init_weights.endswith('.pt'):
-            checkpoint = torch.load(init_weights)
+            checkpoint = torch.load(init_weights, map_location='cpu')
             self.load_state_dict(checkpoint['generator_state_dict'])
         
     def save_weights(self, path):
@@ -154,7 +154,7 @@ class Discriminator(nn.Module):
         if init_weights is None:
             self.model.apply(_init_weights)
         elif init_weights.endswith('.pt'):
-            checkpoint = torch.load(init_weights)
+            checkpoint = torch.load(init_weights, map_location='cpu')
             self.load_state_dict(checkpoint['discriminator_state_dict'])
     
     def save_weights(self, path):
@@ -260,7 +260,7 @@ class Encoder(nn.Module):
             self.mu_layer.apply(_init_weights)
             self.std_layer.apply(_init_weights)
         elif init_weights.endswith('.pt'):
-            checkpoint = torch.load(init_weights)
+            checkpoint = torch.load(init_weights, map_location='cpu')
             self.load_state_dict(checkpoint['encoder_state_dict'])
         
     def save_weights(self, path):

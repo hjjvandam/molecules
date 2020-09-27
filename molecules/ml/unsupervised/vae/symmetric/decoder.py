@@ -52,7 +52,7 @@ class SymmetricDecoderConv2d(nn.Module):
             self.conv_layers.apply(_init_weights)
         # Loading checkpoint weights
         elif init_weights.endswith('.pt'):
-            checkpoint = torch.load(init_weights)
+            checkpoint = torch.load(init_weights, map_location='cpu')
             self.load_state_dict(checkpoint['decoder_state_dict'])
 
     def forward(self, x):

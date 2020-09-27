@@ -156,7 +156,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
             comm_local_rank = local_rank
         else:
             comm_local_rank = int(os.getenv("LOCAL_RANK", 0))
-    
     # HP
     # model
     aae_hparams = {
