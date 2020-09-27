@@ -16,7 +16,6 @@ mpi4py.rc.initialize = False
 from mpi4py import MPI
 
 # molecules stuff
-from molecules.ml.datasets import PointCloudDataset
 from molecules.ml.hyperparams import OptimizerHyperparams
 from molecules.ml.callbacks import (LossCallback, CheckpointCallback,
                                     SaveEmbeddingsCallback, TSNEPlotCallback,
@@ -31,6 +30,50 @@ def parse_dict(ctx, param, value):
             k, v = item.split("=")
             result[k] = v
         return result
+
+
+def get_dataset(dataset_location, input_path, dataset_name, rmsd_name, fnc_name,
+                num_points, num_features,
+                split, shard_id = 0, num_shards = 1, 
+                normalize = 'box', cms_transform = False):
+                
+    if dataset_location == 'storage':
+        # Load training and validation data
+        from molecules.ml.datasets import PointCloudDataset
+        dataset = PointCloudDataset(input_path,
+                                    dataset_name,
+                                    rmsd_name,
+                                    fnc_name,
+                                    num_points,
+                                    num_features,
+                                    split = split,
+                                    normalize = normalize,
+                                    cms_transform = cms_transform)
+
+        # split across nodes
+        if num_shards > 1:
+            chunksize = len(dataset) // comm_size
+            dataset = Subset(dataset, list(range(chunksize * shard_id, chunksize * (shard_id + 1))))
+            
+    elif dataset_location == 'cpu-memory':
+        from molecules.ml.datasets import PointCloudInMemoryDataset
+        dataset = PointCloudInMemoryDataset(input_path,
+                                            dataset_name,
+                                            rmsd_name,
+                                            fnc_name,
+                                            num_points,
+                                            num_features,
+                                            split = split,
+                                            shard_id = shard_id,
+                                            num_shards = num_shards,
+                                            normalize = normalize,
+                                            cms_transform = cms_transform)
+
+    else:
+        raise NotImplementedError(f"Error, dataset_location = {dataset_location} not implemented.")
+        
+    return dataset
+    
 
 @click.command()
 @click.option('-i', '--input', 'input_path', required=True,
@@ -120,6 +163,9 @@ def parse_dict(ctx, param, value):
 
 @click.option('-ndw', '--num_data_workers', default=0, type=int, 
               help='Number of data loaders for training')
+              
+@click.option('-dl', '--dataset_location', default='storage', type=str,
+              help='String which specifies from where to feed the dataset. Valid choices are `storage` and `cpu-memory`.')
 
 def main(input_path, dataset_name, rmsd_name, fnc_name,
          out_path, checkpoint, resume, init_weights, model_id,
@@ -128,7 +174,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
          epochs, batch_size, optimizer, latent_dim,
          loss_weights, embed_interval, tsne_interval,
          sample_interval, local_rank, wandb_project_name,
-         distributed, num_data_workers):
+         distributed, num_data_workers, dataset_location):
     """Example for training Fs-peptide with AAE3d."""
 
     # do some scaffolding for DDP
@@ -193,42 +239,36 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     
         # Only print summary when encoder_gpu is None or 0
         #summary(aae.model, (3 + num_features, num_points))
-
-    # Load training and validation data
-    train_dataset = PointCloudDataset(input_path,
-                                      dataset_name,
-                                      rmsd_name,
-                                      fnc_name,
-                                      num_points,
-                                      num_features,
-                                      split = 'train',
-                                      normalize = 'box',
-                                      cms_transform = False)
-
-    # split across nodes
-    if comm_size > 1:
-        chunksize = len(train_dataset) // comm_size
-        train_dataset = Subset(train_dataset,
-                               list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
+    
+    # set up dataloaders
+    train_dataset = get_dataset(dataset_location,
+                                input_path,
+                                dataset_name,
+                                rmsd_name,
+                                fnc_name,
+                                num_points,
+                                num_features,
+                                split = 'train',
+                                shard_id = comm_rank,
+                                num_shards = comm_size,
+                                normalize = 'box',
+                                cms_transform = False)
     
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
                               pin_memory = True, num_workers = num_data_workers)
 
-    valid_dataset = PointCloudDataset(input_path,
-                                      dataset_name,
-                                      rmsd_name,
-                                      fnc_name,
-                                      num_points,
-                                      num_features,
-                                      split = 'valid',
-                                      normalize = 'box',
-                                      cms_transform = False)
-
-    # split across nodes
-    if comm_size > 1:
-        chunksize = len(valid_dataset) // comm_size
-        valid_dataset = Subset(valid_dataset,
-                               list(range(chunksize * comm_rank, chunksize * (comm_rank + 1))))
+    valid_dataset = get_dataset(dataset_location,
+                                input_path,
+                                dataset_name,
+                                rmsd_name,
+                                fnc_name,
+                                num_points,
+                                num_features,
+                                split = 'valid',
+                                shard_id = comm_rank,
+                                num_shards = comm_size,
+                                normalize = 'box',
+                                cms_transform = False)
     
     valid_loader = DataLoader(valid_dataset, batch_size=batch_size, shuffle = True, drop_last = True,
                               pin_memory = True, num_workers = num_data_workers)

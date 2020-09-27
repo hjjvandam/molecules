@@ -23,12 +23,13 @@ mpirun -np 1 --allow-run-as-root \
        -dn "point_cloud" \
        -rn "rmsd" \
        --resume \
-       -o /data/runs/ -m aae-3clpro-fixed-16A-1 --wandb_project_name covid_dl \
+       -o /data/runs/ -m aae-3clpro-fixed-16A-2 --wandb_project_name covid_dl \
        --encoder_kernel_sizes 5 3 3 1 1 \
        -np 303 -nf 0 \
        -E 0 -G 0 -D 0 \
-       -e 200 -b 32 \
+       -e 80 -b 32 \
        -opt "name=Adam,lr=0.0001" \
        -d 64 \
        -lw "lambda_rec=1.,lambda_gp=10." \
+       -dl "cpu-memory" \
        -S 10
