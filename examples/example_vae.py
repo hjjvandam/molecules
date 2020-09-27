@@ -196,7 +196,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
         input_shape = (dim1, dim1)
         hparams = ResnetVAEHyperparams(**resnet_hparams)
 
-    optimizer_hparams = OptimizerHyperparams(name=optimizer["name"],  hparams={'lr': float(optimizer["lr"])})
+    optimizer_hparams = OptimizerHyperparams(name=optimizer["name"], hparams={'lr': float(optimizer["lr"])})
 
     vae = VAE(input_shape, hparams, optimizer_hparams,
               gpu=(encoder_gpu, decoder_gpu), enable_amp = amp)
