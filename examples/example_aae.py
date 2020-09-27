@@ -176,12 +176,17 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu), init_weights=init_weights)
 
+    enc_device = torch.device(f'cuda:{encoder_gpu}')
+    gen_device = torch.device(f'cuda:{generator_gpu}')
+    disc_device = torch.device(f'cuda:{discriminator_gpu}')
     if comm_size > 1:
         if (encoder_gpu == generator_gpu) and (encoder_gpu == discriminator_gpu):
-            devid = torch.device(f'cuda:{encoder_gpu}')
-            aae.model = DDP(aae.model, device_ids = [devid], output_device = devid)
+            aae.model = DDP(aae.model, device_ids = [enc_device], output_device = enc_device)
         else:
             aae.model = DDP(aae.model, device_ids = None, output_device = None)
+
+    # set global default device
+    torch.cuda.set_device(enc_device.index)
     
     if comm_rank == 0:
         # Diplay model 

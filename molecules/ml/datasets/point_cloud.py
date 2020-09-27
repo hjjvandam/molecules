@@ -83,11 +83,8 @@ class PointCloudDataset(Dataset):
             assert (self.num_points_total >= self.num_points)
             assert (self.num_features_total == (3 + self.num_features))
 
-            # rng
-            self.rng = np.random.default_rng(seed)
-
-            # create temp buffer for IO
-            self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
+            # store seed
+            self.seed = seed
 
             # cms transform if requested
             cms = 0.
@@ -111,16 +108,25 @@ class PointCloudDataset(Dataset):
     def __getitem__(self, idx):
         # init if necessary
         if not self.init:
+            # open dataset
             self.h5_file = open_h5(self.file_path, swmr = False)
             self.dset = self.h5_file[self.dataset_name]
             self.rmsd = self.h5_file[self.rmsd_name]
             self.fnc = self.h5_file[self.fnc_name]
+            
+            # rng
+            self.rng = np.random.default_rng(self.seed)
+
+            # create temp buffer for IO
+            self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
+
+            # set initialized to true
             self.init = True
 
         # translate index
         index = self.indices[idx]
 
-        self.dset.id.refresh()
+        #self.dset.id.refresh()
         if self.num_points < self.num_points_total:
             # select points to read
             point_indices = self.rng.choice(self.num_points_total, size = self.num_points,
