@@ -16,7 +16,7 @@ __all__ = ['AAE3d']
 Device = namedtuple('Device', ['encoder', 'generator', 'discriminator'])
 
 class Generator(nn.Module):
-    def __init__(self, num_points, num_features, hparams, init_weights):
+    def __init__(self, num_points, num_features, hparams, init_weights=None):
         super().__init__()
 
         # copy some parameters
@@ -94,7 +94,7 @@ class Generator(nn.Module):
 
 
 class Discriminator(nn.Module):
-    def __init__(self, hparams, init_weights):
+    def __init__(self, hparams, init_weights=None):
         super().__init__()
 
         self.z_size = hparams.latent_dim
@@ -169,7 +169,7 @@ class Discriminator(nn.Module):
 
 
 class Encoder(nn.Module):
-    def __init__(self, num_points, num_features, hparams, init_weights):
+    def __init__(self, num_points, num_features, hparams, init_weights=None):
         super().__init__()
 
         # copy some parameters

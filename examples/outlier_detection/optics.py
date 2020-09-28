@@ -84,7 +84,7 @@ def model_selection(model_paths, num_select=1, comm=None):
         valid_loss, epochs = loss_log['valid_loss'], loss_log['epochs']
         # Need to index into epoch, since run could have been resumed from
         # a checkpoint, meaning that epochs does not start at 1.
-        best_ind = np.argmin(valid_loss)
+        best_ind = np.nanargmin(valid_loss)
         best_valid_loss = valid_loss[best_ind]
         best_epoch = str(epochs[best_ind])
         
@@ -131,7 +131,7 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
         # Initialize encoder model
         input_shape = (dim1, dim1)
         hparams = ResnetVAEHyperparams().load(hparams_path)
-        encoder = ResnetEncoder(input_shape, hparams)
+        encoder = ResnetEncoder(input_shape, hparams, checkpoint_path)
 
         dataset = ContactMapDataset(input_path,
                                     'contact_map',
@@ -146,7 +146,7 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
        from molecules.ml.unsupervised.point_autoencoder.aae import Encoder
 
        hparams = AAE3dHyperparams().load(hparams_path)
-       encoder = Encoder(dim1, hparams.num_features, hparams)
+       encoder = Encoder(dim1, hparams.num_features, hparams, checkpoint_path)
 
        dataset = PointCloudDataset(input_path,
                                    'point_cloud',
@@ -170,18 +170,12 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
     # Put encoder on specified CPU/GPU
     encoder.to(device)
 
-    # Load encoder checkpoint
-    checkpoint = torch.load(checkpoint_path, map_location='cpu')
-    encoder.load_state_dict(checkpoint['encoder_state_dict'])
-    # Clean checkpoint up since it contains encoder, decoder and optimizer weights
-    del checkpoint; import gc; gc.collect()
-
     data_loader = DataLoader(dataset,
                              batch_size=batch_size,
                              drop_last=False,
                              shuffle=False,
                              pin_memory=True,
-                             num_workers=4)
+                             num_workers=0)
 
     # Collect embeddings and associated index into simulation trajectory
     if comm_rank == 0:
