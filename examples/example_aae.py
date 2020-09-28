@@ -52,7 +52,7 @@ def get_dataset(dataset_location, input_path, dataset_name, rmsd_name, fnc_name,
 
         # split across nodes
         if num_shards > 1:
-            chunksize = len(dataset) // comm_size
+            chunksize = len(dataset) // num_shards
             dataset = Subset(dataset, list(range(chunksize * shard_id, chunksize * (shard_id + 1))))
             
     elif dataset_location == 'cpu-memory':
