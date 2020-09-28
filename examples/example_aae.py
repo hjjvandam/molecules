@@ -143,10 +143,10 @@ def get_dataset(dataset_location, input_path, dataset_name, rmsd_name, fnc_name,
               help='Loss parameters')
 
 @click.option('-ei', '--embed_interval', default=1, type=int,
-              help="Saves embedddings every interval'th point")
+              help="Saves embeddings every interval'th point")
 
 @click.option('-ti', '--tsne_interval', default=1, type=int,
-              help='Saves model checkpoints, embedddings, tsne plots every ' \
+              help='Saves model checkpoints, embeddings, tsne plots every ' \
                    "interval'th point")
 
 @click.option('-S', '--sample_interval', default=20, type=int,
@@ -322,13 +322,13 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     checkpoint_callback = CheckpointCallback(out_dir=join(model_path, 'checkpoint'),
                                              mpi_comm=comm)
 
-    save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embedddings'),
+    save_callback = SaveEmbeddingsCallback(out_dir=join(model_path, 'embeddings'),
                                            interval=embed_interval,
                                            sample_interval=sample_interval,
                                            mpi_comm=comm)
 
     # TSNEPlotCallback requires SaveEmbeddingsCallback to run first
-    tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embedddings'),
+    tsne_callback = TSNEPlotCallback(out_dir=join(model_path, 'embeddings'),
                                      projection_type='3d',
                                      target_perplexity=100,
                                      interval=tsne_interval,
@@ -337,7 +337,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
                                      mpi_comm=comm)
 
     
-    latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embedddings'),
+    latspace_callback = LatspaceStatisticsCallback(out_dir = join(model_path, 'embeddings'),
                                                    sample_interval = sample_interval,
                                                    wandb_config = wandb_config,
                                                    mpi_comm = comm)
