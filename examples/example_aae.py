@@ -218,6 +218,16 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     optimizer_hparams = OptimizerHyperparams(name = optimizer["name"],
                                              hparams={'lr':float(optimizer["lr"])})
 
+    # create a dir for storing the model
+    model_path = join(out_path, f'model-{model_id}')
+
+    # Save hparams to disk 
+    if comm_rank == 0:
+        os.makedirs(model_path, exist_ok=True)
+        hparams.save(join(model_path, 'model-hparams.json'))
+        optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
+
+    # construct model
     aae = AAE3d(num_points, num_features, batch_size, hparams, optimizer_hparams,
               gpu=(encoder_gpu, generator_gpu, discriminator_gpu), init_weights=init_weights)
 
@@ -275,9 +285,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
 
     print(f"Having {len(train_dataset)} training and {len(valid_dataset)} validation samples.")
     
-    # For ease of training multiple models
-    model_path = join(out_path, f'model-{model_id}')
-    os.makedirs(model_path, exist_ok=True)
 
     # do we want wandb
     wandb_config = None
@@ -360,10 +367,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     # Save loss history to disk.
     if comm_rank == 0:
         loss_callback.save(join(model_path, 'loss.json'))
-
-        # Save hparams to disk
-        hparams.save(join(model_path, 'model-hparams.json'))
-        optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
 
         # Save final model weights to disk
         aae.save_weights(join(model_path, 'encoder-weights.pt'),

@@ -206,6 +206,16 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
 
     optimizer_hparams = OptimizerHyperparams(name=optimizer["name"], hparams={'lr': float(optimizer["lr"])})
 
+    # For ease of training multiple models
+    model_path = join(out_path, f'model-{model_prefix}')
+
+    # Save hparams to disk 
+    if comm_rank == 0:
+        os.makedirs(model_path, exist_ok=True)
+        hparams.save(join(model_path, 'model-hparams.json'))
+        optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
+
+    # create model
     vae = VAE(input_shape, hparams, optimizer_hparams,
               gpu=(encoder_gpu, decoder_gpu),
               enable_amp=amp,
@@ -354,10 +364,6 @@ def main(input_path, dataset_name, rmsd_name, fnc_name, out_path, checkpoint, re
     if comm_rank == 0:
         # Save loss history to disk.
         loss_callback.save(join(model_path, 'loss.json'))
-
-        # Save hparams to disk
-        hparams.save(join(model_path, 'model-hparams.json'))
-        optimizer_hparams.save(join(model_path, 'optimizer-hparams.json'))
 
         # Save final model weights to disk
         vae.save_weights(join(model_path, 'encoder-weights.pt'),
