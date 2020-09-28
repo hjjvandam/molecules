@@ -109,7 +109,7 @@ class PointCloudDataset(Dataset):
         # init if necessary
         if not self.init:
             # open dataset
-            self.h5_file = open_h5(self.file_path, swmr = False)
+            self.h5_file = open_h5(self.file_path, 'r', libver = 'latest', swmr = False)
             self.dset = self.h5_file[self.dataset_name]
             self.rmsd = self.h5_file[self.rmsd_name]
             self.fnc = self.h5_file[self.fnc_name]
