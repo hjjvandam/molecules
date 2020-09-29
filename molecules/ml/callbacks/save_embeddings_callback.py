@@ -100,7 +100,7 @@ class SaveEmbeddingsCallback(Callback):
 
     def save_embeddings(self, epoch, embeddings, rmsd, fnc, logs):
         # Create embedding file path and store in logs for downstream callbacks
-        time_stamp = time.strftime(f'embeddings-raw-step-{logs["global_step"]}-%Y%m%d-%H%M%S.h5')
+        time_stamp = time.strftime(f'embeddings-epoch-{epoch}-%Y%m%d-%H%M%S.h5')
         embeddings_path = os.path.join(self.out_dir, time_stamp)
         logs['embeddings_path'] = embeddings_path
 
