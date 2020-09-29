@@ -482,7 +482,7 @@ def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, max_retr
 
         # we might need more than one retry  
         retry_count = 0
-        while(retry_count < max_retry_count):
+        while (retry_count < max_retry_count):
             try:
                 sim_pdb = os.path.realpath(glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0])
                 load_trajec = time.time()
