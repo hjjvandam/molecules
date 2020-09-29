@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import itertools
 import time
@@ -11,7 +12,7 @@ from glob import glob
 from os.path import join
 import MDAnalysis as mda
 from torch.utils.data import DataLoader, Subset
-from sklearn.neighbors import LocalOutlierFactor
+from sklearn.neighbors import LocalOutlierFactor, NearestNeighbors
 from molecules.utils import open_h5
 from molecules.ml.unsupervised.cluster import optics_clustering
 
@@ -39,7 +40,8 @@ def parse_list(ctx, param, value):
     if value is not None:
         return value.split(',')
 
-def model_selection(model_paths, num_select=1, comm=None):
+
+def model_selection_loss_based(model_paths, num_select=1, comm=None):
     """
     Parameters
     ----------
@@ -109,6 +111,127 @@ def model_selection(model_paths, num_select=1, comm=None):
     if comm_rank == 0:
         print("Model Selection Time: {}s".format(t_end - t_start))
 
+    return best_hparams, best_checkpoint
+
+
+def model_selection_embedding_loss_based(model_paths, top_variance_threshold=0.1, num_select=1, comm=None):
+    # start timer
+    t_start = time.time()
+
+    # communicator stuff
+    comm_size = 1
+    comm_rank = 0
+    if comm is not None:
+        comm_size = comm.Get_size()
+        comm_rank = comm.Get_rank()
+
+    # Best model checkpoint file for each HPO run and
+    # associated validation loss
+    results = []
+
+    # create a list of models to work on:
+    epochrule = re.compile(r"^embeddings-epoch-(\d{1,}?)-\d{1,}?-\d{1,}?.h5$")
+    model_files = []
+    for model_path in model_paths:
+        model_files.append(pd.DataFrame([{"model_path": model_path, "epoch": int(epochrule.match(x).groups()[0]), "embeddings_file": x}
+                                         for x in os.listdir(os.path.join(model_path, 'embeddings'))
+                                         if x.endswith(".h5")]))
+    
+    # create df
+    modelsdf = pd.concat(model_files)
+
+    # shard the data
+    fullsize = modelsdf.shape[0]
+    chunksize = int(np.ceil(fullsize / comm_size))
+    start = chunksize * comm_rank
+    end = min([start + chunksize, fullsize])
+    modelsdf = modelsdf.iloc[start:end]
+
+    # Loop over all model paths in hyperparameter optimization search.
+    for model_path, item in modelsdf.groupby("model_path"):
+        # load losses
+        with open(join(model_path, 'loss.json')) as loss_file:
+            loss_log = json.load(loss_file)
+
+        # find all embeddings:
+        for _, row in item.iterrows():
+            
+            # extract
+            epoch = row["epoch"]
+            embfile = row["embeddings_file"]
+
+            with open_h5(os.path.join(model_path, 'embeddings', embfile), 'r', swmr = False) as f:
+                embeddings = f["embeddings"][...]
+                fnc = f["fnc"][...]
+                rmsd = f["rmsd"][...]
+
+            # check for nan
+            if np.any(np.isnan(embeddings)):
+                print(f"Error, {embfile} includes NaN values, skipping.")
+                continue
+
+            # run knn on embeddings
+            knn = NearestNeighbors(n_neighbors=5, algorithm='kd_tree')
+            nbrs = knn.fit(embeddings)
+            distances, indices = nbrs.kneighbors(embeddings)
+            # compute average rmsd for group of points
+            rmsd_variance = np.var(np.mean(rmsd[indices], axis=1))
+            fnc_variance = np.var(np.mean(fnc[indices], axis=1))
+            # add to list
+            records = {"rmsd_variance": rmsd_variance, "fnc_variance": fnc_variance, 
+                       "loss": loss_log["valid_loss"][epoch - 1], 
+                       "epoch": epoch, "model_path": model_path}
+            results.append(records)
+
+    # sort the list
+    if results:
+        resultdf = pd.DataFrame(results)
+    else:
+        resultdf = pd.DataFrame(columns=["rmsd_variance", "fnc_variance",
+                                         "loss", "epoch", "model_path"])
+
+    if comm_size > 1:
+        resultdf = comm.allgather(resultdf)
+        resultdf = pd.concat(resultdf).reset_index(drop=True)
+
+    if comm_rank == 0:
+        # select top N% variances
+        nselect = int(np.ceil(top_variance_threshold * resultdf.shape[0]))
+        resultdf = resultdf.nlargest(nselect, "rmsd_variance")
+
+        # select minimum loss
+        resultdf = resultdf.nsmallest(1, "loss")
+
+        # extract the winner
+        best_model_path = resultdf["model_path"].values[0]
+        best_epoch = resultdf["epoch"].values[0]
+
+        # generate model checkpoint string
+        checkpoint_path = os.path.join(best_model_path, 'checkpoint')
+        best_checkpoint = None
+        for cp in os.listdir(checkpoint_path):
+            match_string = r"^(epoch-{}-).*?-.*?pt$".format(best_epoch)
+            match = re.match(match_string, cp)
+            if match is not None:
+                best_checkpoint = cp
+                break
+
+        # now we have everything
+        best_hparams = os.path.join(best_model_path, 'model-hparams.json')
+        best_checkpoint = os.path.join(best_model_path, "checkpoint", best_checkpoint)
+    else:
+        best_hparams = None
+        best_checkpoint = None
+
+    if comm_size > 1:
+        best_hparams = comm.bcast(best_hparams, 0)
+        best_checkpoint = comm.bcast(best_checkpoint, 0)
+
+    # stop timer
+    t_end = time.time()
+    if comm_rank == 0:
+        print("Model Selection Time: {}s".format(t_end - t_start))
+        
     return best_hparams, best_checkpoint
 
 
@@ -306,7 +429,7 @@ def find_values(rewards_df, fname, xmin, xmax):
     return selection
 
 
-def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, comm = None):
+def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, max_retry_count = 5, comm = None):
     # start timer
     t_start = time.time()
 
@@ -353,24 +476,34 @@ def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, comm = N
     outlier_pdbs = []
     orders = []
     for traj_file, item in groups:
+        
+        # extract sim tag
         sim_id = os.path.splitext(os.path.basename(traj_file))[0]
-        sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
-        load_trajec = time.time()
-        u = mda.Universe(sim_pdb, traj_file)
-        load_trajec = time.time() - load_trajec
-        #print("Load trajectory time: {}s".format(load_trajec))
 
-        save_trajec = time.time()
-        orders += list(item["order"])
-        for frame in item["rewarded_inds"]:
-            out_pdb = os.path.abspath(join(pdb_out_path, f'{sim_id}_{frame:06}.pdb'))
-            with mda.Writer(out_pdb) as writer:
-                # Write a single coordinate set to a PDB file
-                writer._update_frame(u)
-                writer._write_timestep(u.trajectory[frame])
-            outlier_pdbs.append(out_pdb)
-        save_trajec = time.time() - save_trajec
-        #print("Save trajectory time: {}s".format(save_trajec))
+        # we might need more than one retry  
+        retry_count = 0
+        while(retry_count < max_retry_count):
+            try:
+                sim_pdb = os.path.realpath(glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0])
+                load_trajec = time.time()
+                u = mda.Universe(sim_pdb, traj_file)
+                load_trajec = time.time() - load_trajec
+                #print("Load trajectory time: {}s".format(load_trajec))
+                break
+            except IOError as e:
+                retry_count += 1
+                
+        if retry_count < max_retry_count:
+            save_trajec = time.time()
+            orders += list(item["order"])
+            for frame in item["rewarded_inds"]:
+                out_pdb = os.path.abspath(join(pdb_out_path, f'{sim_id}_{frame:06}.pdb'))
+                with mda.Writer(out_pdb) as writer:
+                    # Write a single coordinate set to a PDB file
+                    writer._update_frame(u)
+                    writer._write_timestep(u.trajectory[frame])
+                outlier_pdbs.append(out_pdb)
+            save_trajec = time.time() - save_trajec
 
     if comm_size > 1:
         outlier_pdbs = comm.allgather(outlier_pdbs)
@@ -381,21 +514,6 @@ def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, comm = N
         
     # sort by order
     outlier_pdbs = [x[1] for x in sorted(zip(orders, outlier_pdbs))]
-
-    #outlier_pdbs = []    
-    #for frame, traj_file in reward_locs:
-    #    sim_pdb = glob(os.path.join(os.path.dirname(traj_file), '*.pdb'))[0]
-    #    basename = os.path.basename(os.path.dirname(traj_file))
-    #    out_pdb = os.path.abspath(join(pdb_out_path, f'{basename}_{frame:06}.pdb'))
-    #    u = mda.Universe(sim_pdb, traj_file)
-    #    with mda.Writer(out_pdb) as writer:
-    #        # Write a single coordinate set to a PDB file
-    #        writer._update_frame(u)
-    #        writer._write_timestep(u.trajectory[frame])
-    #    outlier_pdbs.append(out_pdb)
-    
-    #comm.barrier()
-    #exit(1)
 
     # stop timer
     t_end = time.time()
@@ -505,17 +623,12 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
     if comm_rank == 0:
         os.makedirs(pdb_out_path, exist_ok=True)
 
-    if comm_rank ==0:
-        best_hparams, best_checkpoint = model_selection(model_paths, num_select=1)
+    # do distributed model selection
+    best_hparams, best_checkpoint = model_selection_embedding_loss_based(model_paths, top_variance_threshold=0.1, 
+                                                                         num_select=1, comm=comm)
+    if comm_rank == 0:
         print('best hparams: ', best_hparams)
         print('best_checkpoint: ', best_checkpoint)
-    else:
-        best_hparams = None
-        best_checkpoint = None
-
-    if comm_size > 1:
-        best_hparams = comm.bcast(best_hparams, 0)
-        best_checkpoint = comm.bcast(best_checkpoint, 0)
 
     # Generate embeddings for all contact matrices produced during MD stage
     embeddings, indices = generate_embeddings(model_type, best_hparams, best_checkpoint, dim1, dim2,
@@ -561,7 +674,7 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
         print('simulation_inds shape', simulation_inds.shape)
 
     # Write rewarded PDB files to shared path
-    outlier_pdbs = write_rewarded_pdbs(simulation_inds, scores, pdb_out_path, data_path, comm)
+    outlier_pdbs = write_rewarded_pdbs(simulation_inds, scores, pdb_out_path, data_path, comm = comm)
     
     if comm_rank == 0:
         restart_checkpnts = md_checkpoints(sim_path, pdb_out_path, outlier_pdbs)
