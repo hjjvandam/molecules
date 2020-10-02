@@ -133,9 +133,13 @@ def model_selection_embedding_loss_based(model_paths, top_variance_threshold=0.1
     epochrule = re.compile(r"^embeddings-epoch-(\d{1,}?)-\d{1,}?-\d{1,}?.h5$")
     model_files = []
     for model_path in model_paths:
-        model_files.append(pd.DataFrame([{"model_path": model_path, "epoch": int(epochrule.match(x).groups()[0]), "embeddings_file": x}
-                                         for x in os.listdir(os.path.join(model_path, 'embeddings'))
-                                         if x.endswith(".h5")]))
+        try:
+            model_files.append(pd.DataFrame([{"model_path": model_path, "epoch": int(epochrule.match(x).groups()[0]), "embeddings_file": x}
+                                             for x in os.listdir(os.path.join(model_path, 'embeddings'))
+                                             if x.endswith(".h5")]))
+        except:
+            print(f"Error, {model_path} does not contain embedding directories, skipping.")
+            continue
     
     # create df
     modelsdf = pd.concat(model_files)
