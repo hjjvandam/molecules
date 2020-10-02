@@ -146,10 +146,14 @@ def model_selection_embedding_loss_based(model_paths, top_variance_threshold=0.1
 
     # shard the data
     fullsize = modelsdf.shape[0]
-    chunksize = int(np.ceil(fullsize / comm_size))
+    chunksize = fullsize // comm_size
     start = chunksize * comm_rank
-    end = min([start + chunksize, fullsize])
+    end = start + chunksize
+    remainderdf = modelsdf.iloc[comm_size * chunksize:]
     modelsdf = modelsdf.iloc[start:end]
+    for idx, (ind, row) in enumerate(remainderdf.iterrows()):
+        if idx == comm_rank:
+            modelsdf = modelsdf.append(row)
 
     # Loop over all model paths in hyperparameter optimization search.
     for model_path, item in modelsdf.groupby("model_path"):
@@ -289,14 +293,21 @@ def generate_embeddings(model_type, hparams_path, checkpoint_path, dim1, dim2,
     # shard the dataset
     if comm_size > 1:
         fullsize = len(dataset)
-        chunksize = int(np.ceil(fullsize / comm_size))
+        chunksize = fullsize // comm_size
         start = comm_rank * chunksize
-        end = min([start + chunksize, fullsize])
-        dataset = Subset(dataset, range(start, end))
+        end = start + chunksize
+        subset_indices = list(range(start, end))
+        # deal with remainder
+        for idx, i in enumerate(range(comm_size * chunksize, fullsize)):
+            if idx == comm_rank:
+                subset_indices.append(i)
+        # split the set
+        dataset = Subset(dataset, subset_indices)
 
     # Put encoder on specified CPU/GPU
     encoder.to(device)
 
+    # create data loader
     data_loader = DataLoader(dataset,
                              batch_size=batch_size,
                              drop_last=False,
@@ -463,10 +474,14 @@ def write_rewarded_pdbs(rewarded_inds, scores, pdb_out_path, data_path, max_retr
     # now, chunk the frame for each node
     if comm_size > 1:
         fullsize = trajdf.shape[0]
-        chunksize = int(np.ceil(fullsize / comm_size))
+        chunksize = fullsize // comm_size
         start = chunksize * comm_rank
-        end = min([start + chunksize, fullsize])
-        trajdf = trajdf.iloc[start:end, :]    
+        end = start + chunksize
+        remainderdf = trajdf.iloc[chunksize * comm_size:, :]
+        trajdf = trajdf.iloc[start:end, :]
+        for idx, (ind, row) in enumerate(remainderdf.iterrows()):
+            if idx == comm_rank:
+                trajdf = trajdf.append(row)
 
     # For documentation on mda.Writer methods see:
     #   https://www.mdanalysis.org/mdanalysis/documentation_pages/coordinates/PDB.html
@@ -698,6 +713,9 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
         with open(restart_points_path, 'w') as restart_file:
             json.dump(restart_points, restart_file)
     
+    # final barrier
+    comm.barrier()
+
     # end
     t_end = time.time()
     if comm_rank == 0:
