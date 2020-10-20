@@ -2,11 +2,11 @@ import torch
 from torch import nn
 from math import isclose
 from molecules.ml.unsupervised.utils import (conv_output_shape, same_padding,
-                                             get_activation, init_weights, prod)
+                                             get_activation, _init_weights, prod)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 class SymmetricEncoderConv2d(nn.Module):
-    def __init__(self, input_shape, hparams):
+    def __init__(self, input_shape, hparams, init_weights=None):
         super(SymmetricEncoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
@@ -23,12 +23,17 @@ class SymmetricEncoderConv2d(nn.Module):
         self.mu = self._embedding_layer()
         self.logvar = self._embedding_layer()
 
-        self.init_weights()
+        self.init_weights(init_weights)
 
-    def init_weights(self):
-        self.encoder.apply(init_weights)
-        init_weights(self.mu)
-        init_weights(self.logvar)
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.encoder.apply(_init_weights)
+            _init_weights(self.mu)
+            _init_weights(self.logvar)
+        # Loading checkpoint weights
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights, map_location='cpu')
+            self.load_state_dict(checkpoint['encoder_state_dict'])
 
     def forward(self, x):
         x = self.encoder(x)

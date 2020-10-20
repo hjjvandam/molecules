@@ -95,7 +95,7 @@ def _same_padding(input_dim, kernel_size, stride):
             # TODO: see symmetric decoder
             # adjustment = int(input_dim % 2 == 0)
             return input_dim - alpha # + adjustment
-
+        
     raise Exception('No padding found')
 
 def same_padding(input_dim, kernel_size, stride):
@@ -144,16 +144,16 @@ def get_activation(activation):
         type of activation e.g. 'ReLU', etc
 
     """
-    if activation is 'ReLU':
+    if activation == 'ReLU':
         return nn.ReLU()
-    if activation is 'Sigmoid':
+    if activation == 'Sigmoid':
         return nn.Sigmoid()
-    if activation is 'None':
+    if activation == 'None':
         return nn.Identity()
     raise ValueError(f'Invalid activation type: {activation}')
 
 # TODO: generalize this more.
-def init_weights(m):
+def _init_weights(m):
     if type(m) == nn.Linear:
         nn.init.xavier_uniform_(m.weight)
         m.bias.data.fill_(0.01)

@@ -4,14 +4,16 @@ from torch.utils.data import Dataset
 from molecules.utils import open_h5
 
 
-class PointCloudDataset(Dataset):
+class PointCloudInMemoryDataset(Dataset):
     """
-    PyTorch Dataset class to load point clouds data. Uses HDF5
-    files and only reads into memory what is necessary for one batch.
+    PyTorch Dataset class to load point clouds data. Reads the relevant chunk 
+    of the HDF5 file into DRAM or GPU memory.
+    
     """
     def __init__(self, path, dataset_name, rmsd_name,
                  fnc_name, num_points, num_features,
-                 split_ptc=0.8, split = 'train', seed = 333,
+                 split_ptc=0.8, split = 'train', 
+                 shard_id = 0, num_shards = 1, seed = 333,
                  normalize = 'box', cms_transform = False):
         """
         Parameters
@@ -38,6 +40,12 @@ class PointCloudDataset(Dataset):
             Either 'train' or 'valid', specifies whether this
             dataset returns train or validation data.
 
+        shard_id: int
+            Specify the id of the dataset shard. Useful for DDP mode.
+                 
+        num_shards: int
+            Specify the number of shards to generate.
+
         seed : int
             Seed for the RNG for the splitting. Make sure it is the same for all workers reading
             from the same file.
@@ -62,12 +70,14 @@ class PointCloudDataset(Dataset):
         with open_h5(self.file_path, 'r', libver = 'latest', swmr = False) as f:
             
             # get dataset
-            self.dset = f[self.dataset_name]
+            dset = f[self.dataset_name]
+            rmsd = f[self.rmsd_name]
+            fnc = f[self.fnc_name]
 
             # get lengths
-            self.len = self.dset.shape[0]
-            self.num_features_total = self.dset.shape[1]
-            self.num_points_total = self.dset.shape[2]
+            self.len = dset.shape[0]
+            self.num_features_total = dset.shape[1]
+            self.num_points_total = dset.shape[2]
 
             # do splitting
             self.split_ind = int(split_ptc * self.len)
@@ -85,47 +95,50 @@ class PointCloudDataset(Dataset):
 
             # store seed
             self.seed = seed
-
+            
+            # normalization involves all the data
             # cms transform if requested
             cms = 0.
             if self.cms_transform:
                 # average over points
-                cms = np.mean(self.dset[:, 0:3, :].astype(np.float64), axis = 2, keepdims = True).astype(np.float32)
+                cms = np.mean(dset[:, 0:3, :].astype(np.float64), axis = 2, keepdims = True).astype(np.float32)
 
             # normalize input
             self.bias = np.zeros((3 + self.num_features, self.num_points), dtype = np.float32)
             self.scale = np.ones((3 + self.num_features, self.num_points), dtype = np.float32)
             if self.normalize == 'box':
-                self.bias[0:3, :] = (self.dset[:, 0:3, :] - cms).min()
-                self.scale[0:3, :] = 1. / ((self.dset[:, 0:3, :] - cms).max() - self.bias)
-
-        # set file to uninitialized
-        self.init = False
+                self.bias[0:3, :] = (dset[:, 0:3, :] - cms).min()
+                self.scale[0:3, :] = 1. / ((dset[:, 0:3, :] - cms).max() - self.bias)
+                
+            # load the relevant chunks into memory
+            # compute shard sizes
+            fullsize = len(self.indices)
+            chunksize = fullsize // num_shards
+            start = shard_id * chunksize
+            end = start + chunksize
+            
+            # apply sharding
+            self.indices = self.indices[start:end]
+            
+            # load the data
+            # data
+            data_array = dset[...].astype(np.float32)
+            self.data_array = data_array[self.indices, ...]
+            # rmsd
+            rmsd_array = rmsd[...].astype(np.float32)
+            self.rmsd_array = rmsd_array[self.indices]
+            # fnc
+            fnc_array = fnc[...].astype(np.float32)
+            self.fnc_array = fnc_array[self.indices]
             
     def __len__(self):
         return len(self.indices)
 
     def __getitem__(self, idx):
-        # init if necessary
-        if not self.init:
-            # open dataset
-            self.h5_file = open_h5(self.file_path, 'r', libver = 'latest', swmr = False)
-            self.dset = self.h5_file[self.dataset_name]
-            self.rmsd = self.h5_file[self.rmsd_name]
-            self.fnc = self.h5_file[self.fnc_name]
-            
-            # rng
-            self.rng = np.random.default_rng(self.seed)
-
-            # create temp buffer for IO
-            self.token = np.zeros((1, 3 + self.num_features, self.num_points), dtype = np.float32)
-
-            # set initialized to true
-            self.init = True
-
-        # translate index
+        
+        #get global index so that we can later relate it to the global file position
         index = self.indices[idx]
-
+        
         #self.dset.id.refresh()
         if self.num_points < self.num_points_total:
             # select points to read
@@ -133,22 +146,20 @@ class PointCloudDataset(Dataset):
                                             replace = False, shuffle = False)
 
             # read
-            self.token[0, ...] = self.dset[index, :, point_indices]
-        else:            
-            self.dset.read_direct(self.token,
-                                  np.s_[index:index+1, 0:(3 + self.num_features), 0:self.num_points],
-                                  np.s_[0:1, 0:(3 + self.num_features), 0:self.num_points])
+            self.token = self.data_array[idx, :, point_indices]
+        else:
+            self.token = self.data_array[idx, ...]
         
         # cms subtract
         if self.cms_transform:
-            self.token[0, 0:3, :] -= np.mean(self.token[0, 0:3, :], axis = -1, keepdims = True)
+            self.token[0:3, :] -= np.mean(self.token[0:3, :], axis = -1, keepdims = True)
 
         if np.any(np.isnan(self.token)):
             raise ValueError("NaN encountered in input.")
             
         # normalize
-        result = (self.token[0, ...] - self.bias) * self.scale
-        rmsd = torch.tensor(self.rmsd[index], requires_grad=False)
-        fnc = torch.tensor(self.fnc[index], requires_grad=False)
+        result = (self.token - self.bias) * self.scale
+        rmsd = torch.tensor(self.rmsd_array[idx], requires_grad=False)
+        fnc = torch.tensor(self.fnc_array[idx], requires_grad=False)
         return torch.tensor(result, requires_grad = False), rmsd, fnc, index
 

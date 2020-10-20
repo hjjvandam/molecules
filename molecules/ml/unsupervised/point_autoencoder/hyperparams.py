@@ -17,8 +17,7 @@ class AAE3dHyperparams(Hyperparams):
                  noise_mu = 0.,
                  noise_std = 1.,
                  lambda_rec = 1.,
-                 lambda_gp = 10.,
-                 lambda_adv = 1.):
+                 lambda_gp = 10.):
         
         # network features
         self.num_features = num_features
@@ -41,7 +40,6 @@ class AAE3dHyperparams(Hyperparams):
         # loss features
         self.lambda_rec = lambda_rec
         self.lambda_gp = lambda_gp
-        self.lambda_adv = lambda_adv
 
         # Placed after member vars are declared so that base class can validate
         super().__init__()

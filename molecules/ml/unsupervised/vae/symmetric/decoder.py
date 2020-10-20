@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from math import isclose
 from molecules.ml.unsupervised.utils import (conv_output_shape, same_padding,
-                                             get_activation, init_weights, prod)
+                                             get_activation, _init_weights, prod)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 def reversedzip(*iterables):
@@ -28,7 +28,7 @@ def reversedzip(*iterables):
         yield tup
 
 class SymmetricDecoderConv2d(nn.Module):
-    def __init__(self, output_shape, hparams, encoder_shapes):
+    def __init__(self, output_shape, hparams, encoder_shapes, init_weights=None):
         super(SymmetricDecoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
@@ -44,11 +44,16 @@ class SymmetricDecoderConv2d(nn.Module):
         # Reshape flattened x as a tensor (channels, output1, output2)
         self.reshape = (-1, *self.encoder_shapes[-1])
 
-        self.init_weights()
+        self.init_weights(init_weights)
 
-    def init_weights(self):
-        self.affine_layers.apply(init_weights)
-        self.conv_layers.apply(init_weights)
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.affine_layers.apply(_init_weights)
+            self.conv_layers.apply(_init_weights)
+        # Loading checkpoint weights
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights, map_location='cpu')
+            self.load_state_dict(checkpoint['decoder_state_dict'])
 
     def forward(self, x):
         x = self.affine_layers(x).view(self.reshape)

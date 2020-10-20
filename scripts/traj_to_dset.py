@@ -3,6 +3,15 @@ import glob
 import click
 from molecules.sim.dataset import traj_to_dset
 
+def parse_dict(ctx, param, value):
+    if value is not None:
+        token = value.split(",")
+        result = {}
+        for item in token:
+            k, v = item.split("=")
+            result[k] = v
+        return result
+
 @click.command()
 
 @click.option('-p', 'pdb_path', required=True,
@@ -35,10 +44,6 @@ from molecules.sim.dataset import traj_to_dset
               help='Atom selection for creating contact maps, ' \
                     'point clouds and computing fnc.')
 
-@click.option('-c', '--cutoff', default=8., type=float,
-              help='Distanct cutoff measured in angstroms to ' \
-                   'compute contact maps and fnc')
-
 @click.option('--rmsd', is_flag=True,
               help='Computes and saves RMSD.')
 
@@ -48,6 +53,10 @@ from molecules.sim.dataset import traj_to_dset
 @click.option('--contact_map', is_flag=True,
               help='Computes and saves contact maps.')
 
+@click.option('-cmp', '--contact_maps_parameters', callback=parse_dict,
+              default="kernel_type=threshold,threshold=8.0",
+              help='Kernel type parameters for contact maps. Only relevant if contact maps are computed')
+
 @click.option('--point_cloud', is_flag=True,
               help='Computes and saves point cloud.')
 
@@ -56,10 +65,18 @@ from molecules.sim.dataset import traj_to_dset
                    'the contact maps are stored as. latest gives single ' \
                    'dset format while oldest gives group with row,col dset.')
 
+@click.option('--distributed', is_flag=True,
+              help='Uses MPI for distributed assembly.')
+
 @click.option('-v', '--verbose', is_flag=True)
 
-def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers,
-         selection, cutoff, rmsd, fnc, contact_map, point_cloud, cm_format, verbose):
+def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers, selection, 
+         contact_maps_parameters, rmsd, fnc, contact_map, point_cloud, cm_format, distributed, verbose):
+
+    mpi_comm = None
+    if distributed:
+        from mpi4py import MPI
+        mpi_comm = MPI.COMM_WORLD.Dup()
 
     if os.path.isdir(traj_path):
         traj_path = sorted(glob.glob(os.path.join(traj_path, pattern)))
@@ -73,9 +90,11 @@ def main(pdb_path, ref_pdb_path, traj_path, pattern, out_path, num_workers,
 
     traj_to_dset(topology=pdb_path, ref_topology=ref_pdb_path, traj_files=traj_path,
                  save_file=out_path, rmsd=rmsd, fnc=fnc, point_cloud=point_cloud,
-                 contact_map=contact_map, sel=selection, cutoff=cutoff,
-                 cm_format=cm_format, num_workers=num_workers, verbose=verbose)
+                 contact_map=contact_map, distance_kernel_params=contact_maps_parameters,
+                 sel=selection, cm_format=cm_format, num_workers=num_workers, comm=mpi_comm, verbose=verbose)
     
 if __name__ == '__main__':
+    import multiprocessing as mp
+    mp.set_start_method('forkserver')
     main()
 

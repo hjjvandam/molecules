@@ -2,13 +2,13 @@ import torch
 from torch import nn
 from molecules.ml.unsupervised.utils import (conv_output_shape,
                                              same_padding, get_activation,
-                                             init_weights, prod)
+                                             _init_weights, prod)
 from molecules.ml.unsupervised.vae.resnet import ResnetVAEHyperparams
 from molecules.ml.unsupervised.vae.resnet.residual_module import ResidualConv1d
 
 
 class ResnetEncoder(nn.Module):
-    def __init__(self, input_shape, hparams):
+    def __init__(self, input_shape, hparams, init_weights=None):
         super(ResnetEncoder, self).__init__()
 
         assert isinstance(hparams, ResnetVAEHyperparams)
@@ -21,21 +21,28 @@ class ResnetEncoder(nn.Module):
         self.input_shape = input_shape
         self.hparams = hparams
 
-        self.encoder, output_shape = self._encoder_layers()
+        self.encoder, self.match_shape = self._encoder_layers()
 
-        self.mu = self._embedding_layer(output_shape)
-        self.logvar = self._embedding_layer(output_shape)
+        self.mu = self._embedding_layer(self.match_shape[0])
+        self.logvar = self._embedding_layer(self.match_shape[0])
 
-        self.init_weights()
+        self.init_weights(init_weights)
 
-    def init_weights(self):
-        self.encoder.apply(init_weights)
-        init_weights(self.mu)
-        init_weights(self.logvar)
+    def init_weights(self, init_weights):
+        if init_weights is None:
+            self.encoder.apply(_init_weights)
+            _init_weights(self.mu)
+            _init_weights(self.logvar)
+        # Loading checkpoint weights
+        elif init_weights.endswith('.pt'):
+            checkpoint = torch.load(init_weights, map_location='cpu')
+            self.load_state_dict(checkpoint['encoder_state_dict'])
 
     def forward(self, x):
+        # encode
         x = self.encoder(x)
-        return self.mu(x), self.logvar(x)
+        xf = torch.mean(x, dim = 2)
+        return self.mu(xf), self.logvar(xf)
 
     def encode(self, x):
         self.eval()
@@ -81,12 +88,13 @@ class ResnetEncoder(nn.Module):
                                          filters,
                                          self.hparams.enc_kernel_size,
                                          self.hparams.activation,
-                                         shrink=True))
+                                         shrink=True,
+                                         kfac=self.hparams.scale_factor))
 
             res_input_shape = layers[-1].output_shape
 
-        return nn.Sequential(*layers, nn.Flatten()), prod(res_input_shape)
+        return nn.Sequential(*layers), res_input_shape
 
     def _embedding_layer(self, output_shape):
-        return nn.Linear(in_features=output_shape,
-                         out_features=self.hparams.latent_dim)
+        return nn.Linear(in_features = output_shape,
+                         out_features = self.hparams.latent_dim)

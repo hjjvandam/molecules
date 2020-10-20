@@ -21,7 +21,7 @@ class OptimizerHyperparams(Hyperparams):
 
     def validate(self):
         names = {'Adadelta', 'Adagrad', 'Adam', 'AdamW', 'SparseAdam',
-                 'Adamax', 'ASGD', 'LBFGS', 'RMSprop', 'Rprop', 'SGD'}
+                 'Adamax', 'ASGD', 'LBFGS', 'RMSprop', 'Rprop', 'SGD', 'LAMB'}
         if self.name not in names:
             raise Exception(f'Invalid optimizer name: {self.name}.\n'
                             f'Please choose from {names}.\nSee PyTorch docs.')
@@ -75,6 +75,10 @@ def get_optimizer(parameters, hparams):
 
         elif hparams.name == 'SGD':
             return optim.SGD(parameters, **hparams.hparams)
+
+        elif hparams.name == 'LAMB':
+            import apex.optimizers as aoptim
+            return aoptim.FusedLAMB(parameters, **hparams.hparams)
 
     except TypeError as e:
         raise Exception(f'Invalid parameter in hparams: {hparams.hparams}'

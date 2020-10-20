@@ -2,6 +2,7 @@ import time
 import numpy as np
 import torch
 from torch import nn
+import torch.distributed as dist
 from torch.nn import functional as F
 from collections import namedtuple
 from .resnet import ResnetVAEHyperparams
@@ -14,19 +15,21 @@ __all__ = ['VAE']
 Device = namedtuple('Device', ['encoder', 'decoder'])
 
 class VAEModel(nn.Module):
-    def __init__(self, input_shape, hparams, device):
+    def __init__(self, input_shape, hparams, init_weights, device):
         super(VAEModel, self).__init__()
 
         # Select encoder/decoder models by the type of the hparams
         if isinstance(hparams, SymmetricVAEHyperparams):
             from .symmetric import SymmetricEncoderConv2d, SymmetricDecoderConv2d
-            self.encoder = SymmetricEncoderConv2d(input_shape, hparams)
-            self.decoder = SymmetricDecoderConv2d(input_shape, hparams, self.encoder.shapes)
+            self.encoder = SymmetricEncoderConv2d(input_shape,  hparams, init_weights)
+            self.decoder = SymmetricDecoderConv2d(input_shape, hparams,
+                                                  self.encoder.shapes, init_weights)
 
         elif isinstance(hparams, ResnetVAEHyperparams):
             from .resnet import ResnetEncoder, ResnetDecoder
-            self.encoder = ResnetEncoder(input_shape, hparams)
-            self.decoder = ResnetDecoder(input_shape, hparams)
+            self.encoder = ResnetEncoder(input_shape, hparams, init_weights)
+            self.decoder = ResnetDecoder(self.encoder.match_shape, input_shape,
+                                         hparams, init_weights)
 
         else:
             raise TypeError(f'Invalid hparams type: {type(hparams)}.')
@@ -69,7 +72,7 @@ class VAEModel(nn.Module):
         self.decoder.load_weights(dec_path)
 
 
-def vae_loss(recon_x, x, mu, logvar):
+def vae_loss(recon_x, x, mu, logvar, reduction='mean'):
     """
     Effects
     -------
@@ -80,25 +83,37 @@ def vae_loss(recon_x, x, mu, logvar):
     https://arxiv.org/abs/1312.6114
     """
 
-    BCE = F.binary_cross_entropy(recon_x, x, reduction='sum')
+    BCE = F.binary_cross_entropy(recon_x, x, reduction=reduction)
 
-    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return BCE + KLD
+    return BCE, KLD
 
 
-def vae_logit_loss(logit_recon_x, x, mu, logvar):
+def vae_logit_loss(logit_recon_x, x, mu, logvar, reduction='mean'):
     """
     As above, but works directly on logits
     """
-    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction='sum')
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x,
+                                             reduction=reduction)
     
-    # 0.5 * sum(1 + log(sigma^2) - mu^2 - sigma^2)
-    KLD = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
+    # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
-    return BCE + KLD
-                    
+    return BCE, KLD
+    
+                
+def vae_logit_loss_outlier_helper(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
+    """
+    As above, but works directly on logits
+    """
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x,
+                                             reduction=reduction)
+    # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
+    KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
+
+    return lambda_rec * BCE, KLD
 
 
 # TODO: set weight initialization hparams
@@ -143,6 +158,7 @@ class VAE:
                  loss=None,
                  gpu=None,
                  enable_amp=False,
+                 init_weights=None,
                  verbose=True):
         """
         Parameters
@@ -172,9 +188,14 @@ class VAE:
             If int, the specified GPU.
             If tuple, the first and second GPUs respectively.
 
+        init_weights : str, None
+            If str and ends with .pt, init_weights is a model checkpoint from
+            which pretrained weights can be loaded for the encoder and decoder.
+            If None, model will start with default weight initialization.
+
         verbose : bool
             True prints training and validation loss to stdout.
-        """
+        """        
 
         hparams.validate()
         optimizer_hparams.validate()
@@ -185,7 +206,7 @@ class VAE:
         # Tuple of encoder, decoder device
         self.device = Device(*self._configure_device(gpu))
 
-        self.model = VAEModel(input_shape, hparams, self.device)
+        self.model = VAEModel(input_shape, hparams, init_weights, self.device)
 
         # TODO: consider making optimizer_hparams a member variable
         # RMSprop with lr=0.001, alpha=0.9, epsilon=1e-08, decay=0.0
@@ -195,7 +216,16 @@ class VAE:
         self.gscaler = amp.GradScaler(enabled = self.enable_amp)
 
         self.loss_fnc = vae_logit_loss if loss is None else loss
+        self.lambda_rec = hparams.lambda_rec
 
+        # these are helpers for distributed computing
+        self.comm_rank = 0
+        self.comm_size = 1
+        if dist.is_initialized():
+            self.comm_rank = dist.get_rank()
+            self.comm_size = dist.get_world_size()
+
+            
     def _configure_device(self, gpu):
         """
         Configures GPU/CPU device for training VAE. Allows encoder
@@ -230,7 +260,7 @@ class VAE:
     def __repr__(self):
         return str(self.model)
 
-    def train(self, train_loader, valid_loader, epochs=1, checkpoint='',
+    def train(self, train_loader, valid_loader, epochs=1, checkpoint=None,
               callbacks=[]):
         """
         Train model
@@ -246,7 +276,7 @@ class VAE:
         epochs : int
             Number of epochs to train for
 
-        checkpoint : str
+        checkpoint : str, None
             Path to checkpoint file to load and resume training
             from the epoch when the checkpoint was saved.
 
@@ -256,12 +286,17 @@ class VAE:
         """
 
         if callbacks:
-            logs = {'model': self.model, 'optimizer': self.optimizer}
+            handle = self.model
+            if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+                handle = handle.module
+            logs = {'model': handle, 'optimizer': self.optimizer}
+            if dist.is_initialized():
+                logs["comm_size"] = self.comm_size
         else:
             logs = {}
 
-        start_epoch = 1
-
+        start_epoch = 1            
+        
         if checkpoint:
             start_epoch += self._load_checkpoint(checkpoint)
 
@@ -306,7 +341,7 @@ class VAE:
         train_loss = 0.
         for batch_idx, token in enumerate(train_loader):
 
-            data, rmsd = token
+            data, rmsd, fnc, index = token
             data = data.to(self.device[0])
             
             if self.verbose:
@@ -321,7 +356,8 @@ class VAE:
             # forward
             with amp.autocast(self.enable_amp):
                 logit_recon_batch, codes, mu, logvar = self.model(data)
-                loss = self.loss_fnc(logit_recon_batch, data, mu, logvar)
+                loss_rec, loss_kld = self.loss_fnc(logit_recon_batch, data, mu, logvar)
+                loss = self.lambda_rec * loss_rec + loss_kld
 
             # backward
             self.optimizer.zero_grad()
@@ -330,17 +366,20 @@ class VAE:
             self.gscaler.update()
 
             # update loss
-            train_loss += loss.item() / len(data)
+            train_loss += loss.item()
 
             if callbacks:
-                logs['train_loss'] = loss.item() / len(data)
+                logs['train_loss'] = loss.item()
+                logs['train_loss_rec'] = loss_rec.item()
+                logs['train_loss_kld'] = loss_kld.item()
                 logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
 
-            if self.verbose:
+            if self.verbose and (self.comm_rank == 0):
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
-                      epoch, (batch_idx + 1) * len(data), len(train_loader.dataset),
+                      epoch, (batch_idx + 1) * self.comm_size * len(data),
+                      self.comm_size * len(train_loader.dataset),
                       100. * (batch_idx + 1) / len(train_loader),
-                      loss.item() / len(data), time.time() - start))
+                      loss.item(), time.time() - start))
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
@@ -350,7 +389,7 @@ class VAE:
         if callbacks:
             logs['train_loss_average'] = train_loss_ave
 
-        if self.verbose:
+        if self.verbose and (self.comm_rank == 0):
             print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss_ave))
 
     def _validate(self, valid_loader, epoch, callbacks, logs):
@@ -376,18 +415,20 @@ class VAE:
 
         with torch.no_grad():
             for batch_idx, token in enumerate(valid_loader):
-                data, rmsd = token
+                data, rmsd, fnc, index = token
                 data = data.to(self.device[0])
                 
                 with amp.autocast(self.enable_amp):
                     logit_recon_batch, codes, mu, logvar = self.model(data)
-                    valid_loss += self.loss_fnc(logit_recon_batch, data, mu, logvar).item() / len(data)
+                    valid_loss_rec, valid_loss_kld = self.loss_fnc(logit_recon_batch, data,
+                                                                   mu, logvar)
+                    valid_loss += (self.lambda_rec * valid_loss_rec + valid_loss_kld).item()
 
                 for callback in callbacks:
-                    callback.on_validation_batch_end(logs,
-                                                     input = data.detach(),
-                                                     rmsd = rmsd.detach(),
-                                                     mu = mu.detach())
+                    callback.on_validation_batch_end(epoch, batch_idx, logs,
+                                                     rmsd=rmsd.detach(),
+                                                     fnc=fnc.detach(),
+                                                     mu=mu.detach())
                 
         valid_loss /= float(batch_idx + 1)
 
@@ -397,8 +438,29 @@ class VAE:
         for callback in callbacks:
             callback.on_validation_end(epoch, logs)
         
-        if self.verbose:
+        if self.verbose and (self.comm_rank == 0):
             print('====> Validation loss: {:.4f}'.format(valid_loss))
+
+    def compute_losses(self, data_loader, checkpoint):
+        self._load_checkpoint(checkpoint)
+        self.model.eval()
+        bce_losses, kld_losses, indices = [], [], []
+        with torch.no_grad():
+            for batch_idx, token in enumerate(data_loader):
+                data, rmsd, fnc, index = token
+                data = data.to(self.device[0])
+
+                with amp.autocast(self.enable_amp):
+                    logit_recon_batch, codes, mu, logvar = self.model(data)
+                    bce_loss, kld_loss = vae_logit_loss_outlier_helper(logit_recon_batch, data,
+                                                         mu, logvar,
+                                                         self.lambda_rec)
+
+                bce_losses.append(bce_loss.item())
+                kld_losses.append(kld_loss.item())
+                indices.append(index)
+
+        return bce_losses, kld_losses, indices
 
     def _load_checkpoint(self, path):
         """
@@ -415,9 +477,17 @@ class VAE:
         Epoch of training corresponding to the saved checkpoint.
         """
 
-        cp = torch.load(path)
-        self.model.encoder.load_state_dict(cp['encoder_state_dict'])
-        self.model.decoder.load_state_dict(cp['decoder_state_dict'])
+        # checkpoint
+        cp = torch.load(path, map_location='cpu')
+        
+        # model
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.encoder.load_state_dict(cp['encoder_state_dict'])
+        handle.decoder.load_state_dict(cp['decoder_state_dict'])
+        
+        # optimizer
         self.optimizer.load_state_dict(cp['optimizer_state_dict'])
         return cp['epoch']
 
@@ -436,8 +506,10 @@ class VAE:
         torch.Tensor of embeddings of shape (batch-size, latent_dim)
 
         """
-
-        return self.model.encode(x)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.encode(x)
 
     def decode(self, embedding):
         """
@@ -453,8 +525,10 @@ class VAE:
         -------
         torch.Tensor of generated matrices of shape (batch-size, input_shape)
         """
-
-        return self.model.decode(embedding)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        return handle.decode(embedding)
 
     def save_weights(self, enc_path, dec_path):
         """
@@ -468,8 +542,10 @@ class VAE:
         dec_path : str
             Path to save the decoder weights.
         """
-
-        self.model.save_weights(enc_path, dec_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.save_weights(enc_path, dec_path)
 
     def load_weights(self, enc_path, dec_path):
         """
@@ -483,5 +559,7 @@ class VAE:
         dec_path : str
             Path to save the decoder weights.
         """
-
-        self.model.load_weights(enc_path, dec_path)
+        handle = self.model
+        if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
+            handle = handle.module
+        handle.load_weights(enc_path, dec_path)
