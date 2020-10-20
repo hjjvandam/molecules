@@ -6,7 +6,7 @@ import simtk.unit as u
 import simtk.openmm as omm
 import simtk.openmm.app as app
 
-from molecules.sim.openmm_reporter import SparseContactMapReporter
+from molecules.sim.openmm_reporter import OfflineReporter
 
 
 def configure_amber_implicit(
@@ -68,13 +68,7 @@ def configure_amber_explicit(
     return sim, top
 
 
-def configure_simulation(
-    ctx,
-    sim_type="implicit",
-    gpu_index=0,
-    dt_ps=0.002 * u.picoseconds,
-    temperature_kelvin=300 * u.kelvin,
-):
+def configure_simulation(ctx, solvent_type, gpu_index, dt_ps, temperature_kelvin):
     # Configure hardware
     try:
         platform = omm.Platform_getPlatformByName("CUDA")
@@ -92,10 +86,10 @@ def configure_simulation(
         platform,
         platform_properties,
     )
-    if sim_type == "implicit":
+    if solvent_type == "implicit":
         sim, coords = configure_amber_implicit(*args)
     else:
-        assert sim_type == "explicit"
+        assert solvent_type == "explicit"
         sim, coords = configure_amber_explicit(*args)
 
     # Set simulation positions
@@ -120,12 +114,12 @@ def configure_reporters(sim, ctx, report_interval_ps, dt_ps, frames_per_h5, wrap
 
     # Configure contact map reporter
     sim.reporters.append(
-        SparseContactMapReporter(
+        OfflineReporter(
             ctx.h5_prefix,
             report_freq,
             wrap_pdb_file=ctx.pdb_file if wrap else None,
             reference_pdb_file=ctx.reference_pdb_file,
-            batch_size=frames_per_h5,
+            frames_per_h5=frames_per_h5,
         )
     )
 
@@ -202,53 +196,55 @@ class SimulationContext:
         local_top_file = shutil.copy(top_file, self.workdir.joinpath(copy_to_file))
         return local_top_file
 
-    def copy_results(self):
-        shutil.copy(self.workdir, self.result_dir)
+    def move_results(self):
+        shutil.move(self.workdir.as_posix(), self.result_dir)
 
 
 def run_simulation(
-    reference_pdb_file,
-    omm_dir_prefix,
-    local_run_dir,
-    gpu_index,
-    sim_type,
-    report_interval_ps,
-    frames_per_h5,
-    sim_time,
-    dt_ps,
-    temperature_kelvin,
-    h5_scp_path,
-    result_dir,
-    input_dir,
-    initial_configs_dir,
-    wrap,
+    pdb_file: str,
+    reference_pdb_file: str,
+    omm_dir_prefix: str,
+    local_run_dir: str,
+    gpu_index: int,
+    solvent_type: str,
+    report_interval_ps: float,
+    simulation_length_ns: float,
+    dt_ps: float,
+    temperature_kelvin: float,
+    result_dir: str,
+    initial_pdb_dir: str,
+    wrap: bool,
 ):
 
     # Handle files
     ctx = SimulationContext(
+        pdb_file=pdb_file,
         reference_pdb_file=reference_pdb_file,
         omm_dir_prefix=omm_dir_prefix,
         omm_parent_dir=local_run_dir,
-        input_dir=input_dir,
-        h5_scp_path=h5_scp_path,
         result_dir=result_dir,
-        initial_configs_dir=initial_configs_dir,
+        initial_pdb_dir=initial_pdb_dir,
+        solvent_type=solvent_type,
     )
-
-    ctx.copy_to_local()
 
     # Create openmm simulation object
     sim = configure_simulation(
         ctx=ctx,
         gpu_index=gpu_index,
-        sim_type=sim_type,
+        solvent_type=solvent_type,
         dt_ps=dt_ps,
         temperature_kelvin=temperature_kelvin,
     )
 
+    # Write all frames to a single HDF5 file
+    frames_per_h5 = int(simulation_length_ns / report_interval_ps)
+
+    configure_reporters(sim, ctx, report_interval_ps, dt_ps, frames_per_h5, wrap)
+
     # Number of steps to run each simulation
-    nsteps = int(sim_time / dt_ps)
+    nsteps = int(simulation_length_ns / dt_ps)
 
     sim.step(nsteps)
 
-    ctx.backup()
+    # Move simulation data to persistent storage
+    ctx.move_results()

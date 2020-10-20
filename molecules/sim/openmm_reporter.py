@@ -1,7 +1,7 @@
-import uuid
 import h5py
 import numpy as np
 import simtk.unit as u
+from typing import Optional
 import MDAnalysis as mda
 from MDAnalysis.analysis import distances, rms
 
@@ -71,7 +71,7 @@ class ContactMapReporter:
         self._file.flush()
 
 
-def write_contact_map_h5(h5_file, rows, cols):
+def write_contact_map(h5_file: h5py.File, rows, cols):
 
     # Helper function to create ragged array
     def ragged(data):
@@ -93,9 +93,19 @@ def write_contact_map_h5(h5_file, rows, cols):
     )
 
 
-def write_rmsd(h5_file, rmsd):
+def write_rmsd(h5_file: h5py.File, rmsd):
     h5_file.create_dataset(
         "rmsd", data=rmsd, dtype="float16", fletcher32=True, chunks=(1,)
+    )
+
+
+def write_point_cloud(h5_file: h5py.File, point_cloud: np.ndarray):
+    h5_file.create_dataset(
+        "point_cloud",
+        data=point_cloud,
+        dtype="float32",
+        fletcher32=True,
+        chunks=(1,) + point_cloud.shape[1:],
     )
 
 
@@ -118,17 +128,18 @@ def wrap(atoms):
     return wrap_nsp10_16
 
 
-class SparseContactMapReporter:
+class OfflineReporter:
     def __init__(
         self,
-        file,
-        reportInterval,
-        wrap_pdb_file=None,
-        reference_pdb_file=None,
-        selection="CA",
-        threshold=8.0,
-        batch_size=2,  # 1024,
-        senders=[],
+        file: str,
+        reportInterval: int,
+        wrap_pdb_file: Optional[str] = None,
+        reference_pdb_file: Optional[str] = None,
+        selection: str = "CA",
+        threshold: float = 8.0,
+        frames_per_h5: int = 0,
+        contact_map: bool = True,
+        point_cloud: bool = True,
     ):
 
         self._file_idx = 0
@@ -137,8 +148,9 @@ class SparseContactMapReporter:
         self._report_interval = reportInterval
         self._selection = selection
         self._threshold = threshold
-        self._batch_size = batch_size
-        self._senders = senders
+        self._frames_per_h5 = frames_per_h5
+        self._contact_map = contact_map
+        self._point_cloud = point_cloud
 
         self._init_batch()
 
@@ -163,8 +175,13 @@ class SparseContactMapReporter:
     def _init_batch(self):
         # Frame counter for writing batches to HDF5
         self._num_frames = 0
+
         # Row, Column indices for contact matrix in COO format
-        self._rows, self._cols = [], []
+        if self._contact_map:
+            self._rows, self._cols = [], []
+
+        if self._point_cloud:
+            self._point_cloud_data = []
 
     def describeNextReport(self, simulation):
         steps = self._report_interval - simulation.currentStep % self._report_interval
@@ -177,7 +194,7 @@ class SparseContactMapReporter:
         rmsd = rms.rmsd(positions, self._reference_positions, superposition=True)
         self._rmsd.append(rmsd)
 
-    def _collect_contact_maps(self, positions):
+    def _collect_contact_map(self, positions):
 
         contact_map = distances.contact_matrix(
             positions, self._threshold, returntype="sparse"
@@ -188,6 +205,9 @@ class SparseContactMapReporter:
         self._rows.append(coo.row.astype("int16"))
         self._cols.append(coo.col.astype("int16"))
 
+    def _collect_point_cloud(self, positions):
+        self._point_cloud_data.append(positions)
+
     def report(self, simulation, state):
         atom_indices = [
             a.index for a in simulation.topology.atoms() if a.name == self._selection
@@ -195,25 +215,32 @@ class SparseContactMapReporter:
         all_positions = np.array(state.getPositions().value_in_unit(u.angstrom))
         positions = all_positions[atom_indices].astype(np.float32)
 
-        self._collect_contact_maps(positions)
+        if self._contact_map:
+            self._collect_contact_map(positions)
+
+        if self._point_cloud:
+            self._collect_point_cloud(positions)
 
         if self._reference_positions is not None:
             self._collect_rmsd(positions)
 
         self._num_frames += 1
 
-        if self._num_frames == self._batch_size:
-            file_name = f"{self._base_name}_{self._file_idx:05d}_{uuid.uuid4()}.h5"
+        if self._num_frames == self._frames_per_h5:
+            file_name = f"{self._base_name}.h5"
 
             with h5py.File(file_name, "w", swmr=False) as h5_file:
-                write_contact_map_h5(h5_file, self._rows, self._cols)
+
+                if self._contact_map:
+                    write_contact_map(h5_file, self._rows, self._cols)
+
+                if self._point_cloud:
+                    self._point_cloud_data = np.transpose(
+                        self._point_cloud_data, [0, 2, 1]
+                    )
+                    write_point_cloud(h5_file, self._point_cloud_data)
+
                 # Optionally, write rmsd to the reference state
                 if self._reference_positions is not None:
                     write_rmsd(h5_file, self._rmsd)
                     self._rmsd = []
-
-            self._init_batch()
-            self._file_idx += 1
-
-            for sender in self._senders:
-                sender.send(file_name)
