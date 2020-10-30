@@ -30,10 +30,7 @@ Installation
 .. code-block:: console
 
     git clone git://github.com/yngtodd/molecules
-    python3 -m venv env
-    source env/bin/activate
-    pip install --upgrade pip setuptools wheel
-    pip install -e .
+    conda env create -f env.yaml -p ./conda-env
 
 Then, install pre-commit hooks: this will auto-format and auto-lint _on commit_ to enforce consistent code style:
 
