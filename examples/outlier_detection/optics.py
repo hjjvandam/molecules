@@ -622,6 +622,9 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
         comm_size = comm.Get_size()
         comm_rank = comm.Get_rank()
 
+    device = torch.device(device)
+    torch.cuda.set_device(device.index)
+
     if comm_rank == 0:
         print('DEBUG outlier detection')
         print('sim_path: ', sim_path)
