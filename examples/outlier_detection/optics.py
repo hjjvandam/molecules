@@ -717,7 +717,8 @@ def main(sim_path, pdb_out_path, restart_points_path, data_path, model_paths, mo
             json.dump(restart_points, restart_file)
     
     # final barrier
-    comm.barrier()
+    if comm:
+        comm.barrier()
 
     # end
     t_end = time.time()
