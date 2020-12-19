@@ -3,7 +3,7 @@
 set -x
 # run tag
 run_tag=${2}
-output_dir="runs/${run_tag}"
+output_dir="tmp/${run_tag}"
 checkpoint=${3}
 cflag=""
 if [ ! -z "${checkpoint}" ]; then
@@ -28,8 +28,8 @@ echo ${SLURM_PROCID} ${SLURM_TASKS_PER_NODE} ${LOCAL_RANK}
 enc_gpu=$(( 2 * ${LOCAL_RANK} ))
 dec_gpu=$(( 2 * ${LOCAL_RANK} + 1 ))
 # launch code
-python /homes/abrace/molecules/examples/example_aae.py \
-       -i 3clpro-residues-303-cutoff-16.h5 \
+python /homes/abrace/src/molecules/examples/example_aae.py \
+       -i data/3clpro/3clpro-residues-304-cutoff-16.h5 \
        -dn point_cloud \
        -rn rmsd \
        -o ${output_dir} -m ${run_tag} ${cflag} \
@@ -42,7 +42,7 @@ python /homes/abrace/molecules/examples/example_aae.py \
        -b 32 \
        -E ${enc_gpu} -D ${enc_gpu} -G ${enc_gpu} \
        -S 10 \
-       -np 303 -d 48 \
+       -np 304 -d 48 \
        -lw "lambda_rec=0.5,lambda_gp=10" \
        --distributed
 
