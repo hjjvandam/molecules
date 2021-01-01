@@ -158,6 +158,9 @@ def get_dataset(dataset_location, input_path, dataset_name, rmsd_name, fnc_name,
 @click.option('-wp', '--wandb_project_name', default=None, type=str,
               help='Project name for wandb logging')
 
+@click.option('-we', '--wandb_entity_name', default=None, type=str,
+              help='Team name for wandb logging')
+
 @click.option('--distributed', is_flag=True,
               help='Enable distributed training')
 
@@ -174,7 +177,8 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
          epochs, batch_size, optimizer, latent_dim,
          loss_weights, embed_interval, tsne_interval,
          sample_interval, local_rank, wandb_project_name,
-         distributed, num_data_workers, dataset_location):
+         wandb_entity_name, distributed, num_data_workers,
+         dataset_location):
     """Example for training Fs-peptide with AAE3d."""
 
     # do some scaffolding for DDP
@@ -291,6 +295,7 @@ def main(input_path, dataset_name, rmsd_name, fnc_name,
     if (comm_rank == 0) and (wandb_project_name is not None):
         import wandb
         wandb.init(project = wandb_project_name,
+                   entity = wandb_entity_name,
                    name = model_id,
                    id = model_id,
                    dir = model_path,
