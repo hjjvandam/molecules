@@ -1,7 +1,10 @@
+from typing import List
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
+
+# This code is adapted from: https://github.com/tiwarylab/LSTM-predict-MD
 
 
 def running_mean(x, N):
@@ -39,7 +42,7 @@ def rm_peaks_steps(traj, threshold: int = 20):
     return traj
 
 
-def preprocess(data: np.ndarray, smoothing_window: int):
+def preprocess(data: np.ndarray, X: List[float], smoothing_window: int):
     text = running_mean(data, smoothing_window)  # smooothen data
     text = [find_nearest(X, x) for x in text]  # convert to bins
     text = rm_peaks_steps(text)  # remove peaks and short steps
@@ -47,9 +50,9 @@ def preprocess(data: np.ndarray, smoothing_window: int):
 
 
 class SeqData(Dataset):
-    def __init__(self, traj, seq_length, shift):
+    def __init__(self, traj, seq_len, shift):
         self.traj = traj
-        self.seq_len = seq_length
+        self.seq_len = seq_len
         self.shift = shift
 
     def __len__(self):
@@ -119,15 +122,13 @@ def validate(vocab_size, valid_loader, model, loss_fn):
 
 
 epochs = 20
-sequence_len = 100
-shift = 1
-batch_size = 64
-num_bins = 3
 smoothing_window = 20
 device = torch.device("cpu")
-data_path = "/Users/abrace/tmp/lstm_test/train_data.npy"
+# data_path = "/Users/abrace/tmp/lstm_test/train_data.npy"
 # x-values of the metastable states in the 3-state model potential.
-X = [1.5, 0, -1.5]
+# X = [1.5, 0, -1.5]
+data_path = "/Users/abrace/tmp/lstm_test/bba_rmsd.npy"
+X = [2.5, 8.0]
 # Length of the vocabulary in chars
 vocab_size = len(X)
 # The embedding dimension
@@ -138,16 +139,16 @@ rnn_units = 32
 batch_size = 64
 learning_rate = 0.001
 # Sequence length and shift in step between past (input) & future (output)
-seq_length = 100
+seq_len = 100
 shift = 1
 
 data = np.load(data_path)
-text = preprocess(data, smoothing_window)
+text = preprocess(data, X, smoothing_window)
 
 # text stores a sequence of integers representing the bins:
 # Counter(text) -> Counter({1: 38933, 0: 36007, 2: 25041})
 
-dataset = SeqData(text, seq_length, shift)
+dataset = SeqData(text, seq_len, shift)
 train_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True, drop_last=True)
 valid_loader = DataLoader(dataset, batch_size=1, shuffle=False, drop_last=False)
 
@@ -160,5 +161,5 @@ optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
 train(epochs, vocab_size, train_loader, model, optimizer, loss_fn)
 
 y_preds, losses = validate(vocab_size, valid_loader, model, loss_fn)
-np.save("/Users/abrace/tmp/lstm_test/y_preds.npy", y_preds)
-np.save("/Users/abrace/tmp/lstm_test/losses.npy", losses)
+np.save("/Users/abrace/tmp/lstm_test/bba_y_preds.npy", y_preds)
+np.save("/Users/abrace/tmp/lstm_test/bba_losses.npy", losses)
