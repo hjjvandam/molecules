@@ -69,13 +69,9 @@ class NLP(nn.Module):
 
         super(NLP, self).__init__()
 
-        self.input_dim = input_dim
-        self.embedding_dim = embedding_dim
-        self.hidden_dim = rnn_units
-
-        self.embedding = nn.Embedding(self.input_dim, self.embedding_dim)
-        self.lstm = nn.LSTM(self.embedding_dim, self.hidden_dim, batch_first=True)
-        self.linear = nn.Linear(self.hidden_dim, self.input_dim)
+        self.embedding = nn.Embedding(input_dim, embedding_dim)
+        self.lstm = nn.LSTM(embedding_dim, rnn_units, batch_first=True)
+        self.linear = nn.Linear(rnn_units, input_dim)
 
     def forward(self, x):
         x = self.embedding(x)
