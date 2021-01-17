@@ -1,3 +1,4 @@
+from typing import Optional, Tuple, List
 import torch
 from torch import nn
 from math import isclose
@@ -34,7 +35,13 @@ def reversedzip(*iterables):
 
 
 class SymmetricDecoderConv2d(nn.Module):
-    def __init__(self, output_shape, hparams, encoder_shapes, init_weights=None):
+    def __init__(
+        self,
+        output_shape: Tuple[int],
+        hparams: SymmetricVAEHyperparams,
+        encoder_shapes: List[Tuple[int]],
+        init_weights: Optional[str] = None,
+    ):
         super(SymmetricDecoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
@@ -52,7 +59,7 @@ class SymmetricDecoderConv2d(nn.Module):
 
         self.init_weights(init_weights)
 
-    def init_weights(self, init_weights):
+    def init_weights(self, init_weights: Optional[str]):
         if init_weights is None:
             self.affine_layers.apply(_init_weights)
             self.conv_layers.apply(_init_weights)
@@ -70,15 +77,15 @@ class SymmetricDecoderConv2d(nn.Module):
             x = act(conv_t(x, output_size=(batch_size, *output_size)))
         return x
 
-    def decode(self, embedding):
+    def decode(self, embedding: torch.Tensor) -> torch.Tensor:
         self.eval()
         with torch.no_grad():
             return self(embedding)
 
-    def save_weights(self, path):
+    def save_weights(self, path: str):
         torch.save(self.state_dict(), path)
 
-    def load_weights(self, path):
+    def load_weights(self, path: str):
         self.load_state_dict(torch.load(path))
 
     def _conv_layers(self):

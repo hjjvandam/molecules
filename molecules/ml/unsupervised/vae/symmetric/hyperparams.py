@@ -1,18 +1,19 @@
+from typing import List
 from molecules.ml.hyperparams import Hyperparams
 
 
 class SymmetricVAEHyperparams(Hyperparams):
     def __init__(
         self,
-        filters=[64, 64, 64],
-        kernels=[3, 3, 3],
-        strides=[1, 2, 1],
-        latent_dim=3,
-        affine_widths=[128],
-        affine_dropouts=[0],
-        activation="ReLU",
-        output_activation="Sigmoid",
-        lambda_rec=1.0,
+        filters: List[int] = [64, 64, 64],
+        kernels: List[int] = [3, 3, 3],
+        strides: List[int] = [1, 2, 1],
+        latent_dim: int = 3,
+        affine_widths: List[int] = [128],
+        affine_dropouts: List[float] = [0.0],
+        activation: str = "ReLU",
+        output_activation: str = "Sigmoid",
+        lambda_rec: float = 1.0,
     ):
 
         self.filters = filters
