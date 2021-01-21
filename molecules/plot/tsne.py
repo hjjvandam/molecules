@@ -64,7 +64,7 @@ def plot_tsne(
     target_perplexity: int = 30,
     perplexities: List[int] = [5, 30, 50, 100, 200],
     pca_dim: int = 50,
-    backend: str = "mpl",
+    plot_backend: str = "mpl",
     outlier_inds=None,
     wandb_config=None,
     global_step=0,
@@ -73,7 +73,7 @@ def plot_tsne(
     """
     Parameters
     ----------
-    backend: str
+    plot_backend: str
             Specify plotting backend as `mpl` for matplotlib or `plotly` for plotly.
     """
 
@@ -82,7 +82,7 @@ def plot_tsne(
     if pca and embeddings.shape[1] > pca_dim:
         embeddings = compute_pca(embeddings, pca_dim)
 
-    if backend == "plotly":
+    if plot_backend == "plotly":
         from plotly.io import to_html
 
         tsne_embeddings = compute_tsne(embeddings)
@@ -98,6 +98,7 @@ def plot_tsne(
         )
         with open(os.path.join(out_dir, time_stamp), "w") as f:
             f.write(html_string)
+        return
 
     # create plot grid
     nrows = len(perplexities)

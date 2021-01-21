@@ -21,7 +21,7 @@ class TSNEPlotCallback(Callback):
         tsne_is_blocking: bool = False,
         pca: bool = True,
         pca_dim: int = 50,
-        backend: str = "mpl",
+        plot_backend: str = "mpl",
         wandb_config=None,
         mpi_comm=None,
     ):
@@ -32,7 +32,7 @@ class TSNEPlotCallback(Callback):
             Directory to store output plots.
         interval : int
             Plots every interval epochs, default is once per epoch.
-        backend: str
+        plot_backend: str
             Specify plotting backend as `mpl` for matplotlib or `plotly` for plotly.
         wandb_config : wandb configuration file
         mpi_comm: mpi communicator
@@ -51,7 +51,7 @@ class TSNEPlotCallback(Callback):
                 "perplexities": perplexities,
                 "pca": pca,
                 "pca_dim": pca_dim,
-                "backend": backend,
+                "plot_backend": plot_backend,
             }
 
             self.tnse_is_blocking = tsne_is_blocking
