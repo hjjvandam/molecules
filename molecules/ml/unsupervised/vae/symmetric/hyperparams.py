@@ -1,11 +1,20 @@
+from typing import List
 from molecules.ml.hyperparams import Hyperparams
 
+
 class SymmetricVAEHyperparams(Hyperparams):
-    def __init__(self, filters = [64, 64, 64], kernels = [3, 3, 3],
-                 strides = [1, 2, 1], latent_dim = 3,
-                 affine_widths = [128], affine_dropouts = [0],
-                 activation = 'ReLU', output_activation = 'Sigmoid',
-                 lambda_rec = 1.):
+    def __init__(
+        self,
+        filters: List[int] = [64, 64, 64],
+        kernels: List[int] = [3, 3, 3],
+        strides: List[int] = [1, 2, 1],
+        latent_dim: int = 3,
+        affine_widths: List[int] = [128],
+        affine_dropouts: List[float] = [0.0],
+        activation: str = "ReLU",
+        output_activation: str = "Sigmoid",
+        lambda_rec: float = 1.0,
+    ):
 
         self.filters = filters
         self.kernels = kernels
@@ -24,14 +33,16 @@ class SymmetricVAEHyperparams(Hyperparams):
         num_conv_layers = len(self.filters)
 
         if any(num_conv_layers != len(param) for param in (self.kernels, self.strides)):
-            raise ValueError('Number of filters, kernels and strides must be equal.')
+            raise ValueError("Number of filters, kernels and strides must be equal.")
 
         if len(self.affine_dropouts) != len(self.affine_widths):
-            raise ValueError('Number of dropout parameters must equal the number of affine widths.')
+            raise ValueError(
+                "Number of dropout parameters must equal the number of affine widths."
+            )
 
         # Common convention: allows for filter center and for even padding
         if any(kernel % 2 == 0 for kernel in self.kernels):
-            raise ValueError('Only odd valued kernel sizes allowed.')
+            raise ValueError("Only odd valued kernel sizes allowed.")
 
         if any(p < 0 or p > 1 for p in self.affine_dropouts):
-            raise ValueError('Dropout probabilities, p, must be 0 <= p <= 1.')
+            raise ValueError("Dropout probabilities, p, must be 0 <= p <= 1.")

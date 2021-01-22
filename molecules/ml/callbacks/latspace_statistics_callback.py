@@ -8,7 +8,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import numpy as np
 from .callback import Callback
 from PIL import Image
-import numba
 import wandb
 
 

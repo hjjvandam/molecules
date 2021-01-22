@@ -1,9 +1,15 @@
+from typing import Optional, Tuple, List
 import torch
 from torch import nn
 from math import isclose
-from molecules.ml.unsupervised.utils import (conv_output_shape, same_padding,
-                                             get_activation, _init_weights, prod)
+from molecules.ml.unsupervised.utils import (
+    same_padding,
+    get_activation,
+    _init_weights,
+    prod,
+)
 from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
+
 
 def reversedzip(*iterables):
     """
@@ -27,8 +33,15 @@ def reversedzip(*iterables):
     for tup in zip(*map(reversed, iterables)):
         yield tup
 
+
 class SymmetricDecoderConv2d(nn.Module):
-    def __init__(self, output_shape, hparams, encoder_shapes, init_weights=None):
+    def __init__(
+        self,
+        output_shape: Tuple[int],
+        hparams: SymmetricVAEHyperparams,
+        encoder_shapes: List[Tuple[int]],
+        init_weights: Optional[str] = None,
+    ):
         super(SymmetricDecoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
@@ -46,32 +59,33 @@ class SymmetricDecoderConv2d(nn.Module):
 
         self.init_weights(init_weights)
 
-    def init_weights(self, init_weights):
+    def init_weights(self, init_weights: Optional[str]):
         if init_weights is None:
             self.affine_layers.apply(_init_weights)
             self.conv_layers.apply(_init_weights)
         # Loading checkpoint weights
-        elif init_weights.endswith('.pt'):
-            checkpoint = torch.load(init_weights, map_location='cpu')
-            self.load_state_dict(checkpoint['decoder_state_dict'])
+        elif init_weights.endswith(".pt"):
+            checkpoint = torch.load(init_weights, map_location="cpu")
+            self.load_state_dict(checkpoint["decoder_state_dict"])
 
     def forward(self, x):
         x = self.affine_layers(x).view(self.reshape)
         batch_size = x.size()[0]
-        for conv_t, act, output_size in \
-            zip(self.conv_layers, self.conv_acts, self.conv_output_sizes):
+        for conv_t, act, output_size in zip(
+            self.conv_layers, self.conv_acts, self.conv_output_sizes
+        ):
             x = act(conv_t(x, output_size=(batch_size, *output_size)))
         return x
 
-    def decode(self, embedding):
+    def decode(self, embedding: torch.Tensor) -> torch.Tensor:
         self.eval()
         with torch.no_grad():
             return self(embedding)
 
-    def save_weights(self, path):
+    def save_weights(self, path: str):
         torch.save(self.state_dict(), path)
 
-    def load_weights(self, path):
+    def load_weights(self, path: str):
         self.load_state_dict(torch.load(path))
 
     def _conv_layers(self):
@@ -93,23 +107,32 @@ class SymmetricDecoderConv2d(nn.Module):
         tmp = self.hparams.filters.pop()
 
         # self.output_shape[0] Needs to be the last out_channels to match the input matrix
-        for i, (filter_, kernel, stride) in enumerate(reversedzip((self.output_shape[0],
-                                                                  *self.hparams.filters),
-                                                                  self.hparams.kernels,
-                                                                  self.hparams.strides)):
-            shape = self.encoder_shapes[-1*i -1]
+        for i, (filter_, kernel, stride) in enumerate(
+            reversedzip(
+                (self.output_shape[0], *self.hparams.filters),
+                self.hparams.kernels,
+                self.hparams.strides,
+            )
+        ):
+            shape = self.encoder_shapes[-1 * i - 1]
 
             # TODO: this is a quick fix but might not generalize to some architectures
             if stride == 1:
                 padding = same_padding(shape[1:], kernel, stride)
             else:
-                padding = tuple(int(dim % 2 == 0) for dim in self.encoder_shapes[-1*i -2][1:])
+                padding = tuple(
+                    int(dim % 2 == 0) for dim in self.encoder_shapes[-1 * i - 2][1:]
+                )
 
-            layers.append(nn.ConvTranspose2d(in_channels=shape[0],
-                                             out_channels=filter_,
-                                             kernel_size=kernel,
-                                             stride=stride,
-                                             padding=padding))
+            layers.append(
+                nn.ConvTranspose2d(
+                    in_channels=shape[0],
+                    out_channels=filter_,
+                    kernel_size=kernel,
+                    stride=stride,
+                    padding=padding,
+                )
+            )
 
             # TODO: revist padding, output_padding, see github issue.
             #       This code may not generalize to other examples. Needs testing.
@@ -141,11 +164,11 @@ class SymmetricDecoderConv2d(nn.Module):
 
         in_features = self.hparams.latent_dim
 
-        for width, dropout in reversedzip(self.hparams.affine_widths,
-                                          self.hparams.affine_dropouts):
+        for width, dropout in reversedzip(
+            self.hparams.affine_widths, self.hparams.affine_dropouts
+        ):
 
-            layers.append(nn.Linear(in_features=in_features,
-                                    out_features=width))
+            layers.append(nn.Linear(in_features=in_features, out_features=width))
 
             layers.append(act)
 
@@ -157,8 +180,12 @@ class SymmetricDecoderConv2d(nn.Module):
 
         # Add last layer with dims to connect the last linear layer to
         # the first convolutional decoder layer
-        layers.append(nn.Linear(in_features=self.hparams.affine_widths[0],
-                                out_features=prod(self.encoder_shapes[-1])))
+        layers.append(
+            nn.Linear(
+                in_features=self.hparams.affine_widths[0],
+                out_features=prod(self.encoder_shapes[-1]),
+            )
+        )
         layers.append(act)
 
         return layers

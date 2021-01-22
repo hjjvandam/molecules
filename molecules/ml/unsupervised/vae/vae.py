@@ -10,9 +10,10 @@ from .symmetric import SymmetricVAEHyperparams
 from molecules.ml.hyperparams import OptimizerHyperparams, get_optimizer
 import torch.cuda.amp as amp
 
-__all__ = ['VAE']
+__all__ = ["VAE"]
 
-Device = namedtuple('Device', ['encoder', 'decoder'])
+Device = namedtuple("Device", ["encoder", "decoder"])
+
 
 class VAEModel(nn.Module):
     def __init__(self, input_shape, hparams, init_weights, device):
@@ -21,18 +22,22 @@ class VAEModel(nn.Module):
         # Select encoder/decoder models by the type of the hparams
         if isinstance(hparams, SymmetricVAEHyperparams):
             from .symmetric import SymmetricEncoderConv2d, SymmetricDecoderConv2d
-            self.encoder = SymmetricEncoderConv2d(input_shape,  hparams, init_weights)
-            self.decoder = SymmetricDecoderConv2d(input_shape, hparams,
-                                                  self.encoder.shapes, init_weights)
+
+            self.encoder = SymmetricEncoderConv2d(input_shape, hparams, init_weights)
+            self.decoder = SymmetricDecoderConv2d(
+                input_shape, hparams, self.encoder.shapes, init_weights
+            )
 
         elif isinstance(hparams, ResnetVAEHyperparams):
             from .resnet import ResnetEncoder, ResnetDecoder
+
             self.encoder = ResnetEncoder(input_shape, hparams, init_weights)
-            self.decoder = ResnetDecoder(self.encoder.match_shape, input_shape,
-                                         hparams, init_weights)
+            self.decoder = ResnetDecoder(
+                self.encoder.match_shape, input_shape, hparams, init_weights
+            )
 
         else:
-            raise TypeError(f'Invalid hparams type: {type(hparams)}.')
+            raise TypeError(f"Invalid hparams type: {type(hparams)}.")
 
         self.encoder.to(device.encoder)
         self.decoder.to(device.decoder)
@@ -40,20 +45,15 @@ class VAEModel(nn.Module):
         self.device = device
 
     def reparameterize(self, mu, logvar):
-        std = torch.exp(0.5*logvar)
+        std = torch.exp(0.5 * logvar)
         eps = torch.randn_like(std)
-        return mu + eps*std
+        return mu + eps * std
 
     def forward(self, x):
         # x should be placed on encoder gpu in the dataset class
         mu, logvar = self.encoder(x)
         z = self.reparameterize(mu, logvar).to(self.device.decoder)
         x = self.decoder(z).to(self.device.encoder)
-        # TODO: see if we can remove this to speed things up
-        #       or find an inplace way. Only necessary for bad
-        #       hyperparam config such as optimizer learning rate
-        #       being large.
-        #x = torch.where(torch.isnan(x), torch.zeros_like(x), x)
         return x, z, mu, logvar
 
     def encode(self, x):
@@ -72,7 +72,7 @@ class VAEModel(nn.Module):
         self.decoder.load_weights(dec_path)
 
 
-def vae_loss(recon_x, x, mu, logvar, reduction='mean'):
+def vae_loss(recon_x, x, mu, logvar, reduction="mean"):
     """
     Effects
     -------
@@ -91,25 +91,25 @@ def vae_loss(recon_x, x, mu, logvar, reduction='mean'):
     return BCE, KLD
 
 
-def vae_logit_loss(logit_recon_x, x, mu, logvar, reduction='mean'):
+def vae_logit_loss(logit_recon_x, x, mu, logvar, reduction="mean"):
     """
     As above, but works directly on logits
     """
-    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x,
-                                             reduction=reduction)
-    
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction=reduction)
+
     # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
     return BCE, KLD
-    
-                
-def vae_logit_loss_outlier_helper(logit_recon_x, x, mu, logvar, lambda_rec = 1., reduction='mean'):
+
+
+def vae_logit_loss_outlier_helper(
+    logit_recon_x, x, mu, logvar, lambda_rec=1.0, reduction="mean"
+):
     """
     As above, but works directly on logits
     """
-    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x,
-                                             reduction=reduction)
+    BCE = F.binary_cross_entropy_with_logits(logit_recon_x, x, reduction=reduction)
     # 0.5 * mean(1 + log(sigma^2) - mu^2 - sigma^2)
     KLD = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
 
@@ -152,14 +152,17 @@ class VAE:
         Load saved encoder/decoder weights.
     """
 
-    def __init__(self, input_shape,
-                 hparams=SymmetricVAEHyperparams(),
-                 optimizer_hparams=OptimizerHyperparams(),
-                 loss=None,
-                 gpu=None,
-                 enable_amp=False,
-                 init_weights=None,
-                 verbose=True):
+    def __init__(
+        self,
+        input_shape,
+        hparams=SymmetricVAEHyperparams(),
+        optimizer_hparams=OptimizerHyperparams(),
+        loss=None,
+        gpu=None,
+        enable_amp=False,
+        init_weights=None,
+        verbose=True,
+    ):
         """
         Parameters
         ----------
@@ -195,7 +198,7 @@ class VAE:
 
         verbose : bool
             True prints training and validation loss to stdout.
-        """        
+        """
 
         hparams.validate()
         optimizer_hparams.validate()
@@ -213,7 +216,7 @@ class VAE:
         self.optimizer = get_optimizer(self.model.parameters(), optimizer_hparams)
 
         # amp grad scaler
-        self.gscaler = amp.GradScaler(enabled = self.enable_amp)
+        self.gscaler = amp.GradScaler(enabled=self.enable_amp)
 
         self.loss_fnc = vae_logit_loss if loss is None else loss
         self.lambda_rec = hparams.lambda_rec
@@ -225,7 +228,6 @@ class VAE:
             self.comm_rank = dist.get_rank()
             self.comm_size = dist.get_world_size()
 
-            
     def _configure_device(self, gpu):
         """
         Configures GPU/CPU device for training VAE. Allows encoder
@@ -246,22 +248,25 @@ class VAE:
         """
 
         if gpu is None or (isinstance(gpu, tuple) and None in gpu):
-            device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
             return device, device
         if not torch.cuda.is_available():
-            raise ValueError('Specified GPU training but CUDA is not available.')
+            raise ValueError("Specified GPU training but CUDA is not available.")
         if isinstance(gpu, int):
-            device = torch.device(f'cuda:{gpu}')
+            device = torch.device(f"cuda:{gpu}")
             return device, device
         if isinstance(gpu, tuple) and len(gpu) == 2:
-            return torch.device(f'cuda:{gpu[0]}'), torch.device(f'cuda:{gpu[1]}')
-        raise ValueError('Specified GPU device is invalid. Should be int, 2-tuple or None.')
+            return torch.device(f"cuda:{gpu[0]}"), torch.device(f"cuda:{gpu[1]}")
+        raise ValueError(
+            "Specified GPU device is invalid. Should be int, 2-tuple or None."
+        )
 
     def __repr__(self):
         return str(self.model)
 
-    def train(self, train_loader, valid_loader, epochs=1, checkpoint=None,
-              callbacks=[]):
+    def train(
+        self, train_loader, valid_loader, epochs=1, checkpoint=None, callbacks=[]
+    ):
         """
         Train model
 
@@ -289,14 +294,14 @@ class VAE:
             handle = self.model
             if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
                 handle = handle.module
-            logs = {'model': handle, 'optimizer': self.optimizer}
+            logs = {"model": handle, "optimizer": self.optimizer}
             if dist.is_initialized():
                 logs["comm_size"] = self.comm_size
         else:
             logs = {}
 
-        start_epoch = 1            
-        
+        start_epoch = 1
+
         if checkpoint:
             start_epoch += self._load_checkpoint(checkpoint)
 
@@ -338,17 +343,17 @@ class VAE:
         """
 
         self.model.train()
-        train_loss = 0.
+        train_loss = 0.0
         for batch_idx, token in enumerate(train_loader):
 
             data, rmsd, fnc, index = token
             data = data.to(self.device[0])
-            
+
             if self.verbose:
                 start = time.time()
 
             if callbacks:
-                pass # TODO: add more to logs
+                pass  # TODO: add more to logs
 
             for callback in callbacks:
                 callback.on_batch_begin(batch_idx, epoch, logs)
@@ -369,17 +374,22 @@ class VAE:
             train_loss += loss.item()
 
             if callbacks:
-                logs['train_loss'] = loss.item()
-                logs['train_loss_rec'] = loss_rec.item()
-                logs['train_loss_kld'] = loss_kld.item()
-                logs['global_step'] = (epoch - 1) * len(train_loader) + batch_idx
+                logs["train_loss"] = loss.item()
+                logs["train_loss_rec"] = loss_rec.item()
+                logs["train_loss_kld"] = loss_kld.item()
+                logs["global_step"] = (epoch - 1) * len(train_loader) + batch_idx
 
             if self.verbose and (self.comm_rank == 0):
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}'.format(
-                      epoch, (batch_idx + 1) * self.comm_size * len(data),
-                      self.comm_size * len(train_loader.dataset),
-                      100. * (batch_idx + 1) / len(train_loader),
-                      loss.item(), time.time() - start))
+                print(
+                    "Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}\tTime: {:.3f}".format(
+                        epoch,
+                        (batch_idx + 1) * self.comm_size * len(data),
+                        self.comm_size * len(train_loader.dataset),
+                        100.0 * (batch_idx + 1) / len(train_loader),
+                        loss.item(),
+                        time.time() - start,
+                    )
+                )
 
             for callback in callbacks:
                 callback.on_batch_end(batch_idx, epoch, logs)
@@ -387,10 +397,10 @@ class VAE:
         train_loss_ave = train_loss / float(batch_idx + 1)
 
         if callbacks:
-            logs['train_loss_average'] = train_loss_ave
+            logs["train_loss_average"] = train_loss_ave
 
         if self.verbose and (self.comm_rank == 0):
-            print('====> Epoch: {} Average loss: {:.4f}'.format(epoch, train_loss_ave))
+            print("====> Epoch: {} Average loss: {:.4f}".format(epoch, train_loss_ave))
 
     def _validate(self, valid_loader, epoch, callbacks, logs):
         """
@@ -417,29 +427,36 @@ class VAE:
             for batch_idx, token in enumerate(valid_loader):
                 data, rmsd, fnc, index = token
                 data = data.to(self.device[0])
-                
+
                 with amp.autocast(self.enable_amp):
                     logit_recon_batch, codes, mu, logvar = self.model(data)
-                    valid_loss_rec, valid_loss_kld = self.loss_fnc(logit_recon_batch, data,
-                                                                   mu, logvar)
-                    valid_loss += (self.lambda_rec * valid_loss_rec + valid_loss_kld).item()
+                    valid_loss_rec, valid_loss_kld = self.loss_fnc(
+                        logit_recon_batch, data, mu, logvar
+                    )
+                    valid_loss += (
+                        self.lambda_rec * valid_loss_rec + valid_loss_kld
+                    ).item()
 
                 for callback in callbacks:
-                    callback.on_validation_batch_end(epoch, batch_idx, logs,
-                                                     rmsd=rmsd.detach(),
-                                                     fnc=fnc.detach(),
-                                                     mu=mu.detach())
-                
+                    callback.on_validation_batch_end(
+                        epoch,
+                        batch_idx,
+                        logs,
+                        rmsd=rmsd.detach(),
+                        fnc=fnc.detach(),
+                        mu=mu.detach(),
+                    )
+
         valid_loss /= float(batch_idx + 1)
 
         if callbacks:
-            logs['valid_loss'] = valid_loss
-        
+            logs["valid_loss"] = valid_loss
+
         for callback in callbacks:
             callback.on_validation_end(epoch, logs)
-        
+
         if self.verbose and (self.comm_rank == 0):
-            print('====> Validation loss: {:.4f}'.format(valid_loss))
+            print("====> Validation loss: {:.4f}".format(valid_loss))
 
     def compute_losses(self, data_loader, checkpoint):
         self._load_checkpoint(checkpoint)
@@ -452,9 +469,9 @@ class VAE:
 
                 with amp.autocast(self.enable_amp):
                     logit_recon_batch, codes, mu, logvar = self.model(data)
-                    bce_loss, kld_loss = vae_logit_loss_outlier_helper(logit_recon_batch, data,
-                                                         mu, logvar,
-                                                         self.lambda_rec)
+                    bce_loss, kld_loss = vae_logit_loss_outlier_helper(
+                        logit_recon_batch, data, mu, logvar, self.lambda_rec
+                    )
 
                 bce_losses.append(bce_loss.item())
                 kld_losses.append(kld_loss.item())
@@ -478,18 +495,18 @@ class VAE:
         """
 
         # checkpoint
-        cp = torch.load(path, map_location='cpu')
-        
+        cp = torch.load(path, map_location="cpu")
+
         # model
         handle = self.model
         if isinstance(handle, torch.nn.parallel.DistributedDataParallel):
             handle = handle.module
-        handle.encoder.load_state_dict(cp['encoder_state_dict'])
-        handle.decoder.load_state_dict(cp['decoder_state_dict'])
-        
+        handle.encoder.load_state_dict(cp["encoder_state_dict"])
+        handle.decoder.load_state_dict(cp["decoder_state_dict"])
+
         # optimizer
-        self.optimizer.load_state_dict(cp['optimizer_state_dict'])
-        return cp['epoch']
+        self.optimizer.load_state_dict(cp["optimizer_state_dict"])
+        return cp["epoch"]
 
     def encode(self, x):
         """
