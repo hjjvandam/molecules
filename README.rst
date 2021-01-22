@@ -27,26 +27,16 @@ For references, tutorials, and examples check out our `documentation`_.
 Installation
 ------------
 
-From Sources:
-
-You can either clone the public repository:
-
 .. code-block:: console
 
     git clone git://github.com/yngtodd/molecules
+    conda env create -f env.yaml -p ./conda-env
 
-Or download the `tarball`_:
-
-.. code-block:: console
-
-    curl  -OL https://github.com/yngtodd/molecules/tarball/master
-
-Once you have a copy of the source, you can install it with:
+Then, install pre-commit hooks: this will auto-format and auto-lint _on commit_ to enforce consistent code style:
 
 .. code-block:: console
 
-    python setup.py install
+    pre-commit install
+    pre-commit autoupdate
 
-
-.. _tarball: https://github.com/yngtodd/molecules/tarball/master
 .. _documentation: https://molecules.readthedocs.io/en/latest
