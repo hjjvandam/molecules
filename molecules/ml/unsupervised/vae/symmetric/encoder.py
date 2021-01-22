@@ -1,3 +1,4 @@
+from typing import Optional, Tuple
 import torch
 from torch import nn
 from math import isclose
@@ -12,7 +13,12 @@ from molecules.ml.unsupervised.vae.symmetric import SymmetricVAEHyperparams
 
 
 class SymmetricEncoderConv2d(nn.Module):
-    def __init__(self, input_shape, hparams, init_weights=None):
+    def __init__(
+        self,
+        input_shape: Tuple[int],
+        hparams: SymmetricVAEHyperparams,
+        init_weights: Optional[str] = None,
+    ):
         super(SymmetricEncoderConv2d, self).__init__()
 
         assert isinstance(hparams, SymmetricVAEHyperparams)
@@ -31,7 +37,7 @@ class SymmetricEncoderConv2d(nn.Module):
 
         self.init_weights(init_weights)
 
-    def init_weights(self, init_weights):
+    def init_weights(self, init_weights: Optional[str]):
         if init_weights is None:
             self.encoder.apply(_init_weights)
             _init_weights(self.mu)
@@ -45,15 +51,15 @@ class SymmetricEncoderConv2d(nn.Module):
         x = self.encoder(x)
         return self.mu(x), self.logvar(x)
 
-    def encode(self, x):
+    def encode(self, x: torch.Tensor) -> torch.Tensor:
         self.eval()
         with torch.no_grad():
             return self(x)[0]
 
-    def save_weights(self, path):
+    def save_weights(self, path: str):
         torch.save(self.state_dict(), path)
 
-    def load_weights(self, path):
+    def load_weights(self, path: str):
         self.load_state_dict(torch.load(path))
 
     def _conv_layers(self):
