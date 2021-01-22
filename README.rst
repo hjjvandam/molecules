@@ -29,10 +29,10 @@ Installation
 
 .. code-block:: console
 
-    git clone git://github.com/yngtodd/molecules
+    git clone https://github.com/braceal/molecules.git
     conda env create -f env.yaml -p ./conda-env
 
-Then, install pre-commit hooks: this will auto-format and auto-lint _on commit_ to enforce consistent code style:
+Then, install pre-commit hooks: this will auto-format and auto-lint on commit to enforce consistent code style:
 
 .. code-block:: console
 
