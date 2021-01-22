@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 import h5py
+from molecules.data.utils import parse_h5
 
 
 def compute_tsne(
@@ -41,20 +42,6 @@ def compute_pca(embeddings: np.ndarray, dim: int = 50) -> np.ndarray:
     return embeddings
 
 
-def _load_data(
-    embeddings_path: str, colors: List[str], embeddings_dset: str = "embeddings"
-) -> Tuple[np.ndarray, Dict[str, np.ndarray]]:
-    color_arrays = {}
-    with h5py.File(embeddings_path, "r", libver="latest", swmr=False) as f:
-        # Load embeddings from h5 file
-        embeddings = f[embeddings_dset][...]
-        # May contain rmsd, fnc
-        for color in colors:
-            color_arrays[color] = f[color][...]
-
-    return embeddings, color_arrays
-
-
 def plot_tsne(
     embeddings_path: str,
     out_dir: str = "./",
@@ -77,7 +64,8 @@ def plot_tsne(
             Specify plotting backend as `mpl` for matplotlib or `plotly` for plotly.
     """
 
-    embeddings, color_arrays = _load_data(embeddings_path, colors)
+    color_arrays = parse_h5(embeddings_path, fields=colors + ["embeddings"])
+    embeddings = color_arrays.pop("embeddings")
 
     if pca and embeddings.shape[1] > pca_dim:
         embeddings = compute_pca(embeddings, pca_dim)
@@ -94,7 +82,7 @@ def plot_tsne(
                 step=global_step,
             )
         time_stamp = time.strftime(
-            f"t-SNE-plotly-{colors[0]}-step-{global_step}-%Y%m%d-%H%M%S.html"
+            f"t-SNE-plotly-{colors[0]}-epoch-{epoch}-%Y%m%d-%H%M%S.html"
         )
         with open(os.path.join(out_dir, time_stamp), "w") as f:
             f.write(html_string)
@@ -229,7 +217,7 @@ def plot_tsne(
 
         # save figure
         time_stamp = time.strftime(
-            f"2d-embeddings-{color_name}-step-{global_step}-%Y%m%d-%H%M%S.png"
+            f"2d-embeddings-{color_name}-epoch-{epoch}-%Y%m%d-%H%M%S.png"
         )
         plt.savefig(os.path.join(out_dir, time_stamp), dpi=300)
 
@@ -261,7 +249,8 @@ def plot_tsne_publication(
 ):
     """Generate publication quality 3d t-SNE plot."""
 
-    embeddings, color_arrays = _load_data(embeddings_path, colors)
+    color_arrays = parse_h5(embeddings_path, fields=colors + ["embeddings"])
+    embeddings = color_arrays.pop("embeddings")
 
     if pca and embeddings.shape[1] > 50:
         embeddings = pca(embeddings, pca_dim)
@@ -301,7 +290,7 @@ def plot_tsne_publication(
             ax.set_title(f"Fraction of contacts to reference state after epoch {epoch}")
 
         time_stamp = time.strftime(
-            f"3d-embeddings-{color_name}-step-{global_step}-%Y%m%d-%H%M%S.png"
+            f"3d-embeddings-{color_name}-epoch-{epoch}-%Y%m%d-%H%M%S.png"
         )
         plt.savefig(os.path.join(out_dir, time_stamp), dpi=300)
 
