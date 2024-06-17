@@ -5,6 +5,9 @@ class AAE3dHyperparams(Hyperparams):
                  num_features = 1,
                  encoder_filters = [64, 128, 256, 256, 512],
                  encoder_kernel_sizes = [1, 1, 1, 1, 1],
+                 encoder_dilation = [1, 1, 1, 1, 1],
+                 encoder_padding = [0, 0, 0, 0, 0],
+                 encoder_stride = [1, 1, 1, 1, 1],
                  generator_filters = [64, 128, 512, 1024],
                  discriminator_filters = [512, 512, 128, 64],
                  latent_dim = 256,
@@ -23,6 +26,9 @@ class AAE3dHyperparams(Hyperparams):
         self.num_features = num_features
         self.encoder_filters = encoder_filters
         self.encoder_kernel_sizes = encoder_kernel_sizes
+        self.encoder_dilation = encoder_dilation
+        self.encoder_padding = encoder_padding
+        self.encoder_stride = encoder_stride
         self.generator_filters = generator_filters
         self.discriminator_filters = discriminator_filters
         self.latent_dim = latent_dim

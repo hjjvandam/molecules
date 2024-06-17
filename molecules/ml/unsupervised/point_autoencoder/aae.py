@@ -191,6 +191,9 @@ class Encoder(nn.Module):
         layers = OrderedDict([('enc_conv1', nn.Conv1d(in_channels = (3 + self.num_features),
                                                       out_channels = hparams.encoder_filters[0],
                                                       kernel_size = hparams.encoder_kernel_sizes[0],
+                                                      dilation = hparams.encoder_dilation[0],
+                                                      padding = hparams.encoder_padding[0],
+                                                      stride = hparams.encoder_stride[0],
                                                       bias = self.use_bias)),
                               ('enc_relu1', self.activation(**self.activ_args))])
 
@@ -199,6 +202,9 @@ class Encoder(nn.Module):
             layers.update({'enc_conv{}'.format(idx+1) : nn.Conv1d(in_channels = hparams.encoder_filters[idx - 1],
                                                                   out_channels = hparams.encoder_filters[idx],
                                                                   kernel_size = hparams.encoder_kernel_sizes[idx],
+                                                                  dilation = hparams.encoder_dilation[idx],
+                                                                  padding = hparams.encoder_padding[idx],
+                                                                  stride = hparams.encoder_stride[idx],
                                                                   bias = self.use_bias)})
             layers.update({'enc_relu{}'.format(idx+1) : self.activation(**self.activ_args)})
             
@@ -206,6 +212,9 @@ class Encoder(nn.Module):
         layers.update({'enc_conv{}'.format(idx+2) : nn.Conv1d(in_channels = hparams.encoder_filters[-2],
                                                               out_channels = hparams.encoder_filters[-1],
                                                               kernel_size = hparams.encoder_kernel_sizes[-1],
+                                                              dilation = hparams.encoder_dilation[-1],
+                                                              padding = hparams.encoder_padding[-1],
+                                                              stride = hparams.encoder_stride[-1],
                                                               bias = self.use_bias)})
 
         # construct model
